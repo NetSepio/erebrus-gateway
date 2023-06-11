@@ -3,11 +3,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"sync"
 	"time"
@@ -39,29 +38,30 @@ func gateway() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// create a new libp2p Host
 	ha, err := makeBasicHost()
 	if err != nil {
 		log.Fatal(err)
+	}
+	fullAddr := getHostAddress(ha)
+	log.Printf("I am %s\n", fullAddr)
+
+	// Create a new PubSub service using the GossipSub router.
+	ps, err := pubsub.NewGossipSub(ctx, ha)
+	if err != nil {
+		panic(err)
 	}
 
 	// Setup DHT with empty discovery peers so this will be a discovery peer for other
 	// peers. This peer should run with a public ip address, otherwise change "nil" to
 	// a list of peers to bootstrap with.
-	dht, err := NewDHT(context.TODO(), ha, nil)
+	dht, err := NewDHT(ctx, ha, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	// Setup global peer discovery over DiscoveryServiceTag.
-	go Discover(context.TODO(), ha, dht, DiscoveryServiceTag)
-
-	startListener(ctx, ha)
-
-	// Create a new PubSub service using the GossipSub router.
-	ps, err := pubsub.NewGossipSub(context.TODO(), ha)
-	if err != nil {
-		panic(err)
-	}
+	go Discover(ctx, ha, dht, DiscoveryServiceTag)
 
 	// Join a PubSub topic.
 	topicString := "status" // Change "UniversalPeer" to whatever you want!
@@ -70,42 +70,42 @@ func gateway() {
 		panic(err)
 	}
 
-	if err := topic.Publish(context.TODO(), []byte("Hello world!")); err != nil {
-		panic(err)
-	}
+	// if err := topic.Publish(context.TODO(), []byte("Hello world!")); err != nil {
+	// 	panic(err)
+	// }
 
-	// Publish the current date and time every 5 seconds.
-	go func() {
-		for {
-			err := topic.Publish(context.TODO(), []byte(fmt.Sprintf("The time is: %s", time.Now().Format(time.RFC3339))))
-			if err != nil {
-				panic(err)
-			}
-			time.Sleep(time.Second * 5)
-		}
-	}()
+	// // Publish the current date andz
+	// }()
 
 	// Subscribe to the topic.
 	sub, err := topic.Subscribe()
 	if err != nil {
 		panic(err)
 	}
+	type status struct {
+		Status string
+	}
 
 	for {
 		// Block until we recieve a new message.
-		msg, err := sub.Next(context.TODO())
+		msg, err := sub.Next(ctx)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("[%s] %s", msg.ReceivedFrom, string(msg.Data))
+		status := new(status)
+		err = json.Unmarshal(msg.Data, status)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(status.Status))
 		fmt.Println()
 	}
 
-	// wait for a SIGINT or SIGTERM signal
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
-	fmt.Println("Received signal, shutting down...")
+	// // wait for a SIGINT or SIGTERM signal
+	// ch := make(chan os.Signal, 1)
+	// signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	// <-ch
+	// fmt.Println("Received signal, shutting down...")
 
 }
 
@@ -125,20 +125,8 @@ func makeBasicHost() (host.Host, error) {
 		panic(err)
 	}
 	opts := []libp2p.Option{
-		// libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/9001"),
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/9001"),
 		libp2p.Identity(privk),
-		libp2p.DisableRelay(),
-	}
-
-	announceAddrs := []string{"/ip4/127.0.0.1/tcp/9001"} // Set to your external IP address for each transport you wish to use.
-	var announce []multiaddr.Multiaddr
-	if len(announceAddrs) > 0 {
-		for _, addr := range announceAddrs {
-			announce = append(announce, multiaddr.StringCast(addr))
-		}
-		opts = append(opts, libp2p.AddrsFactory(func([]multiaddr.Multiaddr) []multiaddr.Multiaddr {
-			return announce
-		}))
 	}
 
 	return libp2p.New(opts...)
