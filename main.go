@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"sync"
 	"time"
@@ -69,6 +71,29 @@ func gateway() {
 	if err != nil {
 		panic(err)
 	}
+	topicString2 := "client" // Change "UniversalPeer" to whatever you want!
+	topic2, err := ps.Join(DiscoveryServiceTag + "/" + topicString2)
+	if err != nil {
+		panic(err)
+	}
+	sub2, err := topic2.Subscribe()
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		for {
+
+			// Block until we recieve a new message.
+			msg, err := sub2.Next(ctx)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(msg.Data))
+			fmt.Println()
+
+		}
+	}()
 
 	// if err := topic.Publish(context.TODO(), []byte("Hello world!")); err != nil {
 	// 	panic(err)
@@ -85,27 +110,28 @@ func gateway() {
 	type status struct {
 		Status string
 	}
-
-	for {
-		// Block until we recieve a new message.
-		msg, err := sub.Next(ctx)
-		if err != nil {
-			panic(err)
+	go func() {
+		for {
+			// Block until we recieve a new message.
+			msg, err := sub.Next(ctx)
+			if err != nil {
+				panic(err)
+			}
+			status := new(status)
+			err = json.Unmarshal(msg.Data, status)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(status.Status))
+			fmt.Println()
 		}
-		status := new(status)
-		err = json.Unmarshal(msg.Data, status)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(status.Status))
-		fmt.Println()
-	}
 
-	// // wait for a SIGINT or SIGTERM signal
-	// ch := make(chan os.Signal, 1)
-	// signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	// <-ch
-	// fmt.Println("Received signal, shutting down...")
+	}()
+	// wait for a SIGINT or SIGTERM signal
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	<-ch
+	fmt.Println("Received signal, shutting down...")
 
 }
 
