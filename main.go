@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -161,40 +160,6 @@ func getHostAddress(ha host.Host) string {
 	return addr.Encapsulate(hostAddr).String()
 }
 
-func startListener(ctx context.Context, ha host.Host) {
-	fullAddr := getHostAddress(ha)
-	log.Printf("I am %s\n", fullAddr)
-
-	// Set a stream handler on host A. /echo/1.0.0 is
-	// a user-defined protocol name.
-	ha.SetStreamHandler("/echo/1.0.0", func(s network.Stream) {
-		log.Println("listener received new stream")
-		if err := doEcho(s); err != nil {
-			log.Println(err)
-			s.Reset()
-		} else {
-			s.Close()
-		}
-	})
-
-	log.Println("listening for connections")
-
-}
-
-// doEcho reads a line of data a stream and writes it back
-func doEcho(s network.Stream) error {
-	buf := bufio.NewReader(s)
-	str, err := buf.ReadString('\n')
-	if err != nil {
-		return err
-	}
-
-	log.Printf("read: %s", str)
-	_, err = s.Write([]byte(str))
-	return err
-}
-
-// Borrowed from https://medium.com/rahasak/libp2p-pubsub-peer-discovery-with-kademlia-dht-c8b131550ac7
 // NewDHT attempts to connect to a bunch of bootstrap peers and returns a new DHT.
 // If you don't have any bootstrapPeers, you can use dht.DefaultBootstrapPeers
 // or an empty list.
@@ -242,7 +207,6 @@ func NewDHT(ctx context.Context, host host.Host, bootstrapPeers []multiaddr.Mult
 	return kdht, nil
 }
 
-// Borrowed from https://medium.com/rahasak/libp2p-pubsub-peer-discovery-with-kademlia-dht-c8b131550ac7
 // Search the DHT for peers, then connect to them.
 func Discover(ctx context.Context, h host.Host, dht *dht.IpfsDHT, rendezvous string) {
 	var routingDiscovery = routing.NewRoutingDiscovery(dht)
