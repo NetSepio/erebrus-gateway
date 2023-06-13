@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -66,11 +65,11 @@ func gateway() {
 	go Discover(ctx, ha, dht, DiscoveryServiceTag)
 
 	// Join a PubSub topic.
-	topicString := "status" // Change "UniversalPeer" to whatever you want!
-	topic, err := ps.Join(DiscoveryServiceTag + "/" + topicString)
-	if err != nil {
-		panic(err)
-	}
+	// topicString := "status" // Change "UniversalPeer" to whatever you want!
+	// topic, err := ps.Join(DiscoveryServiceTag + "/" + topicString)
+	// if err != nil {
+	// 	panic(err)
+	// }
 	topicString2 := "client" // Change "UniversalPeer" to whatever you want!
 	topic2, err := ps.Join(DiscoveryServiceTag + "/" + topicString2)
 	if err != nil {
@@ -82,51 +81,53 @@ func gateway() {
 	}
 	go func() {
 		for {
-
 			// Block until we recieve a new message.
 			msg, err := sub2.Next(ctx)
 			if err != nil {
 				panic(err)
 			}
-
+			if msg.ReceivedFrom == ha.ID() {
+				continue
+			}
 			fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(msg.Data))
-			fmt.Println()
-
+			if err := topic2.Publish(ctx, []byte("heres a reply from masternode")); err != nil {
+				panic(err)
+			}
 		}
 	}()
-
-	// if err := topic.Publish(context.TODO(), []byte("Hello world!")); err != nil {
-	// 	panic(err)
-	// }
-
-	// // Publish the current date andz
-	// }()
 
 	// Subscribe to the topic.
-	sub, err := topic.Subscribe()
-	if err != nil {
-		panic(err)
-	}
-	type status struct {
-		Status string
-	}
-	go func() {
-		for {
-			// Block until we recieve a new message.
-			msg, err := sub.Next(ctx)
-			if err != nil {
-				panic(err)
-			}
-			status := new(status)
-			err = json.Unmarshal(msg.Data, status)
-			if err != nil {
-				panic(err)
-			}
-			fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(status.Status))
-			fmt.Println()
-		}
+	// sub, err := topic.Subscribe()
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// type status struct {
+	// 	Status string
+	// }
+	// go func() {
+	// 	for {
+	// 		// Block until we recieve a new message.
+	// 		msg, err := sub.Next(ctx)
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		status := new(status)
+	// 		err = json.Unmarshal(msg.Data, status)
+	// 		if err != nil {
+	// 			fmt.Println(err)
+	// 		}
+	// 		if msg.ReceivedFrom == ha.ID() {
+	// 			continue
+	// 		}
+	// 		fmt.Printf("[%s] , status is: %s", msg.ReceivedFrom, string(msg.Data))
+	// 		fmt.Println()
 
-	}()
+	// 		// if err := topic.Publish(ctx, []byte("heres a reply from masternode")); err != nil {
+	// 		// 	panic(err)
+	// 		// }
+	// 	}
+
+	// }()
 	// wait for a SIGINT or SIGTERM signal
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
@@ -138,14 +139,6 @@ func gateway() {
 // makeBasicHost creates a LibP2P host with a random peer ID listening on the
 // given multiaddress. It won't encrypt the connection if insecure is true.
 func makeBasicHost() (host.Host, error) {
-	// r := rand.Reader
-
-	// Generate a key pair for this host. We will use it at least
-	// to obtain a valid host ID.
-	// priv, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
-	// if err != nil {
-	// 	return nil, err
-	// }
 	privk, err := LoadIdentity("identity.key")
 	if err != nil {
 		panic(err)
