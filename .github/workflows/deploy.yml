@@ -88,18 +88,18 @@ jobs:
           push: true
           tags: lazarusnetwork/erebrus-gateway:latest
   deploy:
-    needs : ghcr
+    needs: ghcr
     name: Deploy to dev server
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Deploy on Dev Server
-        if: github.ref == 'refs/heads/main' 
+        if: github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v0.1.7
-        with:         
+        with:
           host: ${{ secrets.DEV_REMOTE_SERVER_ADDRESS }}
           username: ${{ secrets.DEV_SERVER_USERNAME }}
-          key:  ${{ secrets.DEV_REMOTE_SERVER_KEY }}
+          key: ${{ secrets.DEV_REMOTE_SERVER_KEY }}
           port: ${{ secrets.DEV_SSH_PORT }}
           script: |
             pwd
@@ -107,4 +107,4 @@ jobs:
             podman stop erebrus-gateway && podman rm erebrus-gateway && podman image rm erebrus-gateway
             echo ${{ secrets.GHCR_TOKEN }} | podman login ghcr.io -u secrets.GHCR_USERNAME --password-stdin
             podman pull ghcr.io/thelazarusnetwork/erebrus-gateway:main
-            podman run --name="erebrus-gateway" --env-file=.env --net=bridge -d ghcr.io/thelazarusnetwork/erebrus-gateway:main
+            podman run --name="erebrus-gateway" --net=bridge -p 9001:9001 -d ghcr.io/thelazarusnetwork/erebrus-gateway:main

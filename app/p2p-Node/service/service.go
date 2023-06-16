@@ -77,14 +77,11 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 		panic(err)
 	}
 
-	// if err := topic2.Publish(ctx, []byte("send to topic 2")); err != nil {
-	// 	panic(err)
-	// }
-
 	sub2, err := topic2.Subscribe()
 	if err != nil {
 		panic(err)
 	}
+
 	go func() {
 		for {
 			// Block until we recieve a new message.

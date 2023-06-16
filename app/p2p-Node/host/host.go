@@ -41,7 +41,7 @@ func CreateHost() host.Host {
 		log.Fatal(err)
 	}
 	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/9001"),
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/9001"),
 		libp2p.Identity(privk),
 	}
 
@@ -50,8 +50,8 @@ func CreateHost() host.Host {
 		log.Fatal(err)
 	}
 
-	fullAddr := getHostAddress(host)
-	log.Printf("I am %s\n", fullAddr)
+	//fullAddr := getHostAddress(host)
+	log.Printf("I am %s\n", host.Addrs())
 
 	return host
 }
