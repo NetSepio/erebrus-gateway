@@ -52,6 +52,7 @@ func CreateHost() host.Host {
 
 	//fullAddr := getHostAddress(host)
 	log.Printf("I am %s\n", host.Addrs())
+	log.Printf("I am %s\n", getHostAddress(host))
 
 	return host
 }
