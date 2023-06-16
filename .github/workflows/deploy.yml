@@ -87,6 +87,12 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: lazarusnetwork/erebrus-gateway:latest
+  deploy:
+    needs : ghcr
+    name: Deploy to dev server
+    runs-on: ubuntu-latest
+    
+    steps:
       - name: Deploy on Dev Server
         if: github.ref == 'refs/heads/main' 
         uses: appleboy/ssh-action@v0.1.7
