@@ -64,7 +64,7 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 				panic(err)
 			}
 			fmt.Printf("From [%s] , recieved status message is: %s", msg.ReceivedFrom, st.Status)
-			if err := topic.Publish(ctx, []byte("heres a reply from masternode")); err != nil {
+			if err := topic.Publish(ctx, []byte("heres a reply from masternodes")); err != nil {
 				panic(err)
 			}
 
@@ -93,7 +93,7 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 				continue
 			}
 			fmt.Printf("[%s] , status isz: %s", msg.ReceivedFrom, string(msg.Data))
-			if err := topic2.Publish(ctx, []byte("heres a reply from masternode")); err != nil {
+			if err := topic2.Publish(ctx, []byte("heres a reply from client")); err != nil {
 				panic(err)
 			}
 		}
