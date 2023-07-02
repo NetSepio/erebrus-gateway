@@ -107,4 +107,4 @@ jobs:
             podman stop erebrus-gateway && podman rm erebrus-gateway && podman image rm erebrus-gateway
             echo ${{ secrets.GHCR_TOKEN }} | podman login ghcr.io -u secrets.GHCR_USERNAME --password-stdin
             podman pull ghcr.io/thelazarusnetwork/erebrus-gateway:main
-            podman run --name="erebrus-gateway" --net=bridge -p 9001:9001 -d ghcr.io/thelazarusnetwork/erebrus-gateway:main
+            podman run --name="erebrus-gateway" --net=bridge -p 9001:9001 -v "$(pwd)"/identity.key:/app/identity.key:ro -d ghcr.io/thelazarusnetwork/erebrus-gateway:main
