@@ -21,3 +21,5 @@
 go.work
 
 identity.key
+
+.env

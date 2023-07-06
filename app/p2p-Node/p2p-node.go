@@ -16,8 +16,7 @@ const DiscoveryInterval = time.Second * 10
 const DiscoveryServiceTag = "erebrus"
 
 func Init() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, _ := context.WithCancel(context.Background())
 
 	ha := p2pHost.CreateHost()
 	ps := service.NewService(ha, ctx)

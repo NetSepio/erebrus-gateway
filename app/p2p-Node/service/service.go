@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 
 	p2pHost "github.com/TheLazarusNetwork/erebrus-gateway/app/p2p-Node/host"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -99,9 +96,4 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 		}
 	}()
 
-	// wait for a SIGINT or SIGTERM signal
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	<-ch
-	fmt.Println("Received signal, shutting down...")
 }
