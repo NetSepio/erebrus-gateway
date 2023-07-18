@@ -35,6 +35,8 @@ func NewService(h host.Host, ctx context.Context) *pubsub.PubSub {
 	return ps
 }
 
+var Status_data []*Status
+
 func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 
 	topicString := "status"
@@ -56,15 +58,15 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 			if msg.ReceivedFrom == h.ID() {
 				continue
 			}
-			st := new(status)
-			if err := json.Unmarshal(msg.Data, st); err != nil {
-				panic(err)
-			}
-			fmt.Printf("From [%s] , recieved status message is: %s", msg.ReceivedFrom, st.Status)
-			if err := topic.Publish(ctx, []byte("heres a reply from masternodes")); err != nil {
+			status := new(Status)
+			if err := json.Unmarshal(msg.Data, status); err != nil {
 				panic(err)
 			}
 
+			Status_data = append(Status_data, status)
+			if err := topic.Publish(ctx, []byte("Gateway recieved the status")); err != nil {
+				panic(err)
+			}
 		}
 	}()
 

@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/TheLazarusNetwork/erebrus-gateway/api"
 	"github.com/TheLazarusNetwork/erebrus-gateway/app"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,7 @@ func main() {
 	ginApp.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"status": 404, "message": "Invalid Endpoint Request"})
 	})
+	api.ApplyRoutes(ginApp)
 	ginApp.Run(":" + os.Getenv("HTTP_PORT"))
 
 	// wait for a SIGINT or SIGTERM signal
