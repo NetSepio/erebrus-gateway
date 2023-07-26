@@ -36,6 +36,7 @@ func NewService(h host.Host, ctx context.Context) *pubsub.PubSub {
 }
 
 var Status_data []*Status
+var StatusData map[string]*Status
 
 func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 
@@ -63,10 +64,12 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 				panic(err)
 			}
 
-			Status_data = append(Status_data, status)
+			//Status_data = append(Status_data, status)
+			StatusData[status.PublicKey] = status
 			if err := topic.Publish(ctx, []byte("Gateway recieved the status")); err != nil {
 				panic(err)
 			}
+			topic.EventHandler()
 		}
 	}()
 
