@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	p2pHost "github.com/TheLazarusNetwork/erebrus-gateway/app/p2p-Node/host"
+	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 )

@@ -3,7 +3,7 @@ package status
 import (
 	"net/http"
 
-	"github.com/TheLazarusNetwork/erebrus-gateway/app/p2p-Node/service"
+	"github.com/NetSepio/erebrus-gateway/app/p2p-Node/service"
 	"github.com/gin-gonic/gin"
 )
 

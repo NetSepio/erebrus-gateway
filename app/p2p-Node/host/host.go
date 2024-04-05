@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheLazarusNetwork/erebrus-gateway/app/p2p-Node/pkey"
+	"github.com/NetSepio/erebrus-gateway/app/p2p-Node/pkey"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -26,7 +26,7 @@ const DiscoveryInterval = time.Second * 10
 
 func getHostAddress(ha host.Host) string {
 	// Build host multiaddress
-	hostAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/p2p/%s", ha.ID().Pretty()))
+	hostAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/p2p/%s", ha.ID()))
 
 	// Now we can build a full multiaddress to reach this host
 	// by encapsulating both addresses:

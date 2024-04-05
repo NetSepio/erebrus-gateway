@@ -58,8 +58,8 @@ jobs:
         run: |
           export CURRENT_BRANCH=${GITHUB_REF#refs/heads/}
           export TAG=$([[ $CURRENT_BRANCH == "main" ]] && echo $CURRENT_BRANCH || echo "latest")
-          export GITHUB_REF_IMAGE=ghcr.io/thelazarusnetwork/erebrus-gateway:$GITHUB_SHA
-          export GITHUB_BRANCH_IMAGE=ghcr.io/thelazarusnetwork/erebrus-gateway:$TAG
+          export GITHUB_REF_IMAGE=ghcr.io/NetSepio/erebrus-gateway:$GITHUB_SHA
+          export GITHUB_BRANCH_IMAGE=ghcr.io/NetSepio/erebrus-gateway:$TAG
           docker build -t $GITHUB_REF_IMAGE -t $GITHUB_BRANCH_IMAGE .
           echo "Pushing Image to GitHub Container Registry"
           docker push $GITHUB_REF_IMAGE
@@ -106,5 +106,5 @@ jobs:
             cd erebrus-gateway
             podman stop erebrus-gateway && podman rm erebrus-gateway && podman image rm erebrus-gateway
             echo ${{ secrets.GHCR_TOKEN }} | podman login ghcr.io -u secrets.GHCR_USERNAME --password-stdin
-            podman pull ghcr.io/thelazarusnetwork/erebrus-gateway:main
-            podman run --name="erebrus-gateway" --net=bridge -p 9001:9001 -v "$(pwd)"/identity.key:/app/identity.key:ro -d ghcr.io/thelazarusnetwork/erebrus-gateway:main
+            podman pull ghcr.io/NetSepio/erebrus-gateway:main
+            podman run --name="erebrus-gateway" --net=bridge -p 9001:9001 -v "$(pwd)"/identity.key:/app/identity.key:ro -d ghcr.io/NetSepio/erebrus-gateway:main

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	p2pHost "github.com/TheLazarusNetwork/erebrus-gateway/app/p2p-Node/host"
-	"github.com/TheLazarusNetwork/erebrus-gateway/app/p2p-Node/service"
+	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
+	"github.com/NetSepio/erebrus-gateway/app/p2p-Node/service"
 )
 
 // DiscoveryInterval is how often we search for other peers via the DHT.

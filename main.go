@@ -6,8 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/TheLazarusNetwork/erebrus-gateway/api"
-	"github.com/TheLazarusNetwork/erebrus-gateway/app"
+	"github.com/NetSepio/erebrus-gateway/api"
+	"github.com/NetSepio/erebrus-gateway/app"
+	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -17,7 +18,7 @@ func main() {
 	godotenv.Load()
 	go app.Init()
 	ginApp := gin.Default()
-
+	logwrapper.Init()
 	// cors middleware
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
