@@ -28,5 +28,4 @@ func Init() {
 	go p2pHost.Discover(ctx, ha, dht)
 
 	service.SubscribeTopics(ps, ha, ctx)
-
 }

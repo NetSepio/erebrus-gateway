@@ -2,11 +2,12 @@ package dbconfig
 
 import (
 	"fmt"
+	"os"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
-	"github.com/NetSepio/erebrus-gateway/config/envconfig"
+	"github.com/NetSepio/erebrus-gateway/models"
 
 	"gorm.io/driver/postgres"
 )
@@ -19,14 +20,14 @@ func GetDb() *gorm.DB {
 		return db
 	}
 	var (
-		host     = envconfig.EnvVars.DB_HOST
-		username = envconfig.EnvVars.DB_USERNAME
-		password = envconfig.EnvVars.DB_PASSWORD
-		dbname   = envconfig.EnvVars.DB_NAME
-		port     = envconfig.EnvVars.DB_PORT
+		host     = os.Getenv("DB_HOST")
+		username = os.Getenv("DB_USERNAME")
+		password = os.Getenv("DB_PASSWORD")
+		dbname   = os.Getenv("DB_NAME")
+		port     = os.Getenv("DB_PORT")
 	)
 
-	dns := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable port=%d",
+	dns := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable port=%s",
 		host, username, password, dbname, port)
 
 	var err error
@@ -45,25 +46,14 @@ func GetDb() *gorm.DB {
 		log.Fatal("failed to ping database", err)
 	}
 
-	// if err := db.AutoMigrate(&models.User{}, &models.Role{}, &models.UserFeedback{}, &models.FlowId{}, &models.Review{}, &models.WaitList{}, &models.Domain{}, &models.DomainAdmin{}, &models.Sotreus{}, &models.Erebrus{}); err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// db.Exec(`create table if not exists user_roles (
-	// 		wallet_address text,
-	// 		role_id text,
-	// 		unique (wallet_address,role_id)
-	// 		)`)
-
-	// //Create flow id
-	// db.Exec(`
-	// DO $$ BEGIN
-	// 	CREATE TYPE flow_id_type AS ENUM (
-	// 		'AUTH',
-	// 		'ROLE');
-	// EXCEPTION
-	// 	WHEN duplicate_object THEN null;
-	// END $$;`)
-
 	return db.Debug()
+}
+
+func DbInit() error {
+	db := GetDb()
+
+	if err := db.AutoMigrate(models.Erebrus{}, models.Node{}, &models.User{}, &models.FlowId{}); err != nil {
+		log.Fatal(err)
+	}
+	return nil
 }
