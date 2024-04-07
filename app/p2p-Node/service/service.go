@@ -63,7 +63,7 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 			if err != nil {
 				logwrapper.Error("failed to update db: ", err.Error())
 			}
-			if err := topic.Publish(ctx, []byte("Gateway recieved the status")); err != nil {
+			if err := topic.Publish(ctx, []byte("Gateway recieved the node information")); err != nil {
 				panic(err)
 			}
 			fmt.Println("here already")

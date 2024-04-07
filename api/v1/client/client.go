@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
-	"github.com/NetSepio/erebrus-gateway/config/constants/regions"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
@@ -19,16 +18,16 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/erebrus")
 	{
 		g.Use(paseto.PASETO(false))
-		g.POST("/client/:region", RegisterClient)
+		g.POST("/client/:regionId", RegisterClient)
 		g.GET("/clients", GetAllClients)
 		g.DELETE("/client/:region/:uuid", DeleteClient)
 		// g.GET("/config/:region/:uuid", GetConfig)
 	}
 }
 func RegisterClient(c *gin.Context) {
-	region := c.Param("region")
+	region_id := c.Param("regionId")
 	db := dbconfig.GetDb()
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRES)
+	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
 	// var count int64
 	// err := db.Model(&models.Erebrus{}).Where("wallet_address = ?", walletAddress).Find(&models.Erebrus{}).Count(&count).Error
 	// if err != nil {
@@ -42,6 +41,12 @@ func RegisterClient(c *gin.Context) {
 	// 	httpo.NewErrorResponse(http.StatusBadRequest, "Can't create more clients, maximum 3 allowed").SendD(c)
 	// 	return
 	// }
+	var node *models.Node
+	if err := db.Model(&models.Node{}).First(&node, region_id).Error; err != nil {
+		logwrapper.Errorf("failed to get node: %s", err)
+		httpo.NewErrorResponse(http.StatusBadRequest, err.Error()).SendD(c)
+		return
+	}
 
 	var req Client
 
@@ -67,7 +72,7 @@ func RegisterClient(c *gin.Context) {
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
-	contractReq, err := http.NewRequest(http.MethodPost, regions.ErebrusRegions[region].ServerHttp+"/api/v1.0/client", bytes.NewReader(dataBytes))
+	contractReq, err := http.NewRequest(http.MethodPost, node.Address+"/api/v1.0/client", bytes.NewReader(dataBytes))
 	if err != nil {
 		logwrapper.Errorf("failed to create	 request: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
@@ -98,7 +103,9 @@ func RegisterClient(c *gin.Context) {
 		UUID:          reqBody.Client.UUID,
 		Name:          reqBody.Client.Name,
 		WalletAddress: walletAddress,
-		Region:        region,
+		NodeId:        node.Id,
+		Region:        node.Region,
+		Domain:        node.Domain,
 		CollectionId:  req.CollectionId,
 	}
 	if err := db.Create(&dbEntry).Error; err != nil {
@@ -119,7 +126,7 @@ func GetClient(c *gin.Context) {
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
-	resp, err := http.Get(regions.ErebrusRegions[cl.Region].ServerHttp + "/api/v1.0/client/" + uuid)
+	resp, err := http.Get(cl.Domain + "/api/v1.0/client/" + uuid)
 	if err != nil {
 		logwrapper.Errorf("failed to create	 request: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
@@ -155,7 +162,7 @@ func DeleteClient(c *gin.Context) {
 	}
 
 	client := &http.Client{}
-	contractReq, err := http.NewRequest(http.MethodDelete, regions.ErebrusRegions[cl.Region].ServerHttp+"/api/v1.0/client", bytes.NewReader(nil))
+	contractReq, err := http.NewRequest(http.MethodDelete, cl.Domain+"/api/v1.0/client", bytes.NewReader(nil))
 	if err != nil {
 		logwrapper.Errorf("failed to create	 request: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
@@ -190,7 +197,7 @@ func GetConfig(c *gin.Context) {
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
-	resp, err := http.Get(regions.ErebrusRegions[cl.Region].ServerHttp + "/api/v1.0/client/" + uuid + "/config")
+	resp, err := http.Get(cl.Domain + "/api/v1.0/client/" + uuid + "/config")
 	if err != nil {
 		logwrapper.Errorf("failed to create	request: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
@@ -210,7 +217,7 @@ func GetConfig(c *gin.Context) {
 }
 
 func GetClientsByRegion(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRES)
+	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
 	region := c.Param("region")
 
 	db := dbconfig.GetDb()
@@ -220,7 +227,7 @@ func GetClientsByRegion(c *gin.Context) {
 	httpo.NewSuccessResponseP(200, "VPN client fetched successfully", clients).SendD(c)
 }
 func GetClientsByCollectionRegion(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRES)
+	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
 	region := c.Param("region")
 	collection_id := c.Param("collection_id")
 
@@ -231,7 +238,7 @@ func GetClientsByCollectionRegion(c *gin.Context) {
 	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
 }
 func GetAllClients(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRES)
+	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
 
 	region := c.Query("region")
 	collectionID := c.Query("collection_id")
@@ -253,7 +260,7 @@ func GetAllClients(c *gin.Context) {
 }
 
 func GetClientsByCollectionId(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRES)
+	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
 	collection_id := c.Param("collection_id")
 
 	db := dbconfig.GetDb()
