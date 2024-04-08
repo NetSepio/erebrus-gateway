@@ -11,5 +11,4 @@ RUN go build -o erebrus-gateway .
 FROM alpine AS final
 WORKDIR /app
 COPY --from=build-app /app/erebrus-gateway .
-RUN apk del git
 CMD ["./erebrus-gateway"]
