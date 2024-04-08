@@ -104,12 +104,12 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 	var model models.Node
 
-	if err := db.First(&model, node.Id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return db.Create(node).Error
-		}
-		return err
+	result := db.Model(&models.Node{}).Where("id = ?", node.Id)
+	if result.RowsAffected != 0 {
+		//exists, update
+		return db.Model(&model).Updates(node).Error
+	} else {
+		//create
+		return db.Create(node).Error
 	}
-
-	return db.Model(&model).Updates(node).Error
 }

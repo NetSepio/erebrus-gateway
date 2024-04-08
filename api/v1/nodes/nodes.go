@@ -12,10 +12,10 @@ import (
 )
 
 func ApplyRoutes(r *gin.RouterGroup) {
-	g := r.Group("/node")
+	g := r.Group("/nodes")
 	{
 		g.Use(paseto.PASETO(false))
-		g.POST("/all", FetchAllNodes)
+		g.GET("/all", FetchAllNodes)
 	}
 }
 

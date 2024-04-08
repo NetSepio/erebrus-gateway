@@ -3,7 +3,7 @@ package api
 import (
 	"github.com/NetSepio/erebrus-gateway/api/status"
 	"github.com/NetSepio/erebrus-gateway/api/v1/client"
-	nodes "github.com/NetSepio/erebrus-gateway/api/v1/node"
+	"github.com/NetSepio/erebrus-gateway/api/v1/nodes"
 	"github.com/gin-gonic/gin"
 )
 
