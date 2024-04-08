@@ -1,4 +1,4 @@
-package regions
+package nodes
 
 import (
 	"net/http"
