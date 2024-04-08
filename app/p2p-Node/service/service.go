@@ -103,11 +103,13 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 
 func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 	var model models.Node
-	if err := db.Model(&models.Node{}).First(node.Id).Error; err != nil {
+
+	if err := db.First(&model, node.Id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return db.Model(&models.Node{}).Create(&node).Error
+			return db.Create(node).Error
 		}
 		return err
 	}
-	return db.Model(&models.Node{}).Updates(model).Error
+
+	return db.Model(&model).Updates(node).Error
 }
