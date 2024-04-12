@@ -72,7 +72,7 @@ func RegisterClient(c *gin.Context) {
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
-	contractReq, err := http.NewRequest(http.MethodPost, node.Address+"/api/v1.0/client", bytes.NewReader(dataBytes))
+	contractReq, err := http.NewRequest(http.MethodPost, node.Domain+"/api/v1.0/client", bytes.NewReader(dataBytes))
 	if err != nil {
 		logwrapper.Errorf("failed to create	 request: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
