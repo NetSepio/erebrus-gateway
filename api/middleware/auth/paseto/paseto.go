@@ -53,7 +53,7 @@ func PASETO(authOptional bool) func(*gin.Context) {
 		pasetoToken := strings.TrimPrefix(headers.Authorization, "Bearer ")
 
 		//auth req to gateway
-		contractReq, err := http.NewRequest(http.MethodGet, os.Getenv("GATEWAY_URL")+"/api/v1.0/webapp/auth", nil)
+		contractReq, err := http.NewRequest(http.MethodGet, os.Getenv("GATEWAY_URL")+"/api/v1.0/authenticate", nil)
 		if err != nil {
 			logrus.Errorf("failed to send request: %s", err)
 			c.AbortWithStatus(http.StatusUnauthorized)
