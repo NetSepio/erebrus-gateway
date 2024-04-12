@@ -15,7 +15,7 @@ type Client struct {
 	UpdatedBy                 string   `json:"UpdatedBy,omitempty"`
 	CreatedAt                 int64    `json:"CreatedAt,omitempty"`
 	UpdatedAt                 int64    `json:"UpdatedAt,omitempty"`
-	CollectionId              string   `json:"CollectionId" binding:"required"`
+	CollectionId              string   `json:"CollectionId",omitempty`
 }
 
 type Response struct {
