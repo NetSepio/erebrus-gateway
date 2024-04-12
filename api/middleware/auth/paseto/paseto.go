@@ -32,7 +32,6 @@ func PASETO(authOptional bool) func(*gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-
 		if headers.Authorization == "" {
 			if authOptional {
 				c.Next()
@@ -51,7 +50,6 @@ func PASETO(authOptional bool) func(*gin.Context) {
 		}
 
 		pasetoToken := strings.TrimPrefix(headers.Authorization, "Bearer ")
-
 		//auth req to gateway
 		contractReq, err := http.NewRequest(http.MethodGet, os.Getenv("GATEWAY_URL")+"/api/v1.0/authenticate", nil)
 		if err != nil {
@@ -73,16 +71,16 @@ func PASETO(authOptional bool) func(*gin.Context) {
 			return
 		}
 		defer resp.Body.Close()
-		var responseBody AuthenticateTokenPayload
+		var responseBody AuthenticateTokenResponse
 		err = json.NewDecoder(resp.Body).Decode(&responseBody)
 		if err != nil {
 			fmt.Printf("Failed to decode response body: %s\n", err)
 			return
 		} else {
-			if responseBody.WalletAddress != "" {
-				c.Set("CTX_WALLET_ADDRESS", responseBody.WalletAddress)
+			if responseBody.Payload.WalletAddress != "" {
+				c.Set(CTX_WALLET_ADDRESS, responseBody.Payload.WalletAddress)
 			}
-			c.Set("CTX_USER_ID", responseBody.UserId)
+			c.Set(CTX_USER_ID, responseBody.Payload.UserID)
 			c.Next()
 		}
 	}
