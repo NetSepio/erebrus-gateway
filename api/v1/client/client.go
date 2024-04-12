@@ -106,7 +106,7 @@ func RegisterClient(c *gin.Context) {
 		NodeId:        node.Id,
 		Region:        node.Region,
 		Domain:        node.Domain,
-		CollectionId:  req.CollectionId,
+		// CollectionId:  req.CollectionId,
 	}
 	if err := db.Create(&dbEntry).Error; err != nil {
 		logwrapper.Errorf("failed to create database entry: %s", err)
@@ -241,7 +241,7 @@ func GetAllClients(c *gin.Context) {
 	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
 
 	region := c.Query("region")
-	collectionID := c.Query("collection_id")
+	// collectionID := c.Query("collection_id")
 
 	db := dbconfig.GetDb()
 	query := db.Model(&models.Erebrus{}).Where("wallet_address = ?", walletAddress)
@@ -249,9 +249,9 @@ func GetAllClients(c *gin.Context) {
 	if region != "" {
 		query = query.Where("region = ?", region)
 	}
-	if collectionID != "" {
-		query = query.Where("collection_id = ?", collectionID)
-	}
+	// if collectionID != "" {
+	// 	query = query.Where("collection_id = ?", collectionID)
+	// }
 
 	var clients *[]models.Erebrus
 	query.Find(&clients)
