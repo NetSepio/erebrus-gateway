@@ -108,6 +108,4 @@ func Discover(ctx context.Context, h host.Host, dht *dht.IpfsDHT) {
 
 	// Advertise our addresses on rendezvous
 	discovery.Advertise(ctx, routingDiscovery, DiscoveryServiceTag)
-	peers := dht.RoutingTable().GetPeerInfos()
-	fmt.Println("table", peers)
 }

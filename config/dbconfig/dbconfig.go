@@ -46,7 +46,7 @@ func GetDb() *gorm.DB {
 		log.Fatal("failed to ping database", err)
 	}
 
-	return db.Debug()
+	return db
 }
 
 func DbInit() error {
