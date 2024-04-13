@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
@@ -49,7 +48,6 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 			if err != nil {
 				panic(err)
 			}
-			fmt.Println("recieved")
 			if msg.ReceivedFrom == h.ID() {
 				continue
 			}
@@ -66,7 +64,6 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 			if err := topic.Publish(ctx, []byte("Gateway recieved the node information")); err != nil {
 				panic(err)
 			}
-			fmt.Println("here already")
 
 			topic.EventHandler()
 		}

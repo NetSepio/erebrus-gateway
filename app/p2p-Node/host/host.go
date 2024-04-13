@@ -103,45 +103,11 @@ func NewDHT(ctx context.Context, host host.Host, bootstrapPeers []multiaddr.Mult
 	return kdht, nil
 }
 
-// Search the DHT for peers, then connect to them.
 func Discover(ctx context.Context, h host.Host, dht *dht.IpfsDHT) {
 	var routingDiscovery = routing.NewRoutingDiscovery(dht)
 
 	// Advertise our addresses on rendezvous
 	discovery.Advertise(ctx, routingDiscovery, DiscoveryServiceTag)
-
-	// // Search for peers every DiscoveryInterval
-	// ticker := time.NewTicker(DiscoveryInterval)
-	// defer ticker.Stop()
-
-	// for {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		return
-	// 	case <-ticker.C:
-
-	// 		// Search for other peers advertising on rendezvous and
-	// 		// connect to them.
-	// 		peers, err := discovery.FindPeers(ctx, routingDiscovery, DiscoveryServiceTag)
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-
-	// 		for _, p := range peers {
-	// 			if p.ID == h.ID() {
-	// 				continue
-	// 			}
-	// 			if h.Network().Connectedness(p.ID) != network.Connected {
-	// 				_, err = h.Network().DialPeer(ctx, p.ID)
-	// 				if err != nil {
-	// 					fmt.Printf("Failed to connect to peer (%s): %s", p.ID, err.Error())
-
-	// 					fmt.Println()
-	// 					continue
-	// 				}
-	// 				fmt.Println("Connected to peer", p.ID.Pretty())
-	// 			}
-	// 		}
-	// 	}
-	// }
+	peers := dht.RoutingTable().GetPeerInfos()
+	fmt.Println("table", peers)
 }

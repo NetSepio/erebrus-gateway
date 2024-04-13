@@ -18,7 +18,7 @@ import (
 func main() {
 	godotenv.Load()
 	logwrapper.Init()
-	go app.Init()
+	app.Init()
 	ginApp := gin.Default()
 	dbconfig.DbInit()
 
