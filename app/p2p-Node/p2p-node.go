@@ -38,7 +38,7 @@ func Init() {
 
 	go p2pHost.Discover(ctx, ha, dht)
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	quit := make(chan struct{})
 	go func() {
 		for {
