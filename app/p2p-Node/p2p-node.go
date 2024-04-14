@@ -66,7 +66,7 @@ func Init() {
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
 						fmt.Printf("Failed to connect to peer %s: %s\n", peerInfo.ID.String(), err)
 						node.Status = "inactive"
-						if err := db.Model(&models.Node{}).Save(&node).Error; err != nil {
+						if err := db.Model(&models.Node{}).Where("id = ?", node.Id).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}
