@@ -72,7 +72,7 @@ func Init() {
 						}
 						lastPingTime := time.Unix(node.LastPingedTimeStamp, 0)
 						duration := time.Since(lastPingTime)
-						threshold := 6 * time.Hour
+						threshold := 48 * time.Hour
 						if duration > threshold {
 							fmt.Println("The node is inactive for too long, deleting ", node.Id)
 							if err := db.Where("id = ?", node.Id).Delete(&models.Node{}).Error; err != nil {
