@@ -75,8 +75,8 @@ func Init() {
 						threshold := 6 * time.Hour
 						if duration > threshold {
 							fmt.Println("The node is inactive for too long, deleting ", node.Id)
-							if err := db.Model(&models.Node{}).Delete(node).Error; err != nil {
-								logrus.Error("failed to delete node: ", err.Error())
+							if err := db.Where("id = ?", node.Id).Delete(&models.Node{}).Error; err != nil {
+								logrus.Error("failed to delete nodes: ", err.Error())
 								continue
 							}
 						}
@@ -84,7 +84,7 @@ func Init() {
 						fmt.Printf("Connected to peer %s\n", peerInfo.ID.String())
 						node.Status = "active"
 						node.LastPingedTimeStamp = time.Now().Unix()
-						if err := db.Model(&models.Node{}).Save(&node).Error; err != nil {
+						if err := db.Model(&models.Node{}).Where("id = ?", node.Id).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}
