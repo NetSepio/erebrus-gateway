@@ -55,8 +55,11 @@ func CheckSubscription(c *gin.Context) {
 
 	db := dbconfig.GetDb()
 	var subscription *models.Subscription
-	err := db.Where("userId = ?", userId).First(&subscription).Error
+	err := db.Where("user_id = ?", userId).First(&subscription).Error
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusOK, gin.H{"status": "notFound"})
+		}
 		logwrapper.Errorf("Error fetching subscriptions: %v", err)
 		c.Status(http.StatusInternalServerError)
 		return
