@@ -95,7 +95,6 @@ func Init() {
 				ticker.Stop()
 				return
 			}
-			fmt.Println("refresh")
 
 		}
 	}()
