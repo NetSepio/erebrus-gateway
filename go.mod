@@ -32,6 +32,8 @@ require (
 	github.com/libp2p/go-openssl v0.1.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/spacemonkeygo/spacelog v0.0.0-20180420211403-2296661a0572 // indirect
+	github.com/stripe/stripe-go v70.15.0+incompatible // indirect
+	github.com/stripe/stripe-go/v76 v76.25.0 // indirect
 	go.opentelemetry.io/otel/metric v1.25.0 // indirect
 )
 
