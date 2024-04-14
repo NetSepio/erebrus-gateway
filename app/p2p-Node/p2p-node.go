@@ -59,17 +59,35 @@ func Init() {
 					}
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
 					if err != nil {
-						panic(err)
+						logrus.Error(err)
+						continue
 					}
 					// Attempt to connect to the peer
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
 						fmt.Printf("Failed to connect to peer %s: %s\n", peerInfo.ID.String(), err)
-						if err := db.Model(&models.Node{}).Delete(node).Error; err != nil {
-							logrus.Error("failed to delete node: ", err.Error())
+						node.Status = "inactive"
+						if err := db.Model(&models.Node{}).Save(&node).Error; err != nil {
+							logrus.Error("failed to update node: ", err.Error())
 							continue
+						}
+						lastPingTime := time.Unix(node.LastPingedTimeStamp, 0)
+						duration := time.Since(lastPingTime)
+						threshold := 6 * time.Hour
+						if duration > threshold {
+							fmt.Println("The node is inactive for too long, deleting ", node.Id)
+							if err := db.Model(&models.Node{}).Delete(node).Error; err != nil {
+								logrus.Error("failed to delete node: ", err.Error())
+								continue
+							}
 						}
 					} else {
 						fmt.Printf("Connected to peer %s\n", peerInfo.ID.String())
+						node.Status = "active"
+						node.LastPingedTimeStamp = time.Now().Unix()
+						if err := db.Model(&models.Node{}).Save(&node).Error; err != nil {
+							logrus.Error("failed to update node: ", err.Error())
+							continue
+						}
 					}
 				}
 

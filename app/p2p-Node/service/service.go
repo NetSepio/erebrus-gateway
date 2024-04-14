@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -21,7 +23,7 @@ type status struct {
 func NewService(h host.Host, ctx context.Context) *pubsub.PubSub {
 	ps, err := pubsub.NewGossipSub(ctx, h)
 	if err != nil {
-		panic(err)
+		logrus.Error(err)
 	}
 	return ps
 }
@@ -35,34 +37,38 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 	topicString := "status"
 	topic, err := ps.Join(DiscoveryServiceTag + "/" + topicString)
 	if err != nil {
-		panic(err)
+		logrus.Error(err)
 	}
 	sub, err := topic.Subscribe()
 	if err != nil {
-		panic(err)
+		logrus.Error(err)
 	}
 	go func() {
 		for {
 			// Block until we recieve a new message.
 			msg, err := sub.Next(ctx)
 			if err != nil {
-				panic(err)
+				logrus.Error(err)
+				continue
 			}
 			if msg.ReceivedFrom == h.ID() {
 				continue
 			}
 			var node *models.Node
 			if err := json.Unmarshal(msg.Data, &node); err != nil {
-				panic(err)
+				logrus.Error(err)
+				continue
 			}
 			db := dbconfig.GetDb()
-
+			node.Status = "active"
+			node.LastPingedTimeStamp = time.Now().Unix()
 			err = CreateOrUpdate(db, node)
 			if err != nil {
 				logwrapper.Error("failed to update db: ", err.Error())
 			}
 			if err := topic.Publish(ctx, []byte("Gateway recieved the node information")); err != nil {
-				panic(err)
+				logrus.Error(err)
+				continue
 			}
 
 			topic.EventHandler()
