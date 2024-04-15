@@ -58,7 +58,10 @@ func CheckSubscription(c *gin.Context) {
 	err := db.Where("user_id = ?", userId).First(&subscription).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusOK, gin.H{"status": "notFound"})
+			res := SubscriptionResponse{
+				Status: "notFound",
+			}
+			c.JSON(http.StatusNotFound, res)
 		}
 		logwrapper.Errorf("Error fetching subscriptions: %v", err)
 		c.Status(http.StatusInternalServerError)
@@ -68,8 +71,11 @@ func CheckSubscription(c *gin.Context) {
 	if time.Now().Before(subscription.EndTime) {
 		status = "active"
 	}
-
-	c.JSON(http.StatusOK, gin.H{"data": subscription, "status": status})
+	res := SubscriptionResponse{
+		Subscription: subscription,
+		Status:       status,
+	}
+	c.JSON(http.StatusOK, res)
 }
 
 func CreatePaymentIntent(c *gin.Context) {
