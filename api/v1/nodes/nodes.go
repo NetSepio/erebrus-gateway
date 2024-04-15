@@ -14,7 +14,6 @@ import (
 func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/nodes")
 	{
-		g.Use(paseto.PASETO(true))
 		g.GET("/all", FetchAllNodes)
 	}
 }
