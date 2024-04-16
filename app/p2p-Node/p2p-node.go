@@ -2,7 +2,6 @@ package p2pnode
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
@@ -54,7 +53,6 @@ func Init() {
 				for _, node := range nodes {
 					peerMultiAddr, err := multiaddr.NewMultiaddr(node.Address)
 					if err != nil {
-						fmt.Printf("Failed to create multiAddr for peer %s: %s\n", node.Address, err)
 						continue
 					}
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
@@ -64,7 +62,6 @@ func Init() {
 					}
 					// Attempt to connect to the peer
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
-						fmt.Printf("Failed to connect to peer %s: %s\n", peerInfo.ID.String(), err)
 						node.Status = "inactive"
 						if err := db.Model(&models.Node{}).Where("id = ?", node.Id).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
@@ -74,14 +71,12 @@ func Init() {
 						duration := time.Since(lastPingTime)
 						threshold := 48 * time.Hour
 						if duration > threshold {
-							fmt.Println("The node is inactive for too long, deleting ", node.Id)
 							if err := db.Where("id = ?", node.Id).Delete(&models.Node{}).Error; err != nil {
 								logrus.Error("failed to delete nodes: ", err.Error())
 								continue
 							}
 						}
 					} else {
-						fmt.Printf("Connected to peer %s\n", peerInfo.ID.String())
 						node.Status = "active"
 						node.LastPingedTimeStamp = time.Now().Unix()
 						if err := db.Model(&models.Node{}).Where("id = ?", node.Id).Save(&node).Error; err != nil {

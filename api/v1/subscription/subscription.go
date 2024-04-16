@@ -168,7 +168,6 @@ func HandleWebhook(c *gin.Context) {
 			c.Status(http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Creating Subscription")
 
 	case stripe.EventTypePaymentIntentCanceled:
 		err := HandleCanceledOrFailedPaymentIntent(event.Data.Raw)
