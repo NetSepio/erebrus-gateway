@@ -28,6 +28,7 @@ func RegisterClient(c *gin.Context) {
 	region_id := c.Param("regionId")
 	db := dbconfig.GetDb()
 	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
+	userId := c.GetString(paseto.CTX_USER_ID)
 	// var count int64
 	// err := db.Model(&models.Erebrus{}).Where("wallet_address = ?", walletAddress).Find(&models.Erebrus{}).Count(&count).Error
 	// if err != nil {
@@ -106,6 +107,7 @@ func RegisterClient(c *gin.Context) {
 		NodeId:        node.Id,
 		Region:        node.Region,
 		Domain:        node.Domain,
+		UserId:        userId,
 		// CollectionId:  req.CollectionId,
 	}
 	if err := db.Create(&dbEntry).Error; err != nil {
@@ -217,34 +219,34 @@ func GetConfig(c *gin.Context) {
 }
 
 func GetClientsByRegion(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
+	userId := c.GetString(paseto.CTX_USER_ID)
 	region := c.Param("region")
 
 	db := dbconfig.GetDb()
 	var clients *[]models.Erebrus
-	db.Model(&models.Erebrus{}).Where("wallet_address = ? and region = ?", walletAddress, region).Find(&clients)
+	db.Model(&models.Erebrus{}).Where("user_id = ? and region = ?", userId, region).Find(&clients)
 
 	httpo.NewSuccessResponseP(200, "VPN client fetched successfully", clients).SendD(c)
 }
 func GetClientsByCollectionRegion(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
+	userId := c.GetString(paseto.CTX_USER_ID)
 	region := c.Param("region")
 	collection_id := c.Param("collection_id")
 
 	db := dbconfig.GetDb()
 	var clients *[]models.Erebrus
-	db.Model(&models.Erebrus{}).Where("wallet_address = ? and region = ? and collection_id = ?", walletAddress, region, collection_id).Find(&clients)
+	db.Model(&models.Erebrus{}).Where("user_id = ? and region = ? and collection_id = ?", userId, region, collection_id).Find(&clients)
 
 	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
 }
 func GetAllClients(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
+	userId := c.GetString(paseto.CTX_USER_ID)
 
 	region := c.Query("region")
 	// collectionID := c.Query("collection_id")
 
 	db := dbconfig.GetDb()
-	query := db.Model(&models.Erebrus{}).Where("wallet_address = ?", walletAddress)
+	query := db.Model(&models.Erebrus{}).Where("user_id = ?", userId)
 
 	if region != "" {
 		query = query.Where("region = ?", region)
@@ -260,12 +262,12 @@ func GetAllClients(c *gin.Context) {
 }
 
 func GetClientsByCollectionId(c *gin.Context) {
-	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
+	userId := c.GetString(paseto.CTX_USER_ID)
 	collection_id := c.Param("collection_id")
 
 	db := dbconfig.GetDb()
 	var clients *[]models.Erebrus
-	db.Model(&models.Erebrus{}).Where("wallet_address = ? and collection_id = ?", walletAddress, collection_id).Find(&clients)
+	db.Model(&models.Erebrus{}).Where("user_id = ? and collection_id = ?", userId, collection_id).Find(&clients)
 
 	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
 }
