@@ -49,7 +49,7 @@ func RegisterClient(c *gin.Context) {
 		return
 	}
 
-	var req Client
+	var req ClientRequest
 
 	err := c.BindJSON(&req)
 	if err != nil {
