@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
+func Nodeoperatorform() {
 	// Get the database connection
 	db := dbconfig.GetDb()
 	if db.Error != nil {
