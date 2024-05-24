@@ -11,4 +11,5 @@ type FormData struct {
 	WalletAddress string `json:"wallet_address"`
 	TwitterID     string `json:"twitter_id"`
 	Region        string `json:"region"`
+	Chain         string `json:"chain"`
 }
