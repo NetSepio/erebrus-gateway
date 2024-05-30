@@ -12,5 +12,5 @@ type Node struct {
 	UploadSpeed         float64 `json:"uploadSpeed"`
 	StartTimeStamp      int64   `json:"startTimeStamp"`
 	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
-	WalletAddress       string  `json:"walletAddress"`
+	WalletAddressSui    string  `json:"walletAddress"`
 }
