@@ -2,6 +2,7 @@ package p2pnode
 
 import (
 	"context"
+	"log"
 	"time"
 
 	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
@@ -59,6 +60,7 @@ func Init() {
 					if err != nil {
 						logrus.Error(err)
 						continue
+						log.Println(node)
 					}
 					// Attempt to connect to the peer
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
