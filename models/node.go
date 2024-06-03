@@ -13,4 +13,5 @@ type Node struct {
 	StartTimeStamp      int64   `json:"startTimeStamp"`
 	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
 	WalletAddressSui    string  `json:"walletAddress"`
+	WalletAddressSolana string  `json:walletAddressSol"`
 }
