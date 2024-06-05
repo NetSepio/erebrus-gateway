@@ -5,6 +5,7 @@ type Node struct {
 	Name                string  `json:"name"`
 	HttpPort            string  `json:"httpPort"`
 	Domain              string  `json:"domain"`
+	NodeName            string  `json:"nodename"`
 	Address             string  `json:"address"`
 	Region              string  `json:"region"`
 	Status              string  `json:"status"`
@@ -13,5 +14,5 @@ type Node struct {
 	StartTimeStamp      int64   `json:"startTimeStamp"`
 	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
 	WalletAddressSui    string  `json:"walletAddress"`
-	WalletAddressSolana	string  `json:"walletAddressSol"`
+	WalletAddressSolana string  `json:"walletAddressSol"`
 }
