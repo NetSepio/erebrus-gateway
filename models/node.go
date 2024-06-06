@@ -15,4 +15,11 @@ type Node struct {
 	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
 	WalletAddressSui    string  `json:"walletAddress"`
 	WalletAddressSolana string  `json:"walletAddressSol"`
+	IpInfoIP            string  `json:"ipinfoip"`
+	IpInfoCity          string  `json:"ipinfocity"`
+	IpInfoCountry       string  `json:"ipinfocountry"`
+	IpInfoLocation      string  `json:"ipinfolocation"`
+	IpInfoOrg           string  `json:"ipinfoorg"`
+	IpInfoPostal        string  `json:"ipinfopostal"`
+	IpInfoTimezone      string  `json:"ipinfotimezone"`
 }
