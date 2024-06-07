@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -112,7 +115,51 @@ func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 		//exists, update
 		return db.Model(&model).Updates(node).Error
 	} else {
-		//create
-		return db.Create(node).Error
+		// find the list of node which has the node name starting with sg ?
+		var nodes []models.Node
+		db.Where("node_name LIKE ?", node.IpInfoCountry+"%").Find(&nodes) // find all nodes with name starting with sg
+		if len(nodes) > 0 {
+
+			nodeName, err := bringTopRegionId(nodes, node.IpInfoCountry)
+			if err != nil {
+				return err
+			}
+			node.NodeName = nodeName
+			return db.Create(node).Error
+		} else {
+			// if no nodes with name starting with sg, create a new one
+			node.NodeName = node.IpInfoCountry + `001`
+			return db.Create(node).Error
+		}
+
 	}
+}
+func bringTopRegionId(arr []models.Node, region string) (string, error) {
+	if len(arr) == 0 {
+		return "", fmt.Errorf("array is empty")
+	}
+	// Use a map to track indices, though it's not necessary for finding the highest number
+	indexMap := make(map[int]models.Node)
+	for i, node := range arr {
+		indexMap[i] = node
+	}
+
+	firstRegionNumber := strings.Split(arr[0].NodeName, region)
+	/*in006 = [,006]*/
+	highest := firstRegionNumber[1]
+	for _, node := range indexMap {
+		splitedNodeName := strings.Split(node.NodeName, region)
+		if splitedNodeName[1] > highest {
+			highest = splitedNodeName[1]
+		}
+	}
+	// increment the highest number
+	highestInt, _ := strconv.Atoi(highest)
+	highestInt++
+	highest = strconv.Itoa(highestInt)
+	for len(highest) < 3 {
+		highest = "0" + highest
+	}
+
+	return highest, nil
 }
