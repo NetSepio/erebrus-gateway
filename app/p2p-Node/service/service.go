@@ -161,5 +161,5 @@ func bringTopRegionId(arr []models.Node, region string) (string, error) {
 		highest = "0" + highest
 	}
 
-	return highest, nil
+	return region + highest, nil
 }
