@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -118,6 +119,8 @@ func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 		// find the list of node which has the node name starting with sg ?
 		var nodes []models.Node
 		db.Where("node_name LIKE ?", node.IpInfoCountry+"%").Find(&nodes) // find all nodes with name starting with sg
+		fmt.Println("**************** Printing the node data ****************")
+		log.Printf("%+v\n", nodes)
 		if len(nodes) > 0 {
 
 			nodeName, err := bringTopRegionId(nodes, node.IpInfoCountry)
@@ -147,15 +150,21 @@ func bringTopRegionId(arr []models.Node, region string) (string, error) {
 	firstRegionNumber := strings.Split(arr[0].NodeName, region)
 	/*in006 = [,006]*/
 	highest := firstRegionNumber[1]
+	highestInt := 0
 	for _, node := range indexMap {
 		splitedNodeName := strings.Split(node.NodeName, region)
-		if splitedNodeName[1] > highest {
-			highest = splitedNodeName[1]
+		splitedNodeInt, _ := strconv.Atoi(splitedNodeName[1])
+		highestInt, _ = strconv.Atoi(highest)
+		fmt.Println("splitedNodeInt : ", splitedNodeInt, " , highestInt : ", highestInt)
+		if splitedNodeInt > highestInt {
+			highestInt = splitedNodeInt
 		}
 	}
 	// increment the highest number
-	highestInt, _ := strconv.Atoi(highest)
+	// highestInt, err := strconv.Atoi(highest)
+	log.Println("Printing the highest integer { before } = ", highestInt)
 	highestInt++
+	log.Println("Printing the highest integer { after } = ", highestInt)
 	highest = strconv.Itoa(highestInt)
 	for len(highest) < 3 {
 		highest = "0" + highest
