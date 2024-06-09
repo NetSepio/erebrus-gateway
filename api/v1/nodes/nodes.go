@@ -34,7 +34,7 @@ func FetchAllNodes(c *gin.Context) {
 func FetchAllActiveNodes(c *gin.Context) {
 	db := dbconfig.GetDb()
 	var nodes *[]models.Node
-	if err := db.Find(&nodes).Where("status = ? ", "active").Error; err != nil {
+	if err := db.Where("status = ?", "active").Not("status = ?", "inactive").Find(&nodes).Error; err != nil {
 		logwrapper.Errorf("failed to get active nodes from DB: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
