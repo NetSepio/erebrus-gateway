@@ -14,6 +14,8 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/nodes")
 	{
 		g.GET("/all", FetchAllNodes)
+		g.GET("/active", FetchAllActiveNodes)
+
 	}
 }
 
@@ -26,5 +28,17 @@ func FetchAllNodes(c *gin.Context) {
 		return
 	}
 	httpo.NewSuccessResponseP(200, "Nodes fetched succesfully", nodes).SendD(c)
+
+}
+
+func FetchAllActiveNodes(c *gin.Context) {
+	db := dbconfig.GetDb()
+	var nodes *[]models.Node
+	if err := db.Find(&nodes).Where("status = ? ", "active").Error; err != nil {
+		logwrapper.Errorf("failed to get active nodes from DB: %s", err)
+		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		return
+	}
+	httpo.NewSuccessResponseP(200, "Active Nodes fetched succesfully", nodes).SendD(c)
 
 }
