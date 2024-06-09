@@ -2,7 +2,6 @@ package p2pnode
 
 import (
 	"context"
-	"log"
 	"time"
 
 	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
@@ -52,7 +51,7 @@ func Init() {
 					return
 				}
 				for _, node := range nodes {
-					peerMultiAddr, err := multiaddr.NewMultiaddr(node.Address)
+					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
 					if err != nil {
 						continue
 					}
@@ -60,28 +59,28 @@ func Init() {
 					if err != nil {
 						logrus.Error(err)
 						continue
-						log.Println(node)
+						// log.Println(node)
 					}
 					// Attempt to connect to the peer
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
 						node.Status = "inactive"
-						if err := db.Model(&models.Node{}).Where("id = ?", node.Id).Save(&node).Error; err != nil {
+						if err := db.Model(&models.Node{}).Where("id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}
-						lastPingTime := time.Unix(node.LastPingedTimeStamp, 0)
+						lastPingTime := time.Unix(node.LastPing, 0)
 						duration := time.Since(lastPingTime)
 						threshold := 48 * time.Hour
 						if duration > threshold {
-							if err := db.Where("id = ?", node.Id).Delete(&models.Node{}).Error; err != nil {
+							if err := db.Where("id = ?", node.PeerId).Delete(&models.Node{}).Error; err != nil {
 								logrus.Error("failed to delete nodes: ", err.Error())
 								continue
 							}
 						}
 					} else {
 						node.Status = "active"
-						node.LastPingedTimeStamp = time.Now().Unix()
-						if err := db.Model(&models.Node{}).Where("id = ?", node.Id).Save(&node).Error; err != nil {
+						node.LastPing = time.Now().Unix()
+						if err := db.Model(&models.Node{}).Where("id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}

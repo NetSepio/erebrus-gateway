@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -61,7 +62,7 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 			}
 			db := dbconfig.GetDb()
 			node.Status = "active"
-			node.LastPingedTimeStamp = time.Now().Unix()
+			node.LastPing = time.Now().Unix()
 			err = CreateOrUpdate(db, node)
 			if err != nil {
 				logwrapper.Error("failed to update db: ", err.Error())
@@ -107,12 +108,59 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 	var model models.Node
 
-	result := db.Model(&models.Node{}).Where("id = ?", node.Id)
+	result := db.Model(&models.Node{}).Where("id = ?", node.PeerId)
 	if result.RowsAffected != 0 {
 		//exists, update
 		return db.Model(&model).Updates(node).Error
 	} else {
-		//create
-		return db.Create(node).Error
+		// find the list of node which has the node name starting with sg ?
+		var nodes []models.Node
+		db.Where("node_name LIKE ?", node.Region+"%").Find(&nodes) // find all nodes with name starting with sg
+		log.Printf("%+v\n", nodes)
+		if len(nodes) > 0 {
+			// nodeName, err := bringTopRegionId(nodes, node.Region)
+			// if err != nil {
+			// 	return err
+			// }
+			// node.NodeName = nodeName
+			return db.Create(node).Error
+		} else {
+			// if no nodes with name starting with sg, create a new one
+			// node.NodeName = node.IpInfoCountry + `001`
+			return db.Create(node).Error
+		}
+
 	}
 }
+
+/*func bringTopRegionId(arr []models.Node, region string) (string, error) {
+	if len(arr) == 0 {
+		return "", fmt.Errorf("array is empty")
+	}
+	// Use a map to track indices, though it's not necessary for finding the highest number
+	indexMap := make(map[int]models.Node)
+	for i, node := range arr {
+		indexMap[i] = node
+	}
+
+	firstRegionNumber := strings.Split(arr[0].NodeName, region)
+	// in006 = [,006]
+	highest := firstRegionNumber[1]
+	highestInt := 0
+	for _, node := range indexMap {
+		splitedNodeName := strings.Split(node.NodeName, region)
+		splitedNodeInt, _ := strconv.Atoi(splitedNodeName[1])
+		highestInt, _ = strconv.Atoi(highest)
+		if splitedNodeInt > highestInt {
+			highestInt = splitedNodeInt
+		}
+	}
+	// increment the highest number
+	highestInt++
+	highest = strconv.Itoa(highestInt)
+	for len(highest) < 3 {
+		highest = "0" + highest
+	}
+
+	return region + highest, nil
+}*/

@@ -73,7 +73,7 @@ func RegisterClient(c *gin.Context) {
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
-	contractReq, err := http.NewRequest(http.MethodPost, node.Domain+"/api/v1.0/client", bytes.NewReader(dataBytes))
+	contractReq, err := http.NewRequest(http.MethodPost, node.Host+"/api/v1.0/client", bytes.NewReader(dataBytes))
 	if err != nil {
 		logwrapper.Errorf("failed to create	 request: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
@@ -104,9 +104,9 @@ func RegisterClient(c *gin.Context) {
 		UUID:          reqBody.Client.UUID,
 		Name:          reqBody.Client.Name,
 		WalletAddress: walletAddress,
-		NodeId:        node.Id,
+		NodeId:        node.PeerId,
 		Region:        node.Region,
-		Domain:        node.Domain,
+		Domain:        node.Host,
 		UserId:        userId,
 		// CollectionId:  req.CollectionId,
 	}
