@@ -13,8 +13,7 @@ type Node struct {
 	UploadSpeed         float64 `json:"uploadSpeed"`
 	StartTimeStamp      int64   `json:"startTimeStamp"`
 	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
-	WalletAddressSui    string  `json:"walletAddress"`
-	WalletAddressSolana string  `json:"walletAddressSol"`
+	WalletAddress       string  `json:"walletAddress"`
 	IpInfoIP            string  `json:"ipinfoip"`
 	IpInfoCity          string  `json:"ipinfocity"`
 	IpInfoCountry       string  `json:"ipinfocountry"`
@@ -22,4 +21,5 @@ type Node struct {
 	IpInfoOrg           string  `json:"ipinfoorg"`
 	IpInfoPostal        string  `json:"ipinfopostal"`
 	IpInfoTimezone      string  `json:"ipinfotimezone"`
+	ChainName           string  `json:"chainName"`
 }
