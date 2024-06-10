@@ -1,7 +1,5 @@
 package models
 
-import "gorm.io/gorm"
-
 // type Node struct {
 // 	Id                  string  `json:"id" gorm:"primaryKey"`
 // 	Name                string  `json:"name"`
@@ -27,7 +25,6 @@ import "gorm.io/gorm"
 // }
 
 type Node struct {
-	gorm.Config
 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
 	Name             string  `json:"name"`
 	HttpPort         string  `json:"httpPort"`
@@ -48,6 +45,7 @@ type Node struct {
 }
 
 type TestNode struct {
+	//using for db operation
 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
 	Name             string  `json:"name"`
 	HttpPort         string  `json:"httpPort"`
