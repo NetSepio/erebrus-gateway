@@ -23,6 +23,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.GET("/clients", GetAllClients)
 		g.DELETE("/client/:uuid", DeleteClient)
 		// g.GET("/config/:region/:uuid", GetConfig)
+		g.GET("/clients/node/:nodeId", GetClientsByNode)
 	}
 }
 func RegisterClient(c *gin.Context) {
@@ -270,6 +271,21 @@ func GetClientsByCollectionId(c *gin.Context) {
 	db := dbconfig.GetDb()
 	var clients *[]models.Erebrus
 	db.Model(&models.Erebrus{}).Where("user_id = ? and collection_id = ?", userId, collection_id).Find(&clients)
+
+	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
+}
+
+func GetClientsByNode(c *gin.Context) {
+	nodeId := c.Param("nodeId")
+	db := dbconfig.GetDb()
+
+	var clients []models.Erebrus
+	err := db.Model(&models.Erebrus{}).Where("node_id = ?", nodeId).Find(&clients).Error
+	if err != nil {
+		logwrapper.Errorf("failed to fetch clients from database: %s", err)
+		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		return
+	}
 
 	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
 }
