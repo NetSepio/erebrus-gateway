@@ -12,4 +12,5 @@ type Erebrus struct {
 	Domain        string    `json:"domain"`
 	CollectionId  string    `json:"collectionId"`
 	CreatedAt     time.Time `json:"created_at"`
+	ChainName     string    `json:"chainName"`
 }
