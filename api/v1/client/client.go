@@ -23,8 +23,9 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.GET("/clients", GetAllClients)
 		g.DELETE("/client/:uuid", DeleteClient)
 		// g.GET("/config/:region/:uuid", GetConfig)
-		g.GET("/clients/node/:nodeId", GetClientsByNode)
+		// g.GET("/clients/node/:nodeId", GetClientsByNode)
 	}
+	r.GET("/erebrus/clients/node/:nodeId", GetClientsByNode)
 }
 func RegisterClient(c *gin.Context) {
 	region_id := c.Param("regionId")
