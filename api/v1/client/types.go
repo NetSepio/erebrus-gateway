@@ -13,7 +13,7 @@ type Client struct {
 	Address                   []string `json:"Address,omitempty"`
 	CreatedBy                 string   `json:"CreatedBy,omitempty"`
 	UpdatedBy                 string   `json:"UpdatedBy,omitempty"`
-	CreatedAt                 int64    `json:"CreatedAt,omitempty"`
+	CreatedAt                 int64    `json:"CreatedAt"`
 	UpdatedAt                 int64    `json:"UpdatedAt,omitempty"`
 	CollectionId              string   `json:"CollectionId",omitempty"`
 }
