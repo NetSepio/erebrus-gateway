@@ -288,5 +288,10 @@ func GetClientsByNode(c *gin.Context) {
 		return
 	}
 
+	// Ensure that an empty slice is sent if no clients are found
+	if clients == nil {
+		clients = []models.Erebrus{}
+	}
+
 	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
 }
