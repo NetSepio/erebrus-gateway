@@ -39,12 +39,13 @@ package models
 // 	Chain            string  `json:"chain"`
 // 	WalletAddress    string  `json:"walletAddress"`
 // 	Version          string  `json:"version"`
-// 	CodeHash         string  `json:"codeHash"`
+// 	CodeHash         string  `json:"codeHash"``
 // 	SystemInfo       OSInfo  `json:"systemInfo"`
 // 	IpInfo           IPInfo  `json:"ipinfo"`
 // }
 
 type Node struct {
+
 	//using for db operation
 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
 	Name             string  `json:"name"`
@@ -76,4 +77,5 @@ type OSInfo struct {
 type IPInfo struct {
 	IPv4Addresses []string // IPv4 Addresses
 	IPv6Addresses []string // IPv6 Addresses
+
 }
