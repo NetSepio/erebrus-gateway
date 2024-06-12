@@ -14,8 +14,6 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/nodes")
 	{
 		g.GET("/all", FetchAllNodes)
-		g.GET("/active", FetchAllActiveNodes)
-
 	}
 }
 
@@ -27,18 +25,29 @@ func FetchAllNodes(c *gin.Context) {
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
-	httpo.NewSuccessResponseP(200, "Nodes fetched succesfully", nodes).SendD(c)
+	var responses []models.NodeResponse
+	var response models.NodeResponse
 
-}
+	for _, i := range *nodes {
+		response.Id = i.PeerId
+		response.Name = i.Name
+		response.HttpPort = i.HttpPort
+		response.Domain = i.Host
+		response.NodeName = i.Name
+		response.Address = i.PeerAddress
+		response.Region = i.Region
+		response.Status = i.Status
+		response.DownloadSpeed = i.DownloadSpeed
+		response.UploadSpeed = i.UploadSpeed
+		response.StartTimeStamp = i.RegistrationTime
+		response.LastPingedTimeStamp = i.LastPing
+		response.WalletAddressSui = i.WalletAddress
+		response.WalletAddressSolana = i.WalletAddress
+		response.IpInfoCity = i.IpInfo
 
-func FetchAllActiveNodes(c *gin.Context) {
-	db := dbconfig.GetDb()
-	var nodes *[]models.Node
-	if err := db.Where("status = ?", "active").Not("status = ?", "inactive").Find(&nodes).Error; err != nil {
-		logwrapper.Errorf("failed to get active nodes from DB: %s", err)
-		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
-		return
+		responses = append(responses, response)
 	}
-	httpo.NewSuccessResponseP(200, "Active Nodes fetched succesfully", nodes).SendD(c)
+
+	httpo.NewSuccessResponseP(200, "Nodes fetched succesfully", responses).SendD(c)
 
 }

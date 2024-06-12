@@ -1,28 +1,28 @@
 package models
 
-// type Node struct {
-// 	Id                  string  `json:"id" gorm:"primaryKey"`
-// 	Name                string  `json:"name"`
-// 	HttpPort            string  `json:"httpPort"`
-// 	Domain              string  `json:"domain"`
-// 	NodeName            string  `json:"nodename"`
-// 	Address             string  `json:"address"`
-// 	Region              string  `json:"region"`
-// 	Status              string  `json:"status"`
-// 	DownloadSpeed       float64 `json:"downloadSpeed"`
-// 	UploadSpeed         float64 `json:"uploadSpeed"`
-// 	StartTimeStamp      int64   `json:"startTimeStamp"`
-// 	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
-// 	WalletAddressSui    string  `json:"walletAddress"`
-// 	WalletAddressSolana string  `json:"walletAddressSol"`
-// 	IpInfoIP            string  `json:"ipinfoip"`
-// 	IpInfoCity          string  `json:"ipinfocity"`
-// 	IpInfoCountry       string  `json:"ipinfocountry"`
-// 	IpInfoLocation      string  `json:"ipinfolocation"`
-// 	IpInfoOrg           string  `json:"ipinfoorg"`
-// 	IpInfoPostal        string  `json:"ipinfopostal"`
-// 	IpInfoTimezone      string  `json:"ipinfotimezone"`
-// }
+type NodeResponse struct {
+	Id                  string  `json:"id" gorm:"primaryKey"`
+	Name                string  `json:"name"`
+	HttpPort            string  `json:"httpPort"`
+	Domain              string  `json:"domain"`
+	NodeName            string  `json:"nodename"`
+	Address             string  `json:"address"`
+	Region              string  `json:"region"`
+	Status              string  `json:"status"`
+	DownloadSpeed       float64 `json:"downloadSpeed"`
+	UploadSpeed         float64 `json:"uploadSpeed"`
+	StartTimeStamp      int64   `json:"startTimeStamp"`
+	LastPingedTimeStamp int64   `json:"lastPingedTimeStamp"`
+	WalletAddressSui    string  `json:"walletAddress"`
+	WalletAddressSolana string  `json:"walletAddressSol"`
+	IpInfoIP            string  `json:"ipinfoip"`
+	IpInfoCity          string  `json:"ipinfocity"`
+	IpInfoCountry       string  `json:"ipinfocountry"`
+	IpInfoLocation      string  `json:"ipinfolocation"`
+	IpInfoOrg           string  `json:"ipinfoorg"`
+	IpInfoPostal        string  `json:"ipinfopostal"`
+	IpInfoTimezone      string  `json:"ipinfotimezone"`
+}
 
 // type Node struct {
 // 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
@@ -39,13 +39,12 @@ package models
 // 	Chain            string  `json:"chain"`
 // 	WalletAddress    string  `json:"walletAddress"`
 // 	Version          string  `json:"version"`
-// 	CodeHash         string  `json:"codeHash"``
+// 	CodeHash         string  `json:"codeHash"`
 // 	SystemInfo       OSInfo  `json:"systemInfo"`
 // 	IpInfo           IPInfo  `json:"ipinfo"`
 // }
 
 type Node struct {
-
 	//using for db operation
 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
 	Name             string  `json:"name"`
@@ -77,5 +76,4 @@ type OSInfo struct {
 type IPInfo struct {
 	IPv4Addresses []string // IPv4 Addresses
 	IPv6Addresses []string // IPv6 Addresses
-
 }
