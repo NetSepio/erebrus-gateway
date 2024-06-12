@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -20,15 +21,33 @@ func ApplyRoutes(r *gin.RouterGroup) {
 func FetchAllNodes(c *gin.Context) {
 	db := dbconfig.GetDb()
 	var nodes *[]models.Node
+	// var node *models.Node
 	if err := db.Find(&nodes).Error; err != nil {
 		logwrapper.Errorf("failed to get nodes from DB: %s", err)
 		httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
 		return
 	}
+
+	// Unmarshal SystemInfo into OSInfo struct
+
 	var responses []models.NodeResponse
 	var response models.NodeResponse
 
 	for _, i := range *nodes {
+		var osInfo models.OSInfo
+		err := json.Unmarshal([]byte(i.SystemInfo), &osInfo)
+		if err != nil {
+			logwrapper.Errorf("failed to get nodes from DB: %s", err)
+			httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		}
+
+		// Unmarshal IpInfo into IPInfo struct
+		var ipGeoAddress models.IpGeoAddress
+		err = json.Unmarshal([]byte(i.IpGeoData), &ipGeoAddress)
+		if err != nil {
+			logwrapper.Errorf("failed to get nodes from DB: %s", err)
+			httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		}
 		response.Id = i.PeerId
 		response.Name = i.Name
 		response.HttpPort = i.HttpPort
@@ -43,7 +62,13 @@ func FetchAllNodes(c *gin.Context) {
 		response.LastPingedTimeStamp = i.LastPing
 		response.WalletAddressSui = i.WalletAddress
 		response.WalletAddressSolana = i.WalletAddress
-		response.IpInfoCity = i.IpInfo
+		response.IpInfoIP = ipGeoAddress.IpInfoIP
+		response.IpInfoCity = ipGeoAddress.IpInfoCity
+		response.IpInfoCountry = ipGeoAddress.IpInfoCountry
+		response.IpInfoLocation = ipGeoAddress.IpInfoLocation
+		response.IpInfoOrg = ipGeoAddress.IpInfoOrg
+		response.IpInfoPostal = ipGeoAddress.IpInfoPostal
+		response.IpInfoTimezone = ipGeoAddress.IpInfoTimezone
 
 		responses = append(responses, response)
 	}

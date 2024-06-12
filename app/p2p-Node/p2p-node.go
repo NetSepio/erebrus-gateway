@@ -2,6 +2,9 @@ package p2pnode
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
 	"time"
 
 	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
@@ -46,11 +49,57 @@ func Init() {
 				var nodes []models.Node
 
 				err := db.Model(&models.Node{}).Find(&nodes).Error
+
 				if err != nil {
 					logrus.Error("failed to fetch nodes from db")
 					return
 				}
+
+				// fmt.Println("nodes : ", len(nodes))
+
 				for _, node := range nodes {
+
+					var (
+						newOSInfo     models.OSInfo
+						newGeoAddress models.IpGeoAddress
+						newIPInfo     models.IPInfo
+					)
+
+					err = json.Unmarshal([]byte(node.SystemInfo), &newOSInfo)
+					if err != nil {
+						log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
+					}
+					fmt.Println("node.IpGeoData : ", node.IpGeoData)
+					err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
+					if err != nil {
+						log.Printf("Error unmarshaling newGeoAddress from JSON: %v", err)
+					} else {
+
+						// IP := "150.129.168.46"
+						City := "Test"
+						// Region := "Maharashtra"
+						Country := "Test"
+						Location := "Test"
+						Organization := "Test"
+						Postal := "Test"
+						Timezone := "Test"
+
+						newGeoAddress.IpInfoCity = City
+						newGeoAddress.IpInfoCountry = Country
+						newGeoAddress.IpInfoLocation = Location
+						newGeoAddress.IpInfoOrg = Organization
+						newGeoAddress.IpInfoPostal = Postal
+						newGeoAddress.IpInfoTimezone = Timezone
+					}
+					err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
+					if err != nil {
+						log.Printf("Error unmarshaling newGeoAddress from JSON: %v", err)
+					}
+
+					node.SystemInfo = models.ToJSON(newOSInfo)
+					node.IpGeoData = models.ToJSON(newGeoAddress)
+					node.IpInfo = models.ToJSON(newIPInfo)
+
 					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
 					if err != nil {
 						continue
@@ -64,7 +113,7 @@ func Init() {
 					// Attempt to connect to the peer
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
 						node.Status = "inactive"
-						if err := db.Model(&models.Node{}).Where("id = ?", node.PeerId).Save(&node).Error; err != nil {
+						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}
@@ -72,7 +121,7 @@ func Init() {
 						duration := time.Since(lastPingTime)
 						threshold := 48 * time.Hour
 						if duration > threshold {
-							if err := db.Where("id = ?", node.PeerId).Delete(&models.Node{}).Error; err != nil {
+							if err := db.Where("peer_id = ?", node.PeerId).Delete(&models.Node{}).Error; err != nil {
 								logrus.Error("failed to delete nodes: ", err.Error())
 								continue
 							}
@@ -80,7 +129,7 @@ func Init() {
 					} else {
 						node.Status = "active"
 						node.LastPing = time.Now().Unix()
-						if err := db.Model(&models.Node{}).Where("id = ?", node.PeerId).Save(&node).Error; err != nil {
+						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}

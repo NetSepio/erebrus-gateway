@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type NodeResponse struct {
 	Id                  string  `json:"id" gorm:"primaryKey"`
 	Name                string  `json:"name"`
@@ -24,25 +26,13 @@ type NodeResponse struct {
 	IpInfoTimezone      string  `json:"ipinfotimezone"`
 }
 
-// type Node struct {
-// 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
-// 	Name             string  `json:"name"`
-// 	HttpPort         string  `json:"httpPort"`
-// 	Host             string  `json:"host"` //domain
-// 	PeerAddress      string  `json:"peerAddress"`
-// 	Region           string  `json:"region"`
-// 	Status           string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
-// 	DownloadSpeed    float64 `json:"downloadSpeed"`
-// 	UploadSpeed      float64 `json:"uploadSpeed"`
-// 	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
-// 	LastPing         int64   `json:"lastPing"`
-// 	Chain            string  `json:"chain"`
-// 	WalletAddress    string  `json:"walletAddress"`
-// 	Version          string  `json:"version"`
-// 	CodeHash         string  `json:"codeHash"`
-// 	SystemInfo       OSInfo  `json:"systemInfo"`
-// 	IpInfo           IPInfo  `json:"ipinfo"`
-// }
+func ToJSON(data interface{}) string {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+	return string(bytes)
+}
 
 type Node struct {
 	//using for db operation
@@ -63,6 +53,27 @@ type Node struct {
 	CodeHash         string  `json:"codeHash"`
 	SystemInfo       string  `json:"systemInfo" gorm:"type:jsonb"`
 	IpInfo           string  `json:"ipinfo" gorm:"type:jsonb"`
+	IpGeoData        string  `json:"ipGeoData" gorm:"type:jsonb"`
+}
+
+type NodeAppends struct {
+	PeerId           string  `json:"peerId" gorm:"primaryKey"`
+	Name             string  `json:"name"`
+	HttpPort         string  `json:"httpPort"`
+	Host             string  `json:"host"` //domain
+	PeerAddress      string  `json:"peerAddress"`
+	Region           string  `json:"region"`
+	Status           string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
+	DownloadSpeed    float64 `json:"downloadSpeed"`
+	UploadSpeed      float64 `json:"uploadSpeed"`
+	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
+	LastPing         int64   `json:"lastPing"`
+	Chain            string  `json:"chain"`
+	WalletAddress    string  `json:"walletAddress"`
+	Version          string  `json:"version"`
+	CodeHash         string  `json:"codeHash"`
+	SystemInfo       OSInfo  `json:"systemInfo"`
+	IpInfo           IPInfo  `json:"ipinfo"`
 }
 
 type OSInfo struct {
@@ -76,4 +87,14 @@ type OSInfo struct {
 type IPInfo struct {
 	IPv4Addresses []string // IPv4 Addresses
 	IPv6Addresses []string // IPv6 Addresses
+}
+
+type IpGeoAddress struct {
+	IpInfoIP       string
+	IpInfoCity     string
+	IpInfoCountry  string
+	IpInfoLocation string
+	IpInfoOrg      string
+	IpInfoPostal   string
+	IpInfoTimezone string
 }
