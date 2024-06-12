@@ -24,7 +24,7 @@ func fromJSON(data string, v interface{}) error {
 }
 
 // CreateNode creates a new node record in the database
-func CreateNode(node *models.TestNode) error {
+func CreateNode(node *models.Node) error {
 	DB := dbconfig.GetDb()
 	return DB.Create(node).Error
 }
@@ -32,7 +32,7 @@ func CreateNode(node *models.TestNode) error {
 // GetNodeByID retrieves a node record from the database by ID
 func GetNodeByID(id string) (models.Node, error) {
 	var (
-		node  models.TestNode
+		node  models.Node
 		v     models.Node
 		nodes models.Node
 	)
@@ -57,7 +57,7 @@ func GetNodeByID(id string) (models.Node, error) {
 		return nodes, nil
 	}
 
-	// Create Node struct from TestNode struct
+	// Create Node struct from Node struct
 	nodes = models.Node{
 		PeerId:           node.PeerId,
 		Name:             node.Name,
@@ -74,17 +74,17 @@ func GetNodeByID(id string) (models.Node, error) {
 		WalletAddress:    node.WalletAddress,
 		Version:          node.Version,
 		CodeHash:         node.CodeHash,
-		SystemInfo:       osInfo,
-		IpInfo:           ipInfo,
+		SystemInfo:       fmt.Sprintf("%+v\n", osInfo),
+		IpInfo:           fmt.Sprintf("%+v\n", ipInfo),
 	}
 
-		// Print Node struct
-		fmt.Printf("%+v\n", nodes)
+	// Print Node struct
+	fmt.Printf("%+v\n", nodes)
 	return nodes, nil
 }
 
 // UpdateNode updates an existing node record in the database
-func UpdateNode(node *models.TestNode) error {
+func UpdateNode(node *models.Node) error {
 	DB := dbconfig.GetDb()
 	return DB.Save(node).Error
 }
@@ -92,7 +92,7 @@ func UpdateNode(node *models.TestNode) error {
 // DeleteNode deletes a node record from the database
 func DeleteNode(id string) error {
 	DB := dbconfig.GetDb()
-	return DB.Delete(&models.TestNode{}, id).Error
+	return DB.Delete(&models.Node{}, id).Error
 }
 
 func getRandomString(n int) string {
@@ -111,7 +111,7 @@ func TestMain() {
 	// Example: Create a new node with SystemInfo and IpInfo
 	systemInfo := models.OSInfo{Name: "ExampleOS", Hostname: "localhost", Architecture: "x86_64", NumCPU: 4}
 	ipInfo := models.IPInfo{IPv4Addresses: []string{"192.168.1.1", "192.168.1.2"}, IPv6Addresses: []string{"::1"}}
-	newNode := &models.TestNode{
+	newNode := &models.Node{
 		PeerId:           getRandomString(10),
 		Name:             getRandomString(5),
 		HttpPort:         fmt.Sprintf("%d", rand.Intn(65535)),
@@ -139,7 +139,7 @@ func TestMain() {
 }
 
 func GetNodes() {
-	newNode := models.TestNode{}
+	newNode := models.Node{}
 	newNode.PeerId = "MWqenTWG5k"
 	retrievedNode, err := GetNodeByID(newNode.PeerId)
 	if err != nil {
@@ -152,7 +152,7 @@ func GetNodes() {
 }
 func Update() {
 	// Example: Update the node
-	newNode := &models.TestNode{}
+	newNode := &models.Node{}
 	newNode.Name = "UpdatedNode"
 	err := UpdateNode(newNode)
 	if err != nil {
@@ -161,7 +161,7 @@ func Update() {
 }
 func Delete() {
 	// Example: Update the node
-	retrievedNode := &models.TestNode{}
+	retrievedNode := &models.Node{}
 	// Example: Delete the node
 	err := DeleteNode(retrievedNode.PeerId)
 	if err != nil {

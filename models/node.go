@@ -24,27 +24,27 @@ package models
 // 	IpInfoTimezone      string  `json:"ipinfotimezone"`
 // }
 
-type Node struct {
-	PeerId           string  `json:"peerId" gorm:"primaryKey"`
-	Name             string  `json:"name"`
-	HttpPort         string  `json:"httpPort"`
-	Host             string  `json:"host"` //domain
-	PeerAddress      string  `json:"peerAddress"`
-	Region           string  `json:"region"`
-	Status           string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
-	DownloadSpeed    float64 `json:"downloadSpeed"`
-	UploadSpeed      float64 `json:"uploadSpeed"`
-	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
-	LastPing         int64   `json:"lastPing"`
-	Chain            string  `json:"chain"`
-	WalletAddress    string  `json:"walletAddress"`
-	Version          string  `json:"version"`
-	CodeHash         string  `json:"codeHash"`
-	SystemInfo       OSInfo  `json:"systemInfo"`
-	IpInfo           IPInfo  `json:"ipinfo"`
-}
+// type Node struct {
+// 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
+// 	Name             string  `json:"name"`
+// 	HttpPort         string  `json:"httpPort"`
+// 	Host             string  `json:"host"` //domain
+// 	PeerAddress      string  `json:"peerAddress"`
+// 	Region           string  `json:"region"`
+// 	Status           string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
+// 	DownloadSpeed    float64 `json:"downloadSpeed"`
+// 	UploadSpeed      float64 `json:"uploadSpeed"`
+// 	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
+// 	LastPing         int64   `json:"lastPing"`
+// 	Chain            string  `json:"chain"`
+// 	WalletAddress    string  `json:"walletAddress"`
+// 	Version          string  `json:"version"`
+// 	CodeHash         string  `json:"codeHash"`
+// 	SystemInfo       OSInfo  `json:"systemInfo"`
+// 	IpInfo           IPInfo  `json:"ipinfo"`
+// }
 
-type TestNode struct {
+type Node struct {
 	//using for db operation
 	PeerId           string  `json:"peerId" gorm:"primaryKey"`
 	Name             string  `json:"name"`
