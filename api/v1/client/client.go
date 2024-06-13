@@ -46,7 +46,7 @@ func RegisterClient(c *gin.Context) {
 	// 	return
 	// }
 	var node *models.Node
-	if err := db.Model(&models.Node{}).Where("id = ?", region_id).First(&node).Error; err != nil {
+	if err := db.Model(&models.Node{}).Where("peer_id = ?", region_id).First(&node).Error; err != nil {
 		logwrapper.Errorf("failed to get node: %s", err)
 		httpo.NewErrorResponse(http.StatusBadRequest, err.Error()).SendD(c)
 		return

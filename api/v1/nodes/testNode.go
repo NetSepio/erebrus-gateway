@@ -92,7 +92,7 @@ func UpdateNode(node *models.Node) error {
 // DeleteNode deletes a node record from the database
 func DeleteNode(id string) error {
 	DB := dbconfig.GetDb()
-	return DB.Delete(&models.Node{}, id).Error
+	return DB.Delete(&models.Node{}, "where peer_id = ?",id).Error
 }
 
 func getRandomString(n int) string {

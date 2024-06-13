@@ -108,7 +108,7 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 	var model models.Node
 
-	result := db.Model(&models.Node{}).Where("id = ?", node.PeerId)
+	result := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId)
 	if result.RowsAffected != 0 {
 		//exists, update
 		return db.Model(&model).Updates(node).Error
