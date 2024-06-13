@@ -69,12 +69,14 @@ func Init() {
 					if err != nil {
 						log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
 					}
-					fmt.Println("node.IpGeoData : ", node.IpGeoData)
-					err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
-					if err != nil {
-						log.Printf("Error unmarshaling newGeoAddress from JSON: %v", err)
-					} else {
 
+					if len(node.IpGeoData) > 0 {
+						fmt.Println("node.IpGeoData : ", node.IpGeoData)
+						err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
+						if err != nil {
+							log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
+						}
+					} else {
 						// IP := "150.129.168.46"
 						City := "Test"
 						// Region := "Maharashtra"
@@ -93,12 +95,14 @@ func Init() {
 					}
 					err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
 					if err != nil {
-						log.Printf("Error unmarshaling newGeoAddress from JSON: %v", err)
+						log.Printf("Error unmarshaling newGeoAddress from JSON p2p-node.go: %v", err)
 					}
 
 					node.SystemInfo = models.ToJSON(newOSInfo)
 					node.IpGeoData = models.ToJSON(newGeoAddress)
 					node.IpInfo = models.ToJSON(newIPInfo)
+
+					fmt.Printf("%+v\n", node.IpGeoData)
 
 					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
 					if err != nil {
