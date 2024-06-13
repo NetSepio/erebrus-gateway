@@ -48,7 +48,7 @@ type Node struct {
 	UploadSpeed      float64 `json:"uploadSpeed"`
 	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
 	LastPing         int64   `json:"lastPing"`
-	Chain            string  `json:"chain"`
+	Chain            string  `json:"chainName"`
 	WalletAddress    string  `json:"walletAddress"`
 	Version          string  `json:"version"`
 	CodeHash         string  `json:"codeHash"`
