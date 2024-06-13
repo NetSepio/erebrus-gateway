@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -111,7 +110,7 @@ func RegisterClient(c *gin.Context) {
 		Region:        node.Region,
 		Domain:        node.Host,
 		UserId:        userId,
-		CreatedAt:     time.Now(),
+		Chain:         node.Chain,
 		// CollectionId:  req.CollectionId,
 	}
 	if err := db.Create(&dbEntry).Error; err != nil {
