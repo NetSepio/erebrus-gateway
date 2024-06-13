@@ -3,7 +3,6 @@ package p2pnode
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
@@ -71,7 +70,7 @@ func Init() {
 					}
 
 					if len(node.IpGeoData) > 0 {
-						fmt.Println("node.IpGeoData : ", node.IpGeoData)
+						// fmt.Println("node.IpGeoData : ", node.IpGeoData)
 						err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
 						if err != nil {
 							log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
@@ -102,7 +101,7 @@ func Init() {
 					node.IpGeoData = models.ToJSON(newGeoAddress)
 					node.IpInfo = models.ToJSON(newIPInfo)
 
-					fmt.Printf("%+v\n", node.IpGeoData)
+					// fmt.Printf("%+v\n", node.IpGeoData)
 
 					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
 					if err != nil {
