@@ -8,6 +8,7 @@ type NodeResponse struct {
 	HttpPort            string  `json:"httpPort"`
 	Domain              string  `json:"domain"`
 	NodeName            string  `json:"nodename"`
+	Chain               string  `json:"chainName"`
 	Address             string  `json:"address"`
 	Region              string  `json:"region"`
 	Status              string  `json:"status"`

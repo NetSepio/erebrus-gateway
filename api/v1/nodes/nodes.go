@@ -64,6 +64,7 @@ func FetchAllNodes(c *gin.Context) {
 		response.UploadSpeed = i.UploadSpeed
 		response.StartTimeStamp = i.RegistrationTime
 		response.LastPingedTimeStamp = i.LastPing
+		response.Chain = i.Chain
 		response.WalletAddressSui = i.WalletAddress
 		response.WalletAddressSolana = i.WalletAddress
 		response.IpInfoIP = ipGeoAddress.IpInfoIP
