@@ -35,19 +35,23 @@ func FetchAllNodes(c *gin.Context) {
 
 	for _, i := range *nodes {
 		var osInfo models.OSInfo
-		err := json.Unmarshal([]byte(i.SystemInfo), &osInfo)
-		if err != nil {
-			logwrapper.Errorf("failed to get nodes from DB: %s", err)
-			httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		if len(i.SystemInfo) > 0 {
+			err := json.Unmarshal([]byte(i.SystemInfo), &osInfo)
+			if err != nil {
+				logwrapper.Errorf("failed to get nodes from DB OSInfo: %s", err)
+				// httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+			}
 		}
-
 		// Unmarshal IpInfo into IPInfo struct
 		var ipGeoAddress models.IpGeoAddress
-		err = json.Unmarshal([]byte(i.IpGeoData), &ipGeoAddress)
-		if err != nil {
-			logwrapper.Errorf("failed to get nodes from DB: %s", err)
-			httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		if len(i.IpGeoData) > 0 {
+			err := json.Unmarshal([]byte(i.IpGeoData), &ipGeoAddress)
+			if err != nil {
+				logwrapper.Errorf("failed to get nodes from DB IpGeoAddress: %s", err)
+				// httpo.NewErrorResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+			}
 		}
+
 		response.Id = i.PeerId
 		response.Name = i.Name
 		response.HttpPort = i.HttpPort
