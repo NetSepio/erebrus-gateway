@@ -8,7 +8,6 @@ import (
 
 	"github.com/NetSepio/erebrus-gateway/api"
 	"github.com/NetSepio/erebrus-gateway/app"
-	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -20,7 +19,7 @@ func main() {
 	logwrapper.Init()
 	app.Init()
 	ginApp := gin.Default()
-	dbconfig.DbInit()
+	// dbconfig.DbInit()
 
 	// cors middleware
 	config := cors.DefaultConfig()
