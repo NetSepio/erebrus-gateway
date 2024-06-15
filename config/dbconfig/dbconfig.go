@@ -51,7 +51,7 @@ func GetDb() *gorm.DB {
 func DbInit() error {
 	db := GetDb()
 
-	if err := db.AutoMigrate(&models.Erebrus{}, &models.Node{}, &models.Subscription{}, &models.FormData{}); err != nil {
+	if err := db.AutoMigrate(&models.Erebrus{}, &models.Node{}, &models.Subscription{}, &models.FormData{}, &models.FlowId{}, &models.UserFeedback{}, &models.User{}); err != nil {
 		log.Fatal(err)
 	}
 	return nil
