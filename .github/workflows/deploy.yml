@@ -6,7 +6,7 @@ on:
       - main
       - prod
 jobs:
-  Deploy:
+  build_push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,6 +32,11 @@ jobs:
           echo "Pushing Image to GitHub Container Registry"
           docker push $GITHUB_REF_IMAGE
           docker push $GITHUB_BRANCH_IMAGE
+          
+  deploy: 
+    needs: build_push
+    runs-on: ubuntu-latest
+    steps:  
       - name: Deploy on DEV server
         if: github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v0.1.7
