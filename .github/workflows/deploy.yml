@@ -6,7 +6,7 @@ on:
       - main
       - prod
 jobs:
-  Deploy:
+  build_push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,6 +32,11 @@ jobs:
           echo "Pushing Image to GitHub Container Registry"
           docker push $GITHUB_REF_IMAGE
           docker push $GITHUB_BRANCH_IMAGE
+          
+  deploy: 
+    needs: build_push
+    runs-on: ubuntu-latest
+    steps:  
       - name: Deploy on DEV server
         if: github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v0.1.7
@@ -57,7 +62,7 @@ jobs:
           port: ${{ secrets.DEV_SSH_PORT }}
           script: |
             pwd
-            cd erebrus-gateway
+            cd gateway
             docker stop erebrus-gateway && docker rm erebrus-gateway && docker image rm ghcr.io/netsepio/erebrus-gateway:prod
             echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
             docker pull ghcr.io/netsepio/erebrus-gateway:prod
@@ -72,7 +77,7 @@ jobs:
           port: ${{ secrets.DEV_SSH_PORT }}
           script: |
             pwd
-            cd erebrus-gateway
+            cd gateway
             docker stop erebrus-gateway && docker rm erebrus-gateway && docker image rm ghcr.io/netsepio/erebrus-gateway:prod
             echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
             docker pull ghcr.io/netsepio/erebrus-gateway:prod
