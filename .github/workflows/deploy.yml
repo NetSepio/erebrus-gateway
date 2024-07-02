@@ -7,7 +7,7 @@ on:
       - prod
 jobs:
   build_push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -35,7 +35,7 @@ jobs:
           
   deploy: 
     needs: build_push
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:  
       - name: Deploy on DEV server
         if: github.ref == 'refs/heads/main'
