@@ -7,7 +7,7 @@ on:
       - prod
 jobs:
   build_push:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -82,4 +82,3 @@ jobs:
             echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
             docker pull ghcr.io/netsepio/erebrus-gateway:prod
             docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/identity.key" -d ghcr.io/netsepio/erebrus-gateway:prod
-            
