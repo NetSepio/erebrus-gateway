@@ -5,7 +5,7 @@ import (
 	"github.com/NetSepio/erebrus-gateway/api/v1/client"
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodeOperatorForm"
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodes"
-	"github.com/NetSepio/erebrus-gateway/api/v1/registerDeFi"
+	"github.com/NetSepio/erebrus-gateway/api/v1/registerDwifi"
 	"github.com/NetSepio/erebrus-gateway/api/v1/subscription"
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +18,6 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		nodes.ApplyRoutes(v1)
 		subscription.ApplyRoutes(v1)
 		nodeOperatorForm.ApplyRoutes(v1)
-		registerDeFi.ApplyRoutes(v1)
+		registerDwifi.ApplyRoutes(v1)
 	}
 }
