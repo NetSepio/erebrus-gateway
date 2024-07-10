@@ -1,4 +1,4 @@
-package registerDeFi
+package registerDwifi
 
 import (
 	"net/http"
@@ -13,7 +13,7 @@ import (
 func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/registernode")
 	{
-		g.POST("/", RegisterWifiNode)
+		g.POST("", RegisterWifiNode)
 	}
 }
 
