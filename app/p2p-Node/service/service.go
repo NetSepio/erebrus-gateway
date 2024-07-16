@@ -75,33 +75,6 @@ func SubscribeTopics(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
 			topic.EventHandler()
 		}
 	}()
-	// topicString2 := "client"
-	// topic2, err := ps.Join(DiscoveryServiceTag + "/" + topicString2)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// sub2, err := topic2.Subscribe()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// go func() {
-	// 	for {
-	// 		// Block until we recieve a new message.
-	// 		msg, err := sub2.Next(ctx)
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-	// 		if msg.ReceivedFrom == h.ID() {
-	// 			continue
-	// 		}
-	// 		fmt.Printf("[%s] , status isz: %s", msg.ReceivedFrom, string(msg.Data))
-	// 		if err := topic2.Publish(ctx, []byte("heres a reply from client")); err != nil {
-	// 			panic(err)
-	// 		}
-	// 	}
-	// }()
 
 }
 
@@ -194,3 +167,62 @@ func CreateOrUpdate(db *gorm.DB, node *models.Node) error {
 
 	return region + highest, nil
 }*/
+
+func SubscribeTopicsDwifi(ps *pubsub.PubSub, h host.Host, ctx context.Context) {
+	topicString := "status_dwifi"
+	topic, err := ps.Join(DiscoveryServiceTag + "/" + topicString)
+	if err != nil {
+		logrus.Error(err)
+	}
+	sub, err := topic.Subscribe()
+	if err != nil {
+		logrus.Error(err)
+	}
+	go func() {
+		for {
+			msg, err := sub.Next(ctx)
+			if err != nil {
+				logrus.Error(err)
+				continue
+			}
+			if msg.ReceivedFrom == h.ID() {
+				continue
+			}
+			var node *models.NodeDwifi
+			if err := json.Unmarshal(msg.Data, &node); err != nil {
+				logrus.Error(err)
+				continue
+			}
+			db := dbconfig.GetDb()
+			node.LastPing = time.Now().Unix()
+			err = CreateOrUpdateDwifi(db, node)
+			if err != nil {
+				logwrapper.Error("failed to update db: ", err.Error())
+			}
+			if err := topic.Publish(ctx, []byte("Gateway received the node information")); err != nil {
+				logrus.Error(err)
+				continue
+			}
+
+			topic.EventHandler()
+		}
+	}()
+}
+
+func CreateOrUpdateDwifi(db *gorm.DB, node *models.NodeDwifi) error {
+	var model models.NodeDwifi
+
+	result := db.Model(&models.NodeDwifi{}).Where("peer_id = ?", node.PeerId)
+	if result.RowsAffected != 0 {
+		return db.Model(&model).Updates(node).Error
+	} else {
+		var nodes []models.NodeDwifi
+		db.Where("peer_id = ?", node.PeerId).Find(&nodes)
+		log.Printf("%+v\n", nodes)
+		if len(nodes) > 0 {
+			return db.Create(node).Error
+		} else {
+			return db.Create(node).Error
+		}
+	}
+}

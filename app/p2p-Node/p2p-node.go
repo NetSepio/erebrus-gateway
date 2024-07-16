@@ -10,9 +10,11 @@ import (
 	"github.com/NetSepio/erebrus-gateway/app/p2p-Node/service"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // DiscoveryInterval is how often we search for other peers via the DHT.
@@ -27,6 +29,7 @@ func Init() {
 
 	ha := p2pHost.CreateHost()
 	ps := service.NewService(ha, ctx)
+	psDwifi := service.NewService(ha, ctx) // Create a new service for DWIFI
 
 	bootstrapPeers := []multiaddr.Multiaddr{}
 	db := dbconfig.GetDb()
@@ -46,98 +49,25 @@ func Init() {
 			select {
 			case <-ticker.C:
 				var nodes []models.Node
+				var nodesDwifi []models.NodeDwifi
 
 				err := db.Model(&models.Node{}).Find(&nodes).Error
-
 				if err != nil {
 					logrus.Error("failed to fetch nodes from db")
 					return
 				}
 
-				// fmt.Println("nodes : ", len(nodes))
-
-				for _, node := range nodes {
-
-					var (
-						newOSInfo     models.OSInfo
-						newGeoAddress models.IpGeoAddress
-						newIPInfo     models.IPInfo
-					)
-
-					err = json.Unmarshal([]byte(node.SystemInfo), &newOSInfo)
-					if err != nil {
-						log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
-					}
-
-					if len(node.IpGeoData) > 0 {
-						// fmt.Println("node.IpGeoData : ", node.IpGeoData)
-						err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
-						if err != nil {
-							log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
-						}
-					} else {
-						// IP := "150.129.168.46"
-						City := "Test"
-						// Region := "Maharashtra"
-						Country := "Test"
-						Location := "Test"
-						Organization := "Test"
-						Postal := "Test"
-						Timezone := "Test"
-
-						newGeoAddress.IpInfoCity = City
-						newGeoAddress.IpInfoCountry = Country
-						newGeoAddress.IpInfoLocation = Location
-						newGeoAddress.IpInfoOrg = Organization
-						newGeoAddress.IpInfoPostal = Postal
-						newGeoAddress.IpInfoTimezone = Timezone
-					}
-					err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
-					if err != nil {
-						log.Printf("Error unmarshaling newGeoAddress from JSON p2p-node.go: %v", err)
-					}
-
-					node.SystemInfo = models.ToJSON(newOSInfo)
-					node.IpGeoData = models.ToJSON(newGeoAddress)
-					node.IpInfo = models.ToJSON(newIPInfo)
-
-					// fmt.Printf("%+v\n", node.IpGeoData)
-
-					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
-					if err != nil {
-						continue
-					}
-					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
-					if err != nil {
-						logrus.Error(err)
-						continue
-						// log.Println(node)
-					}
-					// Attempt to connect to the peer
-					if err := ha.Connect(ctx, *peerInfo); err != nil {
-						node.Status = "inactive"
-						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
-							logrus.Error("failed to update node: ", err.Error())
-							continue
-						}
-						lastPingTime := time.Unix(node.LastPing, 0)
-						duration := time.Since(lastPingTime)
-						threshold := 48 * time.Hour
-						if duration > threshold {
-							if err := db.Where("peer_id = ?", node.PeerId).Delete(&models.Node{}).Error; err != nil {
-								logrus.Error("failed to delete nodes: ", err.Error())
-								continue
-							}
-						}
-					} else {
-						node.Status = "active"
-						node.LastPing = time.Now().Unix()
-						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
-							logrus.Error("failed to update node: ", err.Error())
-							continue
-						}
-					}
+				err = db.Model(&models.NodeDwifi{}).Find(&nodesDwifi).Error
+				if err != nil {
+					logrus.Error("failed to fetch DWIFI nodes from db")
+					return
 				}
+
+				// Process DVPN nodes
+				processNodes(ctx, db, ha, nodes)
+
+				// Process DWIFI nodes
+				processNodesDwifi(ctx, db, ha, nodesDwifi)
 
 			case <-quit:
 				ticker.Stop()
@@ -148,4 +78,149 @@ func Init() {
 	}()
 
 	go service.SubscribeTopics(ps, ha, ctx)
+	go service.SubscribeTopicsDwifi(psDwifi, ha, ctx) // Subscribe to DWIFI topics
+}
+
+func processNodes(ctx context.Context, db *gorm.DB, ha host.Host, nodes []models.Node) {
+	for _, node := range nodes {
+
+		var (
+			newOSInfo     models.OSInfo
+			newGeoAddress models.IpGeoAddress
+			newIPInfo     models.IPInfo
+		)
+
+		err := json.Unmarshal([]byte(node.SystemInfo), &newOSInfo)
+		if err != nil {
+			log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
+		}
+
+		if len(node.IpGeoData) > 0 {
+			err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
+			if err != nil {
+				log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
+			}
+		} else {
+			newGeoAddress.IpInfoCity = "Test"
+			newGeoAddress.IpInfoCountry = "Test"
+			newGeoAddress.IpInfoLocation = "Test"
+			newGeoAddress.IpInfoOrg = "Test"
+			newGeoAddress.IpInfoPostal = "Test"
+			newGeoAddress.IpInfoTimezone = "Test"
+		}
+		err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
+		if err != nil {
+			log.Printf("Error unmarshaling newGeoAddress from JSON p2p-node.go: %v", err)
+		}
+
+		node.SystemInfo = models.ToJSON(newOSInfo)
+		node.IpGeoData = models.ToJSON(newGeoAddress)
+		node.IpInfo = models.ToJSON(newIPInfo)
+
+		peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
+		if err != nil {
+			continue
+		}
+		peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+		// Attempt to connect to the peer
+		if err := ha.Connect(ctx, *peerInfo); err != nil {
+			node.Status = "inactive"
+			if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
+				logrus.Error("failed to update node: ", err.Error())
+				continue
+			}
+			lastPingTime := time.Unix(node.LastPing, 0)
+			duration := time.Since(lastPingTime)
+			threshold := 48 * time.Hour
+			if duration > threshold {
+				if err := db.Where("peer_id = ?", node.PeerId).Delete(&models.Node{}).Error; err != nil {
+					logrus.Error("failed to delete nodes: ", err.Error())
+					continue
+				}
+			}
+		} else {
+			node.Status = "active"
+			node.LastPing = time.Now().Unix()
+			if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
+				logrus.Error("failed to update node: ", err.Error())
+				continue
+			}
+		}
+	}
+}
+
+func processNodesDwifi(ctx context.Context, db *gorm.DB, ha host.Host, nodesDwifi []models.NodeDwifi) {
+	for _, node := range nodesDwifi {
+
+		var (
+			newOSInfo     models.OSInfo
+			newGeoAddress models.IpGeoAddress
+			newIPInfo     models.IPInfo
+		)
+
+		err := json.Unmarshal([]byte(node.SystemInfo), &newOSInfo)
+		if err != nil {
+			log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
+		}
+
+		if len(node.IpGeoData) > 0 {
+			err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
+			if err != nil {
+				log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
+			}
+		} else {
+			newGeoAddress.IpInfoCity = "Test"
+			newGeoAddress.IpInfoCountry = "Test"
+			newGeoAddress.IpInfoLocation = "Test"
+			newGeoAddress.IpInfoOrg = "Test"
+			newGeoAddress.IpInfoPostal = "Test"
+			newGeoAddress.IpInfoTimezone = "Test"
+		}
+		err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
+		if err != nil {
+			log.Printf("Error unmarshaling newGeoAddress from JSON p2p-node.go: %v", err)
+		}
+
+		node.SystemInfo = models.ToJSON(newOSInfo)
+		node.IpGeoData = models.ToJSON(newGeoAddress)
+		node.IpInfo = models.ToJSON(newIPInfo)
+
+		peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
+		if err != nil {
+			continue
+		}
+		peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+		// Attempt to connect to the peer
+		if err := ha.Connect(ctx, *peerInfo); err != nil {
+			node.Status = "inactive"
+			if err := db.Model(&models.NodeDwifi{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
+				logrus.Error("failed to update node: ", err.Error())
+				continue
+			}
+			lastPingTime := time.Unix(node.LastPing, 0)
+			duration := time.Since(lastPingTime)
+			threshold := 48 * time.Hour
+			if duration > threshold {
+				if err := db.Where("peer_id = ?", node.PeerId).Delete(&models.NodeDwifi{}).Error; err != nil {
+					logrus.Error("failed to delete nodes: ", err.Error())
+					continue
+				}
+			}
+		} else {
+			node.Status = "active"
+			node.LastPing = time.Now().Unix()
+			if err := db.Model(&models.NodeDwifi{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
+				logrus.Error("failed to update node: ", err.Error())
+				continue
+			}
+		}
+	}
 }
