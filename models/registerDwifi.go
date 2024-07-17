@@ -9,5 +9,5 @@ type WifiNode struct {
 	WifiPassword  string `json:"wifi_password"`
 	WalletAddress string `json:"wallet_address"`
 	NodeType      string `json:"node_type"` //The type of WiFi node (e.g., public, private, business).
-
+	Ssid          string `json:"ssid"`
 }
