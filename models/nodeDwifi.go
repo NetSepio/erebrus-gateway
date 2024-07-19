@@ -5,19 +5,25 @@ import (
 )
 
 type NodeDwifi struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	Gateway   string    `json:"gateway"`
-	Status    string    `json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            uint      `json:"id" gorm:"primaryKey"`
+	Gateway       string    `json:"gateway"`
+	Status        string    `json:"-"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Password      string    `json:"password"`
+	Location      string    `json:"location"`
+	Price_per_min string    `json:"price_per_min"`
 }
 
 type NodeDwifiResponse struct {
-	ID        uint         `json:"id"`
-	Gateway   string       `json:"gateway"`
-	CreatedAt time.Time    `json:"created_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
-	Status    []DeviceInfo `json:"status"`
+	ID            uint         `json:"id"`
+	Gateway       string       `json:"gateway"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+	Status        []DeviceInfo `json:"status"`
+	Password      string       `json:"password"`
+	Location      string       `json:"location"`
+	Price_per_min string       `json:"price_per_min"`
 }
 
 type DeviceInfo struct {
