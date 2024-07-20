@@ -61,14 +61,16 @@ func FetchAllNodeDwifi(c *gin.Context) {
 		}
 
 		response := models.NodeDwifiResponse{
-			ID:            nd.ID,
-			Gateway:       nd.Gateway,
-			CreatedAt:     nd.CreatedAt,
-			UpdatedAt:     nd.UpdatedAt,
-			Status:        deviceInfos,
-			Password:      nd.Password,
-			Location:      nd.Location,
-			Price_per_min: nd.Price_per_min,
+			ID:             nd.ID,
+			Gateway:        nd.Gateway,
+			CreatedAt:      nd.CreatedAt,
+			UpdatedAt:      nd.UpdatedAt,
+			Status:         deviceInfos,
+			Password:       nd.Password,
+			Location:       nd.Location,
+			Price_per_min:  nd.Price_per_min,
+			Wallet_address: nd.Wallet_address,
+			Chain_name:     nd.Chain_name,
 		}
 
 		responses = append(responses, response)
@@ -122,14 +124,16 @@ func CheckForUpdates() {
 			}
 
 			response := models.NodeDwifiResponse{
-				ID:            nd.ID,
-				Gateway:       nd.Gateway,
-				CreatedAt:     nd.CreatedAt,
-				UpdatedAt:     nd.UpdatedAt,
-				Status:        deviceInfos,
-				Password:      nd.Password,
-				Location:      nd.Location,
-				Price_per_min: nd.Price_per_min,
+				ID:             nd.ID,
+				Gateway:        nd.Gateway,
+				CreatedAt:      nd.CreatedAt,
+				UpdatedAt:      nd.UpdatedAt,
+				Status:         deviceInfos,
+				Password:       nd.Password,
+				Location:       nd.Location,
+				Price_per_min:  nd.Price_per_min,
+				Wallet_address: nd.Wallet_address,
+				Chain_name:     nd.Chain_name,
 			}
 
 			mutex.Lock()
