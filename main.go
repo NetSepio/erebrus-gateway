@@ -28,6 +28,11 @@ func main() {
 	config.AllowHeaders = []string{"Authorization", "Content-Type"}
 	ginApp.Use(cors.New(config))
 
+	// adding health check
+	ginApp.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "pong"})
+	})
+
 	ginApp.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"status": 404, "message": "Invalid Endpoint Request"})
 	})
