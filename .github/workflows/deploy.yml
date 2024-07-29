@@ -51,7 +51,7 @@ jobs:
             docker stop erebrus-gateway && docker rm erebrus-gateway && docker image rm ghcr.io/netsepio/erebrus-gateway:main
             echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
             docker pull ghcr.io/netsepio/erebrus-gateway:main
-            docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/identity.key" -d ghcr.io/netsepio/erebrus-gateway:main
+            docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/secret/identity.key" -d ghcr.io/netsepio/erebrus-gateway:main
       - name: Deploy on PROD server 1
         if: github.ref == 'refs/heads/prod'
         uses: appleboy/ssh-action@v0.1.7
