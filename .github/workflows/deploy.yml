@@ -52,33 +52,13 @@ jobs:
             echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
             docker pull ghcr.io/netsepio/erebrus-gateway:main
             docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/identity.key" -d ghcr.io/netsepio/erebrus-gateway:main
-      - name: Deploy on PROD server 1
+      - name: Update image in cloud run
         if: github.ref == 'refs/heads/prod'
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.PROD_REMOTE_SERVER_ADDRESS_1 }}
-          username: ${{ secrets.DEV_SERVER_USERNAME }}
-          key: ${{ secrets.DEV_REMOTE_SERVER_KEY }}
-          port: ${{ secrets.DEV_SSH_PORT }}
-          script: |
-            pwd
-            cd gateway
-            docker stop erebrus-gateway && docker rm erebrus-gateway && docker image rm ghcr.io/netsepio/erebrus-gateway:prod
-            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
-            docker pull ghcr.io/netsepio/erebrus-gateway:prod
-            docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/identity.key" -d ghcr.io/netsepio/erebrus-gateway:prod
-      - name: Deploy on PROD server 2
-        if: github.ref == 'refs/heads/prod'
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.PROD_REMOTE_SERVER_ADDRESS_2 }}
-          username: ${{ secrets.DEV_SERVER_USERNAME }}
-          key: ${{ secrets.DEV_REMOTE_SERVER_KEY }}
-          port: ${{ secrets.DEV_SSH_PORT }}
-          script: |
-            pwd
-            cd gateway
-            docker stop erebrus-gateway && docker rm erebrus-gateway && docker image rm ghcr.io/netsepio/erebrus-gateway:prod
-            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
-            docker pull ghcr.io/netsepio/erebrus-gateway:prod
-            docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/identity.key" -d ghcr.io/netsepio/erebrus-gateway:prod
+        run: |
+          docker pull ghcr.io/netsepio/erebrus-gateway:prod
+          docker tag  ghcr.io/netsepio/erebrus-gateway:prod us-west4-docker.pkg.dev/erebrus-prod/erebrus/erebrus-gateway:prod
+          gcloud auth activate-service-account --key-file=${{ secrets.SERVICE_ACCOUNT_KEY_FILE_PATH }} --project=${{ secrets.PROJECT }}
+          gcloud config set account ${{ secrets.SERVICE_ACCOUNT }}
+          gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://us-west4-docker.pkg.dev
+          docker push us-west4-docker.pkg.dev/erebrus-prod/erebrus/erebrus-gateway:prod
+          gcloud run deploy erebrus-gateway --image us-west4-docker.pkg.dev/erebrus-prod/erebrus/erebrus-gateway:prod --region us-west4
