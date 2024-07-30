@@ -35,8 +35,7 @@ func getHostAddress(ha host.Host) string {
 }
 
 func CreateHost() host.Host {
-	privk, err := pkey.LoadIdentity("identity.key")
-	//test comment
+	privk, err := pkey.LoadIdentity("secret/identity.key")
 	if err != nil {
 		log.Fatal(err)
 	}
