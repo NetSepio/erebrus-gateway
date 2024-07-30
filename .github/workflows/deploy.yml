@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - cloud-run-deployment
+      - prod
 jobs:
   build_push:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
             docker pull ghcr.io/netsepio/erebrus-gateway:main
             docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/identity.key" -d ghcr.io/netsepio/erebrus-gateway:main
       - name: Update image in cloud run
-        if: github.ref == 'refs/heads/cloud-run-deployment'
+        if: github.ref == 'refs/heads/prod'
         run: |
           docker pull ghcr.io/netsepio/erebrus-gateway:prod
           docker tag  ghcr.io/netsepio/erebrus-gateway:prod us-west4-docker.pkg.dev/erebrus-prod/erebrus/erebrus-gateway:prod
