@@ -71,6 +71,7 @@ func FetchAllNodeDwifi(c *gin.Context) {
 			Price_per_min:  nd.Price_per_min,
 			Wallet_address: nd.Wallet_address,
 			Chain_name:     nd.Chain_name,
+			Co_ordinates:   nd.Co_ordinates,
 		}
 
 		responses = append(responses, response)
@@ -134,6 +135,7 @@ func CheckForUpdates() {
 				Price_per_min:  nd.Price_per_min,
 				Wallet_address: nd.Wallet_address,
 				Chain_name:     nd.Chain_name,
+				Co_ordinates:   nd.Co_ordinates,
 			}
 
 			mutex.Lock()

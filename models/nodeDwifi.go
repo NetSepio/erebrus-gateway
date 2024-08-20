@@ -15,6 +15,7 @@ type NodeDwifi struct {
 	Price_per_min  string    `json:"price_per_min"`
 	Wallet_address string    `json:"wallet_address"`
 	Chain_name     string    `json:"chain_name"`
+	Co_ordinates   string    `json:"co_ordinates"`
 }
 
 type NodeDwifiResponse struct {
@@ -28,6 +29,7 @@ type NodeDwifiResponse struct {
 	Price_per_min  string       `json:"price_per_min"`
 	Wallet_address string       `json:"wallet_address"`
 	Chain_name     string       `json:"chain_name"`
+	Co_ordinates   string       `json:"co_ordinates"`
 }
 
 type DeviceInfo struct {
