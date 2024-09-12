@@ -21,6 +21,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.POST("/client/:regionId", RegisterClient)
 		g.GET("/clients", GetAllClients)
 		g.DELETE("/client/:uuid", DeleteClient)
+		g.PUT("/client/:uuid/blobId", UpdateClientBlobId)
 		// g.GET("/config/:region/:uuid", GetConfig)
 		// g.GET("/clients/node/:nodeId", GetClientsByNode)
 	}
@@ -293,4 +294,40 @@ func GetClientsByNode(c *gin.Context) {
 	}
 
 	httpo.NewSuccessResponseP(200, "VPN clients fetched successfully", clients).SendD(c)
+}
+
+func UpdateClientBlobId(c *gin.Context) {
+	clientUUID := c.Param("uuid")
+	db := dbconfig.GetDb()
+
+	var req struct {
+		BlobId string `json:"blobId" binding:"required"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		logwrapper.Errorf("failed to bind JSON: %s", err)
+		httpo.NewErrorResponse(http.StatusBadRequest, err.Error()).SendD(c)
+		return
+	}
+
+	// Validate UUID
+	if _, err := uuid.Parse(clientUUID); err != nil {
+		httpo.NewErrorResponse(http.StatusBadRequest, "Invalid UUID").SendD(c)
+		return
+	}
+
+	// Update the client with the new blobId
+	result := db.Model(&models.Erebrus{}).Where("UUID = ?", clientUUID).Update("blob_id", req.BlobId)
+	if result.Error != nil {
+		logwrapper.Errorf("failed to update client blobId: %s", result.Error)
+		httpo.NewErrorResponse(http.StatusInternalServerError, result.Error.Error()).SendD(c)
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		httpo.NewErrorResponse(http.StatusNotFound, "Client not found").SendD(c)
+		return
+	}
+
+	httpo.NewSuccessResponse(200, "Client blobId updated successfully").SendD(c)
 }

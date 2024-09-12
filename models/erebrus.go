@@ -13,4 +13,5 @@ type Erebrus struct {
 	CollectionId  string    `json:"collectionId"`
 	CreatedAt     time.Time `json:"created_at"`
 	Chain         string    `json:"chainName"`
+	BlobId        string    `json:"blobId"`
 }
