@@ -13,6 +13,7 @@ import (
 	"github.com/TheLazarusNetwork/go-helpers/httpo"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 func ApplyRoutes(r *gin.RouterGroup) {
@@ -23,6 +24,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.GET("/clients", GetAllClients)
 		g.DELETE("/client/:uuid", DeleteClient)
 		g.PUT("/client/:uuid/blobId", UpdateClientBlobId)
+		g.GET("/client/:uuid/blobId", GetClientBlobId)
 		// g.GET("/config/:region/:uuid", GetConfig)
 		// g.GET("/clients/node/:nodeId", GetClientsByNode)
 	}
@@ -331,4 +333,34 @@ func UpdateClientBlobId(c *gin.Context) {
 	}
 
 	httpo.NewSuccessResponse(200, "Client blobId updated successfully").SendD(c)
+}
+
+func GetClientBlobId(c *gin.Context) {
+	clientUUID := c.Param("uuid")
+	db := dbconfig.GetDb()
+
+	// Validate UUID
+	if _, err := uuid.Parse(clientUUID); err != nil {
+		httpo.NewErrorResponse(http.StatusBadRequest, "Invalid UUID").SendD(c)
+		return
+	}
+
+	var client models.Erebrus
+	result := db.Model(&models.Erebrus{}).Select("blob_id").Where("UUID = ?", clientUUID).First(&client)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			httpo.NewErrorResponse(http.StatusNotFound, "Client not found").SendD(c)
+		} else {
+			logwrapper.Errorf("failed to fetch client blobId: %s", result.Error)
+			httpo.NewErrorResponse(http.StatusInternalServerError, result.Error.Error()).SendD(c)
+		}
+		return
+	}
+
+	if client.BlobId == "" {
+		httpo.NewErrorResponse(http.StatusNotFound, "BlobId not set for this client").SendD(c)
+		return
+	}
+
+	httpo.NewSuccessResponseP(200, "Client blobId fetched successfully", gin.H{"blobId": client.BlobId}).SendD(c)
 }
