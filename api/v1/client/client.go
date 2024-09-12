@@ -12,6 +12,7 @@ import (
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
 	"github.com/TheLazarusNetwork/go-helpers/httpo"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func ApplyRoutes(r *gin.RouterGroup) {
