@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NetSepio/erebrus-gateway/models"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+
+	"github.com/NetSepio/erebrus-gateway/models"
 
 	"gorm.io/driver/postgres"
 )
@@ -51,7 +52,7 @@ func GetDb() *gorm.DB {
 func DbInit() error {
 	db := GetDb()
 
-	if err := db.AutoMigrate(&models.User{}, &models.Erebrus{}, &models.Node{}, &models.Subscription{}, &models.FormData{}, &models.FlowId{}, &models.UserFeedback{}, &models.WifiNode{}, &models.NodeDwifi{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Erebrus{}, &models.Node{}, &models.Subscription{}, &models.FormData{}, &models.FlowId{}, &models.UserFeedback{}, &models.WifiNode{}, &models.NodeDwifi{}, &models.WalrusStorage{}); err != nil {
 		log.Fatal(err)
 	}
 	return nil
