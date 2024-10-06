@@ -5,10 +5,10 @@ import (
 	"github.com/NetSepio/erebrus-gateway/api/v1/client"
 	nodedwifi "github.com/NetSepio/erebrus-gateway/api/v1/nodeDwifi"
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodeOperatorForm"
-
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodes"
 	"github.com/NetSepio/erebrus-gateway/api/v1/registerDwifi"
 	"github.com/NetSepio/erebrus-gateway/api/v1/subscription"
+	"github.com/NetSepio/erebrus-gateway/api/v1/walrusFileStorage"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,5 +22,6 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		nodeOperatorForm.ApplyRoutes(v1)
 		registerDwifi.ApplyRoutes(v1)
 		nodedwifi.ApplyRoutes(v1)
+		walrusFileStorage.ApplyRoutes(v1)
 	}
 }
