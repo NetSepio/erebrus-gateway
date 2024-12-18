@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	nodeactivity "github.com/NetSepio/erebrus-gateway/api/v1/nodes/nodeActivity"
 	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
 	"github.com/NetSepio/erebrus-gateway/app/p2p-Node/service"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -116,6 +117,7 @@ func Init() {
 					// Attempt to connect to the peer
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
 						node.Status = "inactive"
+						nodeactivity.TrackNodeActivity(node.PeerId, false)
 						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
@@ -131,6 +133,7 @@ func Init() {
 						}
 					} else {
 						node.Status = "active"
+						nodeactivity.TrackNodeActivity(node.PeerId, true)
 						node.LastPing = time.Now().Unix()
 						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())

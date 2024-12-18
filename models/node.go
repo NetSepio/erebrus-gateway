@@ -1,6 +1,9 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type NodeResponse struct {
 	Id                  string  `json:"id" gorm:"primaryKey"`
@@ -25,6 +28,8 @@ type NodeResponse struct {
 	IpInfoOrg           string  `json:"ipinfoorg"`
 	IpInfoPostal        string  `json:"ipinfopostal"`
 	IpInfoTimezone      string  `json:"ipinfotimezone"`
+	TotalActiveDuration float64 `json:"totalUptime"`
+	TodayActiveDuration float64 `json:"uptimeUnit"`
 }
 
 func ToJSON(data interface{}) string {
@@ -37,24 +42,26 @@ func ToJSON(data interface{}) string {
 
 type Node struct {
 	//using for db operation
-	PeerId           string  `json:"peerId" gorm:"primaryKey"`
-	Name             string  `json:"name"`
-	HttpPort         string  `json:"httpPort"`
-	Host             string  `json:"host"` //domain
-	PeerAddress      string  `json:"peerAddress"`
-	Region           string  `json:"region"`
-	Status           string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
-	DownloadSpeed    float64 `json:"downloadSpeed"`
-	UploadSpeed      float64 `json:"uploadSpeed"`
-	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
-	LastPing         int64   `json:"lastPing"`
-	Chain            string  `json:"chainName"`
-	WalletAddress    string  `json:"walletAddress"`
-	Version          string  `json:"version"`
-	CodeHash         string  `json:"codeHash"`
-	SystemInfo       string  `json:"systemInfo" gorm:"type:jsonb"`
-	IpInfo           string  `json:"ipinfo" gorm:"type:jsonb"`
-	IpGeoData        string  `json:"ipGeoData" gorm:"type:jsonb"`
+	PeerId              string  `json:"peerId" gorm:"primaryKey"`
+	Name                string  `json:"name"`
+	HttpPort            string  `json:"httpPort"`
+	Host                string  `json:"host"` //domain
+	PeerAddress         string  `json:"peerAddress"`
+	Region              string  `json:"region"`
+	Status              string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
+	DownloadSpeed       float64 `json:"downloadSpeed"`
+	UploadSpeed         float64 `json:"uploadSpeed"`
+	RegistrationTime    int64   `json:"registrationTime"` //StartTimeStamp
+	LastPing            int64   `json:"lastPing"`
+	Chain               string  `json:"chainName"`
+	WalletAddress       string  `json:"walletAddress"`
+	Version             string  `json:"version"`
+	CodeHash            string  `json:"codeHash"`
+	SystemInfo          string  `json:"systemInfo" gorm:"type:jsonb"`
+	IpInfo              string  `json:"ipinfo" gorm:"type:jsonb"`
+	IpGeoData           string  `json:"ipGeoData" gorm:"type:jsonb"`
+	TotalActiveDuration float64 `json:"totalDuration" gorm:"type:float"`
+	TodayActiveDuration float64 `json:"todayDuration" gorm:"type:float"`
 }
 
 type NodeAppends struct {
@@ -98,4 +105,11 @@ type IpGeoAddress struct {
 	IpInfoOrg      string
 	IpInfoPostal   string
 	IpInfoTimezone string
+}
+
+type NodeActivity struct {
+	PeerID          string     `json:"peerId" gorm:"primaryKey;type:varchar(255)"` // Ensure peer_id is indexed as a primary key
+	StartTime       time.Time  `json:"startTime" gorm:"not null"`                  // Ensure StartTime is required
+	EndTime         *time.Time `json:"endTime"`                                    // EndTime can be nil if the node is still active
+	DurationSeconds int        `json:"durationSeconds" gorm:"default:0"`           // Duration in seconds, default to 0
 }

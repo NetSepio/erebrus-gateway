@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	nodeactivity "github.com/NetSepio/erebrus-gateway/api/v1/nodes/nodeActivity"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
@@ -77,6 +78,12 @@ func FetchAllNodes(c *gin.Context) {
 		response.IpInfoOrg = ipGeoAddress.IpInfoOrg
 		response.IpInfoPostal = ipGeoAddress.IpInfoPostal
 		response.IpInfoTimezone = ipGeoAddress.IpInfoTimezone
+		// Round TotalActiveDuration and TodayActiveDuration to two decimal places
+
+		response.TotalActiveDuration, response.TodayActiveDuration = nodeactivity.CalculateTotalAndTodayActiveDuration(i.PeerId)
+
+		// response.TotalActiveDuration = math.Round(i.TotalActiveDuration*100) / 100
+		// response.TodayActiveDuration = math.Round(i.TodayActiveDuration*100) / 100
 
 		responses = append(responses, response)
 	}
@@ -141,6 +148,11 @@ func FetchAllNodesByStatus(c *gin.Context) {
 		response.IpInfoOrg = ipGeoAddress.IpInfoOrg
 		response.IpInfoPostal = ipGeoAddress.IpInfoPostal
 		response.IpInfoTimezone = ipGeoAddress.IpInfoTimezone
+		// Round TotalActiveDuration and TodayActiveDuration to two decimal places
+		// response.TotalActiveDuration = math.Round(i.TotalActiveDuration*100) / 100
+		// response.TodayActiveDuration = math.Round(i.TodayActiveDuration*100) / 100
+
+		response.TotalActiveDuration, response.TodayActiveDuration = nodeactivity.CalculateTotalAndTodayActiveDuration(i.PeerId)
 
 		responses = append(responses, response)
 	}
@@ -223,6 +235,11 @@ func FetchAllNodesByStatusAndWalletAddress(c *gin.Context) {
 		response.IpInfoOrg = ipGeoAddress.IpInfoOrg
 		response.IpInfoPostal = ipGeoAddress.IpInfoPostal
 		response.IpInfoTimezone = ipGeoAddress.IpInfoTimezone
+		// Round TotalActiveDuration and TodayActiveDuration to two decimal places
+		// response.TotalActiveDuration = math.Round(i.TotalActiveDuration*100) / 100
+		// response.TodayActiveDuration = math.Round(i.TodayActiveDuration*100) / 100
+
+		response.TotalActiveDuration, response.TodayActiveDuration = nodeactivity.CalculateTotalAndTodayActiveDuration(i.PeerId)
 
 		responses = append(responses, response)
 	}
