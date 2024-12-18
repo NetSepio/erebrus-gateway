@@ -53,8 +53,8 @@ func DbInit() error {
 	db := GetDb()
 
 	if err := db.AutoMigrate(
-		&models.Node{},
 		&models.NodeActivity{},
+		&models.Node{},
 		&models.User{},
 		&models.Erebrus{},
 		&models.Subscription{},

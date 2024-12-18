@@ -108,8 +108,9 @@ type IpGeoAddress struct {
 }
 
 type NodeActivity struct {
-	PeerID          string     `json:"peerId" gorm:"primaryKey;type:varchar(255)"` // Ensure peer_id is indexed as a primary key
-	StartTime       time.Time  `json:"startTime" gorm:"not null"`                  // Ensure StartTime is required
-	EndTime         *time.Time `json:"endTime"`                                    // EndTime can be nil if the node is still active
-	DurationSeconds int        `json:"durationSeconds" gorm:"default:0"`           // Duration in seconds, default to 0
+	PeerID              string     `json:"peerId" gorm:"primaryKey;type:varchar(255)"` // Ensure peer_id is indexed as a primary key
+	StartTime           time.Time  `json:"startTime" gorm:"not null"`                  // Ensure StartTime is required
+	EndTime             *time.Time `json:"endTime"`                                    // EndTime can be nil if the node is still active
+	DurationSeconds     int        `json:"durationSeconds" gorm:"default:0"`           // Duration in seconds, default to 0
+	LastActiveStartTime *time.Time `json:"lastActiveStartTime"`                        // Time when the node last became active (nullable)
 }
