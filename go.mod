@@ -15,6 +15,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.10.0
 	github.com/multiformats/go-multiaddr v0.12.3
+	github.com/redis/go-redis v6.15.9+incompatible
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stripe/stripe-go/v76 v76.25.0
 	github.com/vk-rv/pvx v0.0.0-20210912195928-ac00bc32f6e7
@@ -35,14 +36,17 @@ require (
 	github.com/consensys/gnark-crypto v0.12.1 // indirect
 	github.com/crate-crypto/go-kzg-4844 v0.7.0 // indirect
 	github.com/deckarep/golang-set/v2 v2.1.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/ethereum/c-kzg-4844 v0.4.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/go-redis/redis v6.15.9+incompatible // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jinzhu/gorm v1.9.16 // indirect
 	github.com/lib/pq v1.10.4 // indirect
 	github.com/libp2p/go-libp2p-routing-helpers v0.7.3 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/redis/go-redis/v9 v9.7.0 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/supranational/blst v0.3.11 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect

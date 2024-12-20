@@ -52,7 +52,21 @@ func GetDb() *gorm.DB {
 func DbInit() error {
 	db := GetDb()
 
+	func() {
+
+		// SQL query to create the extension
+		sql := `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`
+
+		// Execute the query
+		result := db.Exec(sql)
+		if result.Error != nil {
+			log.Fatal("failed to create extention : ", result.Error)
+		}
+
+	}()
+
 	if err := db.AutoMigrate(
+		&models.NodeLog{},
 		&models.NodeActivity{},
 		&models.Node{},
 		&models.User{},

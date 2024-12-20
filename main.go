@@ -9,14 +9,20 @@ import (
 	"github.com/NetSepio/erebrus-gateway/api"
 	"github.com/NetSepio/erebrus-gateway/app"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
+	"github.com/NetSepio/erebrus-gateway/config/redisconfig"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
 
-func main() {
+func init() {
 	godotenv.Load()
+	redisconfig.RedisConnection()
+}
+
+func main() {
+
 	logwrapper.Init()
 	app.Init()
 	ginApp := gin.Default()
