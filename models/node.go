@@ -3,6 +3,8 @@ package models
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type NodeResponse struct {
@@ -29,7 +31,7 @@ type NodeResponse struct {
 	IpInfoPostal        string  `json:"ipinfopostal"`
 	IpInfoTimezone      string  `json:"ipinfotimezone"`
 	TotalActiveDuration float64 `json:"totalUptime"`
-	TodayActiveDuration float64 `json:"todayUpTime"`
+	// TodayActiveDuration float64 `json:"todayUpTime"`
 	UptimeUnit          string  `json:"upTimeUnit"`
 }
 
@@ -114,4 +116,12 @@ type NodeActivity struct {
 	EndTime             *time.Time `json:"endTime"`                                    // EndTime can be nil if the node is still active
 	DurationSeconds     int        `json:"durationSeconds" gorm:"default:0"`           // Duration in seconds, default to 0
 	LastActiveStartTime *time.Time `json:"lastActiveStartTime"`                        // Time when the node last became active (nullable)
+}
+
+// NodeLog represents the schema for the node_logs table
+type NodeLog struct {
+	ID        uuid.UUID `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()"` // Use UUID as primary key
+	PeerID    string    `gorm:"index;not null"`                                  // PeerID is not unique, but indexed for fast lookup
+	Status    string    `gorm:"not null"`                                        // Status: active or inactive
+	Timestamp time.Time `gorm:"not null"`                                        // Timestamp of the status change
 }

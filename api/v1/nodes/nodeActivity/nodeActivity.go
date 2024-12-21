@@ -60,6 +60,8 @@ import (
 // 	return math.Round((float64(totalDuration)/3600)*100) / 100, math.Round((float64(todayDuration)/3600)*100) / 100
 // }
 
+
+
 func CalculateTotalAndTodayActiveDuration(peerID string) (totalDurationHr, todayDurationHr float64) {
 	db := dbconfig.GetDb()
 	now := time.Now()
