@@ -83,7 +83,7 @@ func LogNodeStatus(peerID string, status string) error {
 	cachedStatus, err := RedisClient.Get(Ctx, cacheKey).Result()
 
 	if err == redis.Nil {
-		fmt.Printf("peerID : %v, status : %v \n", peerID, status)
+		// fmt.Printf("peerID : %v, status : %v \n", peerID, status)
 
 		// If Redis does not have data for the PeerID, check the database
 		var nodeLog models.NodeLog
