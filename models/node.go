@@ -31,7 +31,7 @@ type NodeResponse struct {
 	IpInfoPostal        string  `json:"ipinfopostal"`
 	IpInfoTimezone      string  `json:"ipinfotimezone"`
 	TotalActiveDuration float64 `json:"totalUptime"`
-	TodayActiveDuration float64 `json:"todayUpTime"`
+	// TodayActiveDuration float64 `json:"todayUpTime"`
 	UptimeUnit          string  `json:"upTimeUnit"`
 }
 

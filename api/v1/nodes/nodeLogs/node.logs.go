@@ -3,17 +3,71 @@ package nodelogs
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/redisconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
+	"github.com/TheLazarusNetwork/go-helpers/httpo"
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
+
+func ApplyRoutes(r *gin.RouterGroup) {
+	g := r.Group("/active-nodes")
+	{
+		g.GET("", GetActiveNodesHandler)
+		// g.GET("/:status", FetchAllNodesByStatus)
+		// g.GET("/status_wallet_address/:status/:wallet_address", FetchAllNodesByStatusAndWalletAddress)
+		// g.GET("/nodes_details_by_wallet_adddress_and_chain", HandlerGetNodesByChainAndWallet())
+
+	}
+}
+
+// GetActiveNodesHandler retrieves active nodes within a specific time range
+func GetActiveNodesHandler(c *gin.Context) {
+	peer_id := c.Query("peer_id")
+	if len(peer_id) == 0 {
+		httpo.NewSuccessResponse(http.StatusBadRequest, "Please pass the peer_id").SendD(c)
+		return
+	}
+	start_time := c.Query("start_time")
+	end_time := c.Query("end_time")
+	var (
+		startTime time.Time
+		endTime   time.Time
+		err       error
+	)
+
+	if len(start_time) == 0 || len(end_time) == 0 {
+		endTime = time.Now()
+		startTime = endTime.AddDate(0, 0, -30)
+	} else {
+		startTime, err = time.Parse(time.RFC3339, start_time)
+		if err != nil {
+			httpo.NewSuccessResponse(http.StatusBadRequest, "Invalid start_time format").SendD(c)
+			return
+		}
+		endTime, err = time.Parse(time.RFC3339, end_time)
+		if err != nil {
+			httpo.NewSuccessResponse(http.StatusBadRequest, "Invalid end_time format").SendD(c)
+			return
+		}
+	}
+
+	activeNodes, err := GetTotalActiveDuration(peer_id, startTime, endTime)
+	if err != nil {
+		httpo.NewSuccessResponse(http.StatusInternalServerError, err.Error()).SendD(c)
+		return
+	}
+
+	httpo.NewSuccessResponseP(http.StatusOK, "active_nodes", activeNodes).SendD(c)
+}
 
 // LogNodeStatus logs the status change of a node
 func LogNodeStatus(peerID string, status string) error {
@@ -157,6 +211,15 @@ func GetTotalActiveDuration(peerID string, startTime time.Time, endTime time.Tim
 	var totalActiveDuration int64
 	var lastStatus string
 	var lastTimestamp time.Time
+
+	// If there is only one log entry with status 'active', calculate the duration from that log entry to the current time
+	if len(nodeLogs) == 1 && nodeLogs[0].Status == "active" {
+		duration := time.Now().Sub(nodeLogs[0].Timestamp).Seconds()
+		if duration > 0 {
+			totalActiveDuration = int64(duration)
+		}
+		return totalActiveDuration, nil
+	}
 
 	// Iterate through the logs to calculate the total active duration
 	for _, log := range nodeLogs {
