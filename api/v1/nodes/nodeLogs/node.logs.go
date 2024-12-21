@@ -118,6 +118,9 @@ func LogNodeStatus(peerID string, status string) error {
 				// Set the status in Redis
 				RedisClient.Set(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
 				return nil
+			} else {
+				RedisClient.Set(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
+				return nil
 			}
 		} else {
 			// Return any other errors encountered while querying the database
