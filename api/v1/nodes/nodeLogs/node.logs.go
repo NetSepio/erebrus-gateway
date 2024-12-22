@@ -145,7 +145,7 @@ func LogNodeStatus(peerID string, status string) error {
 
 	// If status in Redis already matches, just update the Redis cache timestamp
 	if err == nil && cachedStatus == status {
-		log.Info("Data alread exists", peerID, status)
+		log.Info("Data alread exists : ", peerID, status)
 		// Reset the cache expiration time
 		RedisClient.Set(Ctx, cacheKey, status, time.Hour*1)
 		return nil

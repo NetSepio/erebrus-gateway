@@ -3,7 +3,6 @@ package redisconfig
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"os"
 
 	"github.com/redis/go-redis/v9"
@@ -28,8 +27,6 @@ func ConnectRedis() *redis.Client {
 		address = DecodeB64("MzUuMjA5LjE5OC4xNjo2Mzc5")
 		// password = DecodeB64("STkwNjFVNjI4NlFKQ1BOME0=")
 		password = "I9061U6286QJCPN0M"
-
-		fmt.Printf("address : %v and password : %v \n", address, password)
 	}
 	testAddress = address
 	testPassword = password
