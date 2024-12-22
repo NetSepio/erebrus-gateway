@@ -343,7 +343,7 @@ func HandlerGetNodesByChain() gin.HandlerFunc {
 
 		if chain == "" && walletAddress == "" {
 			logwrapper.Errorf("provide atleast chain and wallet_address are required { HandlerGetNodesByChainAndWallet }")
-
+			httpo.NewErrorResponse(400, "please pass atleast chain or wallet address").SendD(c)
 			return
 		}
 		db := dbconfig.GetDb()
