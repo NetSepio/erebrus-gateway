@@ -341,20 +341,37 @@ func HandlerGetNodesByChain() gin.HandlerFunc {
 		start_time := c.Query("start_time")
 		end_time := c.Query("end_time")
 
-		if chain == "" || walletAddress == "" {
-			logwrapper.Errorf("chain and wallet_address are required { HandlerGetNodesByChainAndWallet }")
+		if chain == "" && walletAddress == "" {
+			logwrapper.Errorf("provide atleast chain and wallet_address are required { HandlerGetNodesByChainAndWallet }")
 
 			return
 		}
 		db := dbconfig.GetDb()
 		var nodes *[]models.Node
 
-		err := db.Where("chain = ? AND wallet_address = ?", chain, walletAddress).Find(&nodes).Error
+		if chain != "" && walletAddress == "" {
+			err := db.Where("chain = ?", chain).Find(&nodes).Error
+			if err != nil {
+				logwrapper.Errorf("error fetching nodes { HandlerGetNodesByChainAndWallet 1 } : %v\n", err.Error())
+				httpo.NewErrorResponse(500, "error fetching nodes").SendD(c)
+				return
+			}
+		} else if chain == "" && walletAddress != "" {
+			err := db.Where("wallet_address = ?", walletAddress).Find(&nodes).Error
+			if err != nil {
+				logwrapper.Errorf("error fetching nodes { HandlerGetNodesByChainAndWallet }: %v\n", err.Error())
+				httpo.NewErrorResponse(500, "error fetching nodes").SendD(c)
+				return
+			}
+		} else {
+			err := db.Where("chain = ? AND wallet_address = ?", chain, walletAddress).Find(&nodes).Error
 
-		// nodes, err := GetNodesByChainAndWallet(db, chain, walletAddress)
-		if err != nil {
-			logwrapper.Errorf("failed to get nodes from DB { HandlerGetNodesByChainAndWallet }: %s", err)
-			return
+			// nodes, err := GetNodesByChainAndWallet(db, chain, walletAddress)
+			if err != nil {
+				logwrapper.Errorf("failed to get nodes from DB { HandlerGetNodesByChainAndWallet 3 }: %s", err)
+				httpo.NewErrorResponse(500, "error fetching nodes").SendD(c)
+				return
+			}
 		}
 
 		var (
