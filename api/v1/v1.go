@@ -2,6 +2,7 @@ package apiv1
 
 import (
 	"github.com/NetSepio/erebrus-gateway/api/status"
+	caddyservices "github.com/NetSepio/erebrus-gateway/api/v1/caddyServices"
 	"github.com/NetSepio/erebrus-gateway/api/v1/client"
 	nodedwifi "github.com/NetSepio/erebrus-gateway/api/v1/nodeDwifi"
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodeOperatorForm"
@@ -23,5 +24,6 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		registerDwifi.ApplyRoutes(v1)
 		nodedwifi.ApplyRoutes(v1)
 		walrusFileStorage.ApplyRoutes(v1)
+		caddyservices.ApplyRoutes(v1)
 	}
 }
