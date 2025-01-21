@@ -1,6 +1,7 @@
 package caddyservices
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -24,28 +25,28 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	}
 }
 
-func baseURL(c *gin.Context) string {
+func baseURL(c *gin.Context) (string, int, error) {
 	walletAddress := c.GetString(paseto.CTX_WALLET_ADDRESS)
+	if len(walletAddress) == 0 {
+		return "", http.StatusNotFound, errors.New("invalid wallet address : walletAddress is empty")
+	}
 	db := dbconfig.GetDb()
 	var node models.Node
 
 	err := db.Where("wallet_address = ?", walletAddress).First(&node).Error
 	if err != nil {
 		if gorm.IsRecordNotFoundError(err) {
-			logwrapper.Errorf("node not found for wallet address %s: %v\n", walletAddress, err)
-			httpo.NewErrorResponse(404, "node not found").SendD(c)
-			return ""
+			return "", http.StatusNotFound, errors.New("failed to get wallet details : node not found")
 		} else {
-			logwrapper.Errorf("error fetching node for wallet address %s: %v\n", walletAddress, err)
-			httpo.NewErrorResponse(500, "error fetching node").SendD(c)
-			return ""
+			return "", http.StatusInternalServerError, fmt.Errorf("error fetching node for wallet address %s: %v", walletAddress, err)
+
 		}
 	}
 	fmt.Println()
 	fmt.Println("node host : ", node.Host+"/api/v1.0/caddy")
 	fmt.Println()
 
-	return node.Host + "/api/v1.0/caddy"
+	return node.Host + "/api/v1.0/caddy", http.StatusOK, nil
 }
 
 // CallAddService calls the `addServices` API
@@ -56,7 +57,14 @@ func CallAddService(c *gin.Context) {
 		return
 	}
 
-	if response, err := AddServiceInErebrusNode(RequestData{Name: payload.Name, IpAddress: payload.IPAddress, Port: payload.Port}, baseURL(c)); err != nil {
+	baseURL, statusCode, err := baseURL(c)
+	if err != nil && len(baseURL) == 0 {
+		logwrapper.Errorf("failed to get node details by wallet address %s: %v\n", err, err)
+		httpo.NewErrorResponse(statusCode, fmt.Sprintf("failed to get node details by wallet address: %v\n", err)).SendD(c)
+		return
+	}
+
+	if response, err := AddServiceInErebrusNode(RequestData{Name: payload.Name, IpAddress: payload.IPAddress, Port: payload.Port}, baseURL); err != nil {
 		if response.Message.Name != "" {
 			logwrapper.Errorf("error adding service: %v\n", response.Message.Name)
 			httpo.NewErrorResponse(500, "error adding service , "+" node status code = "+fmt.Sprintf("%d", response.Status)+", api response message : "+response.Message.Name).SendD(c)
@@ -73,7 +81,14 @@ func CallAddService(c *gin.Context) {
 // CallGetServices calls the `getServices` API
 func CallGetAllServices(c *gin.Context) {
 
-	response, err := FetchServices(baseURL(c))
+	baseURL, statusCode, err := baseURL(c)
+	if err != nil && len(baseURL) == 0 {
+		logwrapper.Errorf("failed to get node details by wallet address %s: %v\n", err, err)
+		httpo.NewErrorResponse(statusCode, fmt.Sprintf("failed to get node details by wallet address: %v\n", err)).SendD(c)
+		return
+	}
+
+	response, err := FetchServices(baseURL)
 
 	if err != nil {
 		logwrapper.Errorf("Failed to get the services %v", err.Error())
@@ -89,7 +104,17 @@ func CallGetAllServices(c *gin.Context) {
 // CallGetService calls the `getService` API for a specific service
 func CallGetService(c *gin.Context) {
 	name := c.Param("name")
-	url := fmt.Sprintf("%s/%s", baseURL(c), name)
+	if len(name) == 0 {
+		httpo.NewErrorResponse(400, "name is required").SendD(c)
+		return
+	}
+	baseURL, statusCode, err := baseURL(c)
+	if err != nil && len(baseURL) == 0 {
+		logwrapper.Errorf("failed to get node details by wallet address %s: %v\n", err, err)
+		httpo.NewErrorResponse(statusCode, fmt.Sprintf("failed to get node details by wallet address: %v\n", err)).SendD(c)
+		return
+	}
+	url := fmt.Sprintf("%s/%s", baseURL, name)
 
 	response, err := FetchServiceDetails(url)
 
@@ -105,7 +130,18 @@ func CallGetService(c *gin.Context) {
 
 func CallDeleteService(c *gin.Context) {
 	name := c.Param("name")
-	url := fmt.Sprintf("%s/%s", baseURL(c), name)
+	if len(name) == 0 {
+		httpo.NewErrorResponse(400, "name is required").SendD(c)
+		return
+	}
+
+	baseURL, statusCode, err := baseURL(c)
+	if err != nil && len(baseURL) == 0 {
+		logwrapper.Errorf("failed to get node details by wallet address %s: %v\n", err, err)
+		httpo.NewErrorResponse(statusCode, fmt.Sprintf("failed to get node details by wallet address : %v\n", err)).SendD(c)
+		return
+	}
+	url := fmt.Sprintf("%s/%s", baseURL, name)
 
 	response, err := DeleteService(url)
 
