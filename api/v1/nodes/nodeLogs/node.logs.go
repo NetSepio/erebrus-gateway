@@ -9,7 +9,8 @@ import (
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/redisconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
-	"github.com/TheLazarusNetwork/go-helpers/httpo"
+	"github.com/NetSepio/erebrus-gateway/util/pkg/httpo"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 

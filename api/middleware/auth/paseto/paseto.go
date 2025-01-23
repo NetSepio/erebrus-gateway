@@ -8,8 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/NetSepio/erebrus-gateway/util/pkg/httpo"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
-	"github.com/TheLazarusNetwork/go-helpers/httpo"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/gin-gonic/gin"

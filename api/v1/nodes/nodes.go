@@ -9,8 +9,9 @@ import (
 	nodelogs "github.com/NetSepio/erebrus-gateway/api/v1/nodes/nodeLogs"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
+	"github.com/NetSepio/erebrus-gateway/util/pkg/httpo"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
-	"github.com/TheLazarusNetwork/go-helpers/httpo"
+
 	"github.com/gin-gonic/gin"
 )
 
