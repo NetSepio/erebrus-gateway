@@ -9,7 +9,8 @@ import (
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/redisconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
-	"github.com/TheLazarusNetwork/go-helpers/httpo"
+	"github.com/NetSepio/erebrus-gateway/util/pkg/httpo"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
@@ -145,7 +146,7 @@ func LogNodeStatus(peerID string, status string) error {
 
 	// If status in Redis already matches, just update the Redis cache timestamp
 	if err == nil && cachedStatus == status {
-		log.Info("Data alread exists", peerID, status)
+		log.Info("Data alread exists : ", peerID, status)
 		// Reset the cache expiration time
 		RedisClient.Set(Ctx, cacheKey, status, time.Hour*1)
 		return nil
