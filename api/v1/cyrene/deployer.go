@@ -1,4 +1,4 @@
-package deployer
+package cyrene
 
 import (
 	"errors"
