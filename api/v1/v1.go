@@ -6,7 +6,7 @@ import (
 	nodedwifi "github.com/NetSepio/erebrus-gateway/api/v1/nodeDwifi"
 	caddyservices "github.com/NetSepio/erebrus-gateway/api/v1/services"
 	"github.com/NetSepio/erebrus-gateway/api/v1/walrus"
-
+	"github.com/NetSepio/erebrus-gateway/api/v1/agents"
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodes"
 	"github.com/NetSepio/erebrus-gateway/api/v1/registerDwifi"
 	"github.com/NetSepio/erebrus-gateway/api/v1/subscription"
@@ -25,6 +25,6 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		nodedwifi.ApplyRoutes(v1)
 		walrus.ApplyRoutes(v1)
 		caddyservices.ApplyRoutes(v1)
-		
+		agents.ApplyRoutes(v1)
 	}
 }
