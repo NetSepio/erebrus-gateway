@@ -32,7 +32,7 @@ type NodeResponse struct {
 	IpInfoTimezone      string  `json:"ipinfotimezone"`
 	TotalActiveDuration float64 `json:"totalUptime"`
 	// TodayActiveDuration float64 `json:"todayUpTime"`
-	UptimeUnit          string  `json:"upTimeUnit"`
+	UptimeUnit string `json:"upTimeUnit"`
 }
 
 func ToJSON(data interface{}) string {
@@ -45,26 +45,26 @@ func ToJSON(data interface{}) string {
 
 type Node struct {
 	//using for db operation
-	PeerId              string  `json:"peerId" gorm:"primaryKey"`
-	Name                string  `json:"name"`
-	HttpPort            string  `json:"httpPort"`
-	Host                string  `json:"host"` //domain
-	PeerAddress         string  `json:"peerAddress"`
-	Region              string  `json:"region"`
-	Status              string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
-	DownloadSpeed       float64 `json:"downloadSpeed"`
-	UploadSpeed         float64 `json:"uploadSpeed"`
-	RegistrationTime    int64   `json:"registrationTime"` //StartTimeStamp
-	LastPing            int64   `json:"lastPing"`
-	Chain               string  `json:"chainName"`
-	WalletAddress       string  `json:"walletAddress"`
-	Version             string  `json:"version"`
-	CodeHash            string  `json:"codeHash"`
-	SystemInfo          string  `json:"systemInfo" gorm:"type:jsonb"`
-	IpInfo              string  `json:"ipinfo" gorm:"type:jsonb"`
-	IpGeoData           string  `json:"ipGeoData" gorm:"type:jsonb"`
-	TotalActiveDuration float64 `json:"totalDuration" gorm:"type:float"`
-	TodayActiveDuration float64 `json:"todayDuration" gorm:"type:float"`
+	PeerId           string  `json:"peerId" gorm:"primaryKey"`
+	Name             string  `json:"name"`
+	HttpPort         string  `json:"httpPort"`
+	Host             string  `json:"host"` //domain
+	PeerAddress      string  `json:"peerAddress"`
+	Region           string  `json:"region"`
+	Status           string  `json:"status"` // offline 1, online 2, maintainance 3,block 4
+	DownloadSpeed    float64 `json:"downloadSpeed"`
+	UploadSpeed      float64 `json:"uploadSpeed"`
+	RegistrationTime int64   `json:"registrationTime"` //StartTimeStamp
+	LastPing         int64   `json:"lastPing"`
+	Chain            string  `json:"chainName"`
+	WalletAddress    string  `json:"walletAddress"`
+	Version          string  `json:"version"`
+	CodeHash         string  `json:"codeHash"`
+	SystemInfo       string  `json:"systemInfo" gorm:"type:jsonb"`
+	IpInfo           string  `json:"ipinfo" gorm:"type:jsonb"`
+	IpGeoData        string  `json:"ipGeoData" gorm:"type:jsonb"`
+	NodeType         string  `json:"nodeType"`
+	NodeConfig       string  `json:"nodeConfig"`
 }
 
 type NodeAppends struct {
@@ -85,6 +85,8 @@ type NodeAppends struct {
 	CodeHash         string  `json:"codeHash"`
 	SystemInfo       OSInfo  `json:"systemInfo"`
 	IpInfo           IPInfo  `json:"ipinfo"`
+	NodeType         string  `json:"nodeType"`
+	NodeConfig       string  `json:"nodeConfig"`
 }
 
 type OSInfo struct {

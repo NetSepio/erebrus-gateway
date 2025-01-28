@@ -1,4 +1,4 @@
-package walrusFileStorage
+package walrus
 
 import (
 	"net/http"

@@ -9,13 +9,13 @@ import (
 	"github.com/NetSepio/erebrus-gateway/config/envconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/NetSepio/erebrus-gateway/models/claims"
-	"github.com/TheLazarusNetwork/go-helpers/httpo"
 
 	"github.com/NetSepio/erebrus-gateway/util/pkg/auth"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/cryptosign"
+	"github.com/NetSepio/erebrus-gateway/util/pkg/httpo"
 	"github.com/NetSepio/erebrus-gateway/util/pkg/logwrapper"
 
-	// "github.com/TheLazarusNetwork/go-helpers/httpo"
+	//
 
 	"github.com/gin-gonic/gin"
 )
