@@ -10,5 +10,5 @@ RUN go build -o erebrus-gateway-1.1.2 .
 
 FROM alpine AS final
 WORKDIR /app
-COPY --from=build-app /app/erebrus-gateway-1.1.2 .
-CMD ["./erebrus-gateway-1.1.2"]
+COPY --from=build-app /app/erebrus-gateway .
+CMD ["./erebrus-gateway"]
