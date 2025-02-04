@@ -72,7 +72,7 @@ jobs:
         with:
           host: ${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}
           username: ${{ secrets.AWS_SERVER_USERNAME }}
-          key: ${{ secrets.AWS_REMOTE_SER VER_KEY }}
+          key: ${{ secrets.AWS_REMOTE_SERVER_KEY }}
           port: ${{ secrets.AWS_SSH_PORT }}
           script: |
             pwd
