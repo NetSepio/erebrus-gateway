@@ -65,3 +65,20 @@ jobs:
           gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://us-west4-docker.pkg.dev
           docker push us-west4-docker.pkg.dev/erebrus-prod/erebrus/erebrus-gateway:1.1.2
           gcloud compute instance-groups managed rolling-action replace erebrus-gateway-prod --region us-west4 --max-surge=2 --max-unavailable=0
+
+      - name: Deploy on AWS PROD
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}
+          username: ${{ secrets.AWS_SERVER_USERNAME }}
+          key: ${{ secrets.AWS_REMOTE_SER VER_KEY }}
+          port: ${{ secrets.AWS_SSH_PORT }}
+          script: |
+            pwd
+            cd erebrus-gateway
+            docker stop erebrus-gateway && docker rm erebrus-gateway 
+            docker image rm ghcr.io/netsepio/erebrus-gateway:1.1.2
+            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+            docker pull ghcr.io/netsepio/erebrus-gateway:1.1.2
+            docker run --restart=on-failure:14 --dns=1.1.1.1 --name="erebrus-gateway" --env-file=.env -p 9000:9000 -p 9001:9001 --net=bridge -v "$(pwd)/identity.key:/app/secret/identity.key" -d ghcr.io/netsepio/erebrus-gateway:1.1.2
