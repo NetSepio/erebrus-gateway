@@ -62,7 +62,7 @@ func CheckSubscription(c *gin.Context) {
 			res := SubscriptionResponse{
 				Status: "notFound",
 			}
-			c.JSON(http.StatusNotFound, res)
+			c.JSON(http.StatusOK, res)
 		}
 		logwrapper.Errorf("Error fetching subscriptions: %v", err)
 		c.Status(http.StatusInternalServerError)
