@@ -69,7 +69,7 @@ func DbInit() error {
 		&models.NodeLog{},
 		&models.NodeActivity{},
 		&models.Node{},
-		&models.User{},
+		// &models.User{},
 		&models.Erebrus{},
 		&models.Subscription{},
 		&models.FormData{},
