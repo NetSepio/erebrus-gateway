@@ -35,7 +35,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	}
 
 	// Start the CheckForUpdates function in a separate goroutine
-	go CheckForUpdates()
+	// go CheckForUpdates()
 }
 
 func FetchAllNodeDwifi(c *gin.Context) {

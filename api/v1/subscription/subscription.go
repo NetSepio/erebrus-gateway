@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
+	"github.com/NetSepio/erebrus-gateway/api/v1/subscription/token"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/envconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
@@ -28,10 +29,13 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/subscription")
 	{
 		g.POST("webhook", HandleWebhook)
+		token.ApplyRoutesSubscriptionNft(g)
+		token.ApplyRoutesSubscriptionToken(g)
 		g.Use(paseto.PASETO(false))
 		g.POST("/trial", TrialSubscription)
 		g.POST("/create-payment", CreatePaymentIntent)
 		g.GET("", CheckSubscription)
+
 	}
 }
 
