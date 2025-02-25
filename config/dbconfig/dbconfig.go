@@ -80,6 +80,7 @@ func DbInit() error {
 		&models.WifiNode{},
 		&models.NodeDwifi{},
 		&models.WalrusStorage{},
+		&models.CyreneAIAgent{},
 	); err != nil {
 		log.Fatal(err)
 	}
