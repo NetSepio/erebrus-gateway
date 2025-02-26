@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
-	"time"
+	// "time"
 
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
@@ -106,50 +106,50 @@ func StreamNodeDwifi(c *gin.Context) {
 }
 
 func CheckForUpdates() {
-	db := dbconfig.GetDb()
-	for {
-		var nodeDwifis []models.NodeDwifi
-		if err := db.Find(&nodeDwifis).Error; err != nil {
-			logwrapper.Errorf("Error fetching updates: %v", err)
-			continue
-		}
+	// db := dbconfig.GetDb()
+	// for {
+	// 	var nodeDwifis []models.NodeDwifi
+	// 	if err := db.Find(&nodeDwifis).Error; err != nil {
+	// 		logwrapper.Errorf("Error fetching updates: %v", err)
+	// 		continue
+	// 	}
 
-		for _, nd := range nodeDwifis {
-			var deviceInfos []models.DeviceInfo
-			if len(nd.Status) > 0 {
-				err := json.Unmarshal([]byte(nd.Status), &deviceInfos)
-				if err != nil {
-					logwrapper.Errorf("failed to unmarshal NodeDwifi Status: %s", err)
-					continue
-				}
-			}
+	// 	for _, nd := range nodeDwifis {
+	// 		var deviceInfos []models.DeviceInfo
+	// 		if len(nd.Status) > 0 {
+	// 			err := json.Unmarshal([]byte(nd.Status), &deviceInfos)
+	// 			if err != nil {
+	// 				logwrapper.Errorf("failed to unmarshal NodeDwifi Status: %s", err)
+	// 				continue
+	// 			}
+	// 		}
 
-			response := models.NodeDwifiResponse{
-				ID:             nd.ID,
-				Gateway:        nd.Gateway,
-				CreatedAt:      nd.CreatedAt,
-				UpdatedAt:      nd.UpdatedAt,
-				Status:         deviceInfos,
-				Password:       nd.Password,
-				Location:       nd.Location,
-				Price_per_min:  nd.Price_per_min,
-				Wallet_address: nd.Wallet_address,
-				Chain_name:     nd.Chain_name,
-				Co_ordinates:   nd.Co_ordinates,
-			}
+	// 		response := models.NodeDwifiResponse{
+	// 			ID:             nd.ID,
+	// 			Gateway:        nd.Gateway,
+	// 			CreatedAt:      nd.CreatedAt,
+	// 			UpdatedAt:      nd.UpdatedAt,
+	// 			Status:         deviceInfos,
+	// 			Password:       nd.Password,
+	// 			Location:       nd.Location,
+	// 			Price_per_min:  nd.Price_per_min,
+	// 			Wallet_address: nd.Wallet_address,
+	// 			Chain_name:     nd.Chain_name,
+	// 			Co_ordinates:   nd.Co_ordinates,
+	// 		}
 
-			mutex.Lock()
-			for conn := range subscribers {
-				err := conn.WriteJSON(response)
-				if err != nil {
-					logwrapper.Errorf("error writing to WebSocket: %v", err)
-					conn.Close()
-					delete(subscribers, conn)
-				}
-			}
-			mutex.Unlock()
-		}
+	// 		mutex.Lock()
+	// 		for conn := range subscribers {
+	// 			err := conn.WriteJSON(response)
+	// 			if err != nil {
+	// 				logwrapper.Errorf("error writing to WebSocket: %v", err)
+	// 				conn.Close()
+	// 				delete(subscribers, conn)
+	// 			}
+	// 		}
+	// 		mutex.Unlock()
+	// 	}
 
-		time.Sleep(1 * time.Second)
-	}
+	// 	time.Sleep(1 * time.Second)
+	// }
 }

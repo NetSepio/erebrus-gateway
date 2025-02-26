@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
+	// "github.com/sirupsen/logrus"
 )
 
 var (
@@ -36,17 +36,17 @@ func ConnectRedis() *redis.Client {
 }
 
 func RedisConnection() {
-	r := ConnectRedis()
-	if r.Ping(Ctx).Err() != nil {
-		logrus.Println("Redis port : ", testAddress)
-		logrus.Println("Redis password : ", testPassword)
-		logrus.Fatal(r.Ping(Ctx).Err())
-	} else {
-		if count != 0 {
-			logrus.Println("Using the inbuild redis ")
-		}
-		logrus.Infoln("REDIS CONNECTED SUCCESSFULLY")
-	}
+	// r := ConnectRedis()
+	// if r.Ping(Ctx).Err() != nil {
+	// 	logrus.Println("Redis port : ", testAddress)
+	// 	logrus.Println("Redis password : ", testPassword)
+	// 	logrus.Fatal(r.Ping(Ctx).Err())
+	// } else {
+	// 	if count != 0 {
+	// 		logrus.Println("Using the inbuild redis ")
+	// 	}
+	// 	logrus.Infoln("REDIS CONNECTED SUCCESSFULLY")
+	// }
 }
 
 func DecodeB64(message string) (retour string) {
