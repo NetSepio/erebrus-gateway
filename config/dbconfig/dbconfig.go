@@ -53,7 +53,6 @@ func DbInit() error {
 	db := GetDb()
 
 	func() {
-
 		// SQL query to create the extension
 		sql := `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`
 
@@ -62,7 +61,6 @@ func DbInit() error {
 		if result.Error != nil {
 			log.Fatal("failed to create extention : ", result.Error)
 		}
-
 	}()
 
 	if err := db.AutoMigrate(

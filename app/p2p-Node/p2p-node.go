@@ -3,14 +3,23 @@ package p2pnode
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	nodelogs "github.com/NetSepio/erebrus-gateway/api/v1/nodes/nodeLogs"
 	p2pHost "github.com/NetSepio/erebrus-gateway/app/p2p-Node/host"
 	"github.com/NetSepio/erebrus-gateway/app/p2p-Node/service"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
+	"github.com/NetSepio/erebrus-gateway/contract"
 	"github.com/NetSepio/erebrus-gateway/models"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/joho/godotenv"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
@@ -22,6 +31,23 @@ const DiscoveryInterval = time.Second * 10
 // DiscoveryServiceTag is used in our DHT advertisements to discover
 // other peers.
 const DiscoveryServiceTag = "erebrus"
+
+// Node status constants matching the contract's enum
+const (
+	StatusOffline     uint8 = 0
+	StatusOnline      uint8 = 1
+	StatusMaintenance uint8 = 2
+	StatusDeactivated uint8 = 3
+)
+
+// NodeStateTracker keeps track of node states to minimize contract calls
+type NodeStateTracker struct {
+	ContractStatus uint8
+	LastPing       time.Time
+}
+
+// Global map to track node states
+var nodeStates = make(map[string]*NodeStateTracker)
 
 func Init() {
 	ctx, _ := context.WithCancel(context.Background())
@@ -41,6 +67,9 @@ func Init() {
 	go p2pHost.Discover(ctx, ha, dht)
 
 	ticker := time.NewTicker(10 * time.Second)
+	maintenanceThreshold := 2 * time.Minute
+	offlineThreshold := 5 * time.Minute
+
 	quit := make(chan struct{})
 	go func() {
 		for {
@@ -49,15 +78,18 @@ func Init() {
 				var nodes []models.Node
 
 				err := db.Model(&models.Node{}).Find(&nodes).Error
-
 				if err != nil {
 					logrus.Error("failed to fetch nodes from db")
 					return
 				}
 
-				// fmt.Println("nodes : ", len(nodes))
-
 				for _, node := range nodes {
+					if _, exists := nodeStates[node.PeerId]; !exists {
+						nodeStates[node.PeerId] = &NodeStateTracker{
+							ContractStatus: StatusOffline,
+							LastPing:       time.Now(),
+						}
+					}
 
 					var (
 						newOSInfo     models.OSInfo
@@ -71,15 +103,12 @@ func Init() {
 					}
 
 					if len(node.IpGeoData) > 0 {
-						// fmt.Println("node.IpGeoData : ", node.IpGeoData)
 						err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
 						if err != nil {
 							log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
 						}
 					} else {
-						// IP := "150.129.168.46"
 						City := "Test"
-						// Region := "Maharashtra"
 						Country := "Test"
 						Location := "Test"
 						Organization := "Test"
@@ -102,8 +131,6 @@ func Init() {
 					node.IpGeoData = models.ToJSON(newGeoAddress)
 					node.IpInfo = models.ToJSON(newIPInfo)
 
-					// fmt.Printf("%+v\n", node.IpGeoData)
-
 					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
 					if err != nil {
 						continue
@@ -112,31 +139,47 @@ func Init() {
 					if err != nil {
 						logrus.Error(err)
 						continue
-						// log.Println(node)
 					}
-					// Attempt to connect to the peer
+
 					if err := ha.Connect(ctx, *peerInfo); err != nil {
+						timeSinceLastPing := time.Since(nodeStates[node.PeerId].LastPing)
 						node.Status = "inactive"
-						// nodeactivity.TrackNodeActivity(node.PeerId, false)
 						nodelogs.LogNodeStatus(node.PeerId, node.Status)
+
+						var newStatus uint8
+						if timeSinceLastPing > offlineThreshold {
+							newStatus = StatusOffline
+						} else if timeSinceLastPing > maintenanceThreshold {
+							newStatus = StatusMaintenance
+						} else {
+							continue // Skip if within maintenance threshold
+						}
+
+						if newStatus != nodeStates[node.PeerId].ContractStatus {
+							if err := updateNodeContractStatus(node.PeerId, newStatus); err != nil {
+								logrus.Error("failed to update contract status: ", err.Error())
+							} else {
+								nodeStates[node.PeerId].ContractStatus = newStatus
+							}
+						}
 
 						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}
-						lastPingTime := time.Unix(node.LastPing, 0)
-						duration := time.Since(lastPingTime)
-						threshold := 48 * time.Hour
-						if duration > threshold {
-							if err := db.Where("peer_id = ?", node.PeerId).Delete(&models.Node{}).Error; err != nil {
-								logrus.Error("failed to delete nodes: ", err.Error())
-								continue
-							}
-						}
 					} else {
 						node.Status = "active"
-						// nodeactivity.TrackNodeActivity(node.PeerId, true)
 						nodelogs.LogNodeStatus(node.PeerId, node.Status)
+						nodeStates[node.PeerId].LastPing = time.Now()
+
+						if nodeStates[node.PeerId].ContractStatus != StatusOnline {
+							if err := updateNodeContractStatus(node.PeerId, StatusOnline); err != nil {
+								logrus.Error("failed to update contract status: ", err.Error())
+							} else {
+								nodeStates[node.PeerId].ContractStatus = StatusOnline
+							}
+						}
+
 						node.LastPing = time.Now().Unix()
 						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
@@ -149,9 +192,67 @@ func Init() {
 				ticker.Stop()
 				return
 			}
-
 		}
 	}()
 
 	go service.SubscribeTopics(ps, ha, ctx)
+}
+
+// formatNodeId adds the "did:netsepio:" prefix to the peer ID if not present
+func formatNodeId(peerId string) string {
+	prefix := "did:netsepio:"
+	if !strings.HasPrefix(peerId, prefix) {
+		return prefix + peerId
+	}
+	return peerId
+}
+
+func updateNodeContractStatus(nodeId string, status uint8) error {
+	formattedNodeId := formatNodeId(nodeId)
+	
+	// Load environment variables if not already loaded
+	if os.Getenv("CONTRACT_ADDRESS") == "" {
+		err := godotenv.Load()
+		if err != nil {
+			return fmt.Errorf("Error loading .env file: %v", err)
+		}
+	}
+
+	// Connect to the Ethereum client
+	client, err := ethclient.Dial(os.Getenv("RPC_URL"))
+	if err != nil {
+		return fmt.Errorf("Failed to connect to the Ethereum client: %v", err)
+	}
+
+	// Create a new instance of the contract
+	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	instance, err := contract.NewContract(contractAddress, client)
+	if err != nil {
+		return fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+
+	// Create auth options for the transaction
+	privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
+	if err != nil {
+		return fmt.Errorf("Failed to create private key: %v", err)
+	}
+
+	chainID, err := client.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("Failed to get chain ID: %v", err)
+	}
+
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	if err != nil {
+		return fmt.Errorf("Failed to create transactor: %v", err)
+	}
+
+	// Update node status
+	tx, err := instance.UpdateNodeStatus(auth, formattedNodeId, status)
+	if err != nil {
+		return fmt.Errorf("Failed to update node status: %v", err)
+	}
+
+	logrus.Infof("Node %s status updated to %d in contract. Transaction hash: %s", formattedNodeId, status, tx.Hash().Hex())
+	return nil
 }
