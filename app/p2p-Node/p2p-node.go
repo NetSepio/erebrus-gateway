@@ -40,6 +40,12 @@ const (
 	StatusDeactivated uint8 = 3
 )
 
+// Time thresholds for status changes
+const (
+	MaintenanceThreshold = 2 * time.Minute
+	OfflineThreshold    = 5 * time.Minute
+)
+
 // NodeStateTracker keeps track of node states to minimize contract calls
 type NodeStateTracker struct {
 	ContractStatus uint8
@@ -51,7 +57,6 @@ var nodeStates = make(map[string]*NodeStateTracker)
 
 func Init() {
 	ctx, _ := context.WithCancel(context.Background())
-
 	ha := p2pHost.CreateHost()
 	ps := service.NewService(ha, ctx)
 
@@ -67,20 +72,16 @@ func Init() {
 	go p2pHost.Discover(ctx, ha, dht)
 
 	ticker := time.NewTicker(10 * time.Second)
-	maintenanceThreshold := 2 * time.Minute
-	offlineThreshold := 5 * time.Minute
-
 	quit := make(chan struct{})
+	
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
 				var nodes []models.Node
-
-				err := db.Model(&models.Node{}).Find(&nodes).Error
-				if err != nil {
+				if err := db.Model(&models.Node{}).Find(&nodes).Error; err != nil {
 					logrus.Error("failed to fetch nodes from db")
-					return
+					continue
 				}
 
 				for _, node := range nodes {
@@ -135,57 +136,56 @@ func Init() {
 					if err != nil {
 						continue
 					}
+					
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
 					if err != nil {
 						logrus.Error(err)
 						continue
 					}
 
-					if err := ha.Connect(ctx, *peerInfo); err != nil {
+					isConnected := ha.Connect(ctx, *peerInfo) == nil
+					var newStatus uint8
+					var nodeStatus string
+
+					if !isConnected {
 						timeSinceLastPing := time.Since(nodeStates[node.PeerId].LastPing)
-						node.Status = "inactive"
-						nodelogs.LogNodeStatus(node.PeerId, node.Status)
-
-						var newStatus uint8
-						if timeSinceLastPing > offlineThreshold {
+						if timeSinceLastPing > OfflineThreshold {
 							newStatus = StatusOffline
-						} else if timeSinceLastPing > maintenanceThreshold {
+							nodeStatus = "inactive"
+						} else if timeSinceLastPing > MaintenanceThreshold {
 							newStatus = StatusMaintenance
+							nodeStatus = "inactive"
 						} else {
-							continue // Skip if within maintenance threshold
-						}
-
-						if newStatus != nodeStates[node.PeerId].ContractStatus {
-							if err := updateNodeContractStatus(node.PeerId, newStatus); err != nil {
-								logrus.Error("failed to update contract status: ", err.Error())
-							} else {
-								nodeStates[node.PeerId].ContractStatus = newStatus
-							}
-						}
-
-						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
-							logrus.Error("failed to update node: ", err.Error())
 							continue
 						}
 					} else {
-						node.Status = "active"
-						nodelogs.LogNodeStatus(node.PeerId, node.Status)
+						newStatus = StatusOnline
+						nodeStatus = "active"
 						nodeStates[node.PeerId].LastPing = time.Now()
-
-						if nodeStates[node.PeerId].ContractStatus != StatusOnline {
-							if err := updateNodeContractStatus(node.PeerId, StatusOnline); err != nil {
-								logrus.Error("failed to update contract status: ", err.Error())
-							} else {
-								nodeStates[node.PeerId].ContractStatus = StatusOnline
-							}
-						}
-
-						node.LastPing = time.Now().Unix()
-						if err := db.Model(&models.Node{}).Where("peer_id = ?", node.PeerId).Save(&node).Error; err != nil {
-							logrus.Error("failed to update node: ", err.Error())
-							continue
-						}
 					}
+
+					// Update contract status only for peaq nodes
+					if strings.ToLower(node.Chain) == "peaq" && newStatus != nodeStates[node.PeerId].ContractStatus {
+						go func(peerId string, status uint8) {
+							if err := updateNodeContractStatus(peerId, status); err != nil {
+								logrus.Error("failed to update contract status: ", err.Error())
+								return
+							}
+							nodeStates[peerId].ContractStatus = status
+						}(node.PeerId, newStatus)
+					}
+
+					// Update database for all nodes
+					go func(n models.Node, status string) {
+						n.Status = status
+						if status == "active" {
+							n.LastPing = time.Now().Unix()
+						}
+						if err := db.Save(&n).Error; err != nil {
+							logrus.Error("failed to update node: ", err.Error())
+						}
+						nodelogs.LogNodeStatus(n.PeerId, status)
+					}(node, nodeStatus)
 				}
 
 			case <-quit:
