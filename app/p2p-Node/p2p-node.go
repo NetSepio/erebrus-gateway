@@ -46,6 +46,13 @@ const (
 	OfflineThreshold     = 5 * time.Minute
 )
 
+// OnlineURI, MaintenanceURI, and OfflineURI are constants for token URIs
+const (
+	OnlineURI      = "ipfs://bafkreiczwfmevybanlj73w3v2smos2qgoxsfigonmmki4aoftcgike45sq"
+	MaintenanceURI = "ipfs://bafybeibil3zpj6povthugmrpwdvhgehrfpbhgkabltrrtwwfijvuguopka"
+	OfflineURI     = "ipfs://bafybeicetdyf7ocbdflobb7dkw5lvwejpa6ny3x55ht4pf2cmyedgarxmu"
+)
+
 // NodeStateTracker keeps track of node states to minimize contract calls
 type NodeStateTracker struct {
 	ContractStatus uint8
@@ -90,6 +97,7 @@ func Init() {
 							ContractStatus: StatusOffline,
 							LastPing:       time.Now(),
 						}
+						continue // Skip first iteration for new nodes
 					}
 
 					var (
@@ -149,14 +157,19 @@ func Init() {
 
 					if !isConnected {
 						timeSinceLastPing := time.Since(nodeStates[node.PeerId].LastPing)
-						if timeSinceLastPing > OfflineThreshold {
-							newStatus = StatusOffline
-							nodeStatus = "inactive"
-						} else if timeSinceLastPing > MaintenanceThreshold {
-							newStatus = StatusMaintenance
-							nodeStatus = "inactive"
+						// Only update status if within our monitoring window
+						if timeSinceLastPing <= OfflineThreshold + time.Minute {
+							if timeSinceLastPing > OfflineThreshold {
+								newStatus = StatusOffline
+								nodeStatus = "inactive"
+							} else if timeSinceLastPing > MaintenanceThreshold {
+								newStatus = StatusMaintenance
+								nodeStatus = "inactive"
+							} else {
+								continue
+							}
 						} else {
-							continue
+							continue // Skip nodes that have been offline for too long
 						}
 					} else {
 						newStatus = StatusOnline
@@ -179,7 +192,7 @@ func Init() {
 						}(node.PeerId, newStatus)
 					}
 
-					// Update database for all nodes
+					// Update database status
 					go func(n models.Node, status string) {
 						n.Status = status
 						if status == "active" {
@@ -251,12 +264,42 @@ func updateNodeContractStatus(nodeId string, status uint8) error {
 		return fmt.Errorf("Failed to create transactor: %v", err)
 	}
 
+	// Get node details to fetch tokenId
+	opts := &bind.CallOpts{
+		From: auth.From,
+	}
+	
+	node, err := instance.Nodes(opts, formattedNodeId)
+	if err != nil {
+		return fmt.Errorf("Failed to get node details: %v", err)
+	}
+
 	// Update node status
 	tx, err := instance.UpdateNodeStatus(auth, formattedNodeId, status)
 	if err != nil {
 		return fmt.Errorf("Failed to update node status: %v", err)
 	}
 
-	logrus.Infof("Node %s status updated to %d in contract. Transaction hash: %s", formattedNodeId, status, tx.Hash().Hex())
+	// Get the appropriate URI based on status
+	var uri string
+	switch status {
+	case StatusOnline:
+		uri = OnlineURI
+	case StatusMaintenance:
+		uri = MaintenanceURI
+	case StatusOffline:
+		uri = OfflineURI
+	default:
+		return fmt.Errorf("Invalid status for URI update")
+	}
+
+	// Update the token URI
+	tx, err = instance.UpdateTokenURI(auth, node.TokenId, uri)
+	if err != nil {
+		return fmt.Errorf("Failed to update token URI: %v", err)
+	}
+
+	logrus.Infof("Node %s status updated to %d and token URI updated to %s. Transaction hash: %s", 
+		formattedNodeId, status, uri, tx.Hash().Hex())
 	return nil
 }
