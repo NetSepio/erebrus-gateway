@@ -16,9 +16,9 @@ import (
 	"github.com/NetSepio/erebrus-gateway/contract"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/joho/godotenv"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -43,7 +43,7 @@ const (
 // Time thresholds for status changes
 const (
 	MaintenanceThreshold = 2 * time.Minute
-	OfflineThreshold    = 5 * time.Minute
+	OfflineThreshold     = 5 * time.Minute
 )
 
 // OnlineURI, MaintenanceURI, and OfflineURI are constants for token URIs
@@ -80,7 +80,7 @@ func Init() {
 
 	ticker := time.NewTicker(10 * time.Second)
 	quit := make(chan struct{})
-	
+
 	go func() {
 		for {
 			select {
@@ -144,7 +144,7 @@ func Init() {
 					if err != nil {
 						continue
 					}
-					
+
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
 					if err != nil {
 						logrus.Error(err)
@@ -177,9 +177,13 @@ func Init() {
 						nodeStates[node.PeerId].LastPing = time.Now()
 					}
 
-					// Only update contract for peaq nodes and if status has changed
+					// Update contract status only for peaq nodes
+					logrus.Infof("Chain : %s, Node : %s, status: %s\n", strings.ToLower(node.Chain), node.PeerId, nodeStatus)
+					logrus.Infof("newStatus : %d, nodeStates[node.PeerId].ContractStatus : %d\n", newStatus, nodeStates[node.PeerId].ContractStatus)
+
 					if strings.ToLower(node.Chain) == "peaq" && newStatus != nodeStates[node.PeerId].ContractStatus {
 						go func(peerId string, status uint8) {
+							logrus.Infoln("Updating contract status starts")
 							if err := updateNodeContractStatus(peerId, status); err != nil {
 								logrus.Error("failed to update contract status: ", err.Error())
 								return
@@ -222,19 +226,19 @@ func formatNodeId(peerId string) string {
 
 func updateNodeContractStatus(nodeId string, status uint8) error {
 	formattedNodeId := formatNodeId(nodeId)
-	
+
 	// Load environment variables if not already loaded
 	if os.Getenv("CONTRACT_ADDRESS") == "" {
 		err := godotenv.Load()
 		if err != nil {
-			return fmt.Errorf("Error loading .env file: %v", err)
+			return fmt.Errorf("error loading .env file: %v", err)
 		}
 	}
 
 	// Connect to the Ethereum client
 	client, err := ethclient.Dial(os.Getenv("RPC_URL"))
 	if err != nil {
-		return fmt.Errorf("Failed to connect to the Ethereum client: %v", err)
+		return fmt.Errorf("failed to connect to the Ethereum client: %v", err)
 	}
 
 	// Create a new instance of the contract

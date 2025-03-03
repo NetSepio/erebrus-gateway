@@ -3,28 +3,23 @@ package redisconfig
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	RedisClient  *redis.Client
-	Ctx          = context.Background()
-	count        int
-	testAddress  string
-	testPassword string
+	RedisClient *redis.Client
+	Ctx         = context.Background()
 )
 
 func ConnectRedis() *redis.Client {
 
 	address := os.Getenv("REDIS_ADDRESS")
 	password := os.Getenv("REDIS_PASSWORD")
-
-	
-	testAddress = address
-	testPassword = password
 
 	RedisClient = redis.NewClient(&redis.Options{
 		Addr:     address,
@@ -38,14 +33,26 @@ func ConnectRedis() *redis.Client {
 func RedisConnection() {
 	r := ConnectRedis()
 	if r.Ping(Ctx).Err() != nil {
-		logrus.Println("Redis port : ", testAddress)
-		logrus.Println("Redis password : ", testPassword)
 		logrus.Fatal(r.Ping(Ctx).Err())
 	} else {
-		if count != 0 {
-			logrus.Println("Using the inbuild redis ")
-		}
 		logrus.Infoln("REDIS CONNECTED SUCCESSFULLY")
+
+		// Function to clear Redis data every hour
+		go func(redisClient *redis.Client) {
+			ticker := time.NewTicker(1 * time.Hour) // Runs every 1 hour
+			defer ticker.Stop()
+
+			ctx := context.Background()
+
+			for range ticker.C {
+				err := redisClient.FlushDB(ctx).Err() // Use FlushAll() to clear all databases
+				if err != nil {
+					fmt.Println("Error clearing Redis:", err)
+				} else {
+					fmt.Println("Redis data cleared successfully at", time.Now())
+				}
+			}
+		}(r)
 	}
 }
 

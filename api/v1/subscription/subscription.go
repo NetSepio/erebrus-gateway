@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
+	"github.com/NetSepio/erebrus-gateway/api/v1/subscription/token"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/envconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
@@ -28,10 +29,13 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/subscription")
 	{
 		g.POST("webhook", HandleWebhook)
+		token.ApplyRoutesSubscriptionNft(g)
+		token.ApplyRoutesSubscriptionToken(g)
 		g.Use(paseto.PASETO(false))
 		g.POST("/trial", TrialSubscription)
 		g.POST("/create-payment", CreatePaymentIntent)
 		g.GET("", CheckSubscription)
+
 	}
 }
 
@@ -62,7 +66,7 @@ func CheckSubscription(c *gin.Context) {
 			res := SubscriptionResponse{
 				Status: "notFound",
 			}
-			c.JSON(http.StatusNotFound, res)
+			c.JSON(http.StatusOK, res)
 		}
 		logwrapper.Errorf("Error fetching subscriptions: %v", err)
 		c.Status(http.StatusInternalServerError)
