@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/NetSepio/erebrus-gateway/models"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-
-	"github.com/NetSepio/erebrus-gateway/models"
 
 	"gorm.io/driver/postgres"
 )
@@ -81,6 +80,7 @@ func DbInit() error {
 		&models.NodeDwifi{},
 		&models.WalrusStorage{},
 		&models.CyreneAIAgent{},
+		&models.NFTSubscriptionMintAddress{},
 	); err != nil {
 		log.Fatal(err)
 	}
