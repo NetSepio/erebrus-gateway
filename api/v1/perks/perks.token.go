@@ -1,4 +1,4 @@
-package token
+package perks
 
 import (
 	"net/http"
@@ -9,21 +9,21 @@ import (
 	"github.com/google/uuid"
 )
 
-func ApplyRoutesSubscriptionToken(r *gin.RouterGroup) {
-	g := r.Group("/token")
+func ApplyRoutesPerksToken(r *gin.RouterGroup) {
+	g := r.Group("/perks_token")
 	{
-		g.POST("", CreateSubscriptionToken)
-		g.GET("/all", GetSubscriptionTokens)
-		g.GET("/:id", GetSubscriptionToken)
-		g.PATCH("/:id", UpdateSubscriptionToken)
-		g.DELETE("/:id", DeleteSubscriptionToken)
+		g.POST("", CreatePerksToken)
+		g.GET("/all", GetPerksTokens)
+		g.GET("/:id", GetPerksToken)
+		g.PATCH("/:id", UpdatePerksToken)
+		g.DELETE("/:id", DeletePerksToken)
 
 	}
 }
 
-// Create Subscription Token
-func CreateSubscriptionToken(c *gin.Context) {
-	var token models.SubscriptionToken
+// Create Perks Token
+func CreatePerksToken(c *gin.Context) {
+	var token models.PerksToken
 	if err := c.ShouldBindJSON(&token); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -39,9 +39,9 @@ func CreateSubscriptionToken(c *gin.Context) {
 	c.JSON(http.StatusCreated, token)
 }
 
-// Get All Subscription Tokens
-func GetSubscriptionTokens(c *gin.Context) {
-	var tokens []models.SubscriptionToken
+// Get All Perks Tokens
+func GetPerksTokens(c *gin.Context) {
+	var tokens []models.PerksToken
 	DB := dbconfig.GetDb()
 
 	tx := DB.Find(&tokens)
@@ -52,8 +52,8 @@ func GetSubscriptionTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, tokens)
 }
 
-// Get Subscription Token by ID
-func GetSubscriptionToken(c *gin.Context) {
+// Get Perks Token by ID
+func GetPerksToken(c *gin.Context) {
 	idStr := c.Param("id")
 
 	// Convert string to UUID
@@ -63,7 +63,7 @@ func GetSubscriptionToken(c *gin.Context) {
 		return
 	}
 
-	var token models.SubscriptionToken
+	var token models.PerksToken
 	DB := dbconfig.GetDb()
 
 	// Use UUID in the query
@@ -75,10 +75,10 @@ func GetSubscriptionToken(c *gin.Context) {
 	c.JSON(http.StatusOK, token)
 }
 
-// Update Subscription Token
-func UpdateSubscriptionToken(c *gin.Context) {
+// Update Perks Token
+func UpdatePerksToken(c *gin.Context) {
 	idStr := c.Param("id")
-	var token models.SubscriptionToken
+	var token models.PerksToken
 
 	// Convert string to UUID
 	id, err := uuid.Parse(idStr)
@@ -107,10 +107,10 @@ func UpdateSubscriptionToken(c *gin.Context) {
 	c.JSON(http.StatusOK, token)
 }
 
-// Delete Subscription Token
-func DeleteSubscriptionToken(c *gin.Context) {
+// Delete Perks Token
+func DeletePerksToken(c *gin.Context) {
 	id := c.Param("id")
-	var token models.SubscriptionToken
+	var token models.PerksToken
 
 	DB := dbconfig.GetDb()
 

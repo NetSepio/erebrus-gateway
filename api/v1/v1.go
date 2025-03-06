@@ -7,6 +7,7 @@ import (
 	"github.com/NetSepio/erebrus-gateway/api/v1/client"
 	nodedwifi "github.com/NetSepio/erebrus-gateway/api/v1/nodeDwifi"
 	"github.com/NetSepio/erebrus-gateway/api/v1/nodes"
+	"github.com/NetSepio/erebrus-gateway/api/v1/perks"
 	"github.com/NetSepio/erebrus-gateway/api/v1/registerDwifi"
 	caddyservices "github.com/NetSepio/erebrus-gateway/api/v1/services"
 	"github.com/NetSepio/erebrus-gateway/api/v1/subscription"
@@ -21,7 +22,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		client.ApplyRoutes(v1)
 		nodes.ApplyRoutes(v1)
 		subscription.ApplyRoutes(v1)
-
+		perks.ApplyRoutesPerksToken(v1)
 		registerDwifi.ApplyRoutes(v1)
 		nodedwifi.ApplyRoutes(v1)
 		walrus.ApplyRoutes(v1)

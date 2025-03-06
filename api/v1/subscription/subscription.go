@@ -30,7 +30,6 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	{
 		g.POST("webhook", HandleWebhook)
 		token.ApplyRoutesSubscriptionNft(g)
-		token.ApplyRoutesSubscriptionToken(g)
 		token.ApplyRoutesSubscriptionMint(g)
 		g.Use(paseto.PASETO(false))
 		g.POST("/trial", TrialSubscription)

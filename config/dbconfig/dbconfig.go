@@ -63,7 +63,7 @@ func DbInit() error {
 	}()
 
 	if err := db.AutoMigrate(
-		&models.SubscriptionToken{},
+		&models.PerksToken{},
 		&models.SubscriptionNFT{},
 		&models.NodeLog{},
 		&models.NodeActivity{},

@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type SubscriptionToken struct {
+type PerksToken struct {
 	ID              uuid.UUID      `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	Blockchain      string         `gorm:"type:varchar(50);not null" json:"blockchain"`
 	Name            string         `gorm:"type:varchar(100);not null" json:"name"`
