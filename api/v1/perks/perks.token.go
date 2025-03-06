@@ -10,10 +10,10 @@ import (
 )
 
 func ApplyRoutesPerksToken(r *gin.RouterGroup) {
-	g := r.Group("/perks_token")
+	g := r.Group("/token")
 	{
 		g.POST("", CreatePerksToken)
-		g.GET("/all", GetPerksTokens)
+		g.GET("", GetPerksTokens)
 		g.GET("/:id", GetPerksToken)
 		g.PATCH("/:id", UpdatePerksToken)
 		g.DELETE("/:id", DeletePerksToken)

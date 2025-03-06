@@ -22,12 +22,12 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		client.ApplyRoutes(v1)
 		nodes.ApplyRoutes(v1)
 		subscription.ApplyRoutes(v1)
-		perks.ApplyRoutesPerksToken(v1)
 		registerDwifi.ApplyRoutes(v1)
 		nodedwifi.ApplyRoutes(v1)
 		walrus.ApplyRoutes(v1)
 		caddyservices.ApplyRoutes(v1)
 		agents.ApplyRoutes(v1)
 		cyreneAiAgent.ApplyRoutes(v1)
+		perks.ApplyRoutesPerks(v1)
 	}
 }

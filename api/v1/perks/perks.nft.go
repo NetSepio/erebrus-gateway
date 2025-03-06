@@ -1,4 +1,4 @@
-package token
+package perks
 
 import (
 	"net/http"
@@ -9,21 +9,21 @@ import (
 	"github.com/google/uuid"
 )
 
-func ApplyRoutesSubscriptionNft(r *gin.RouterGroup) {
+func ApplyRoutesPerksNFT(r *gin.RouterGroup) {
 	g := r.Group("/nft")
 	{
-		g.POST("", CreateSubscriptionNFT)
-		g.GET("/all", GetSubscriptionNFTs)
-		g.GET("/:id", GetSubscriptionNFT)
-		g.PATCH("/:id", UpdateSubscriptionNFT)
-		g.DELETE("/:id", DeleteSubscriptionNFT)
+		g.POST("", CreatePerkNFT)
+		g.GET("", GetPerkNFTs)
+		g.GET("/:id", GetPerkNFT)
+		g.PATCH("/:id", UpdatePerkNFT)
+		g.DELETE("/:id", DeletePerkNFT)
 
 	}
 }
 
-// Create Subscription NFT
-func CreateSubscriptionNFT(c *gin.Context) {
-	var nft models.SubscriptionNFT
+// Create Perks NFT
+func CreatePerkNFT(c *gin.Context) {
+	var nft models.PerkNFT
 
 	if err := c.ShouldBindJSON(&nft); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
@@ -37,12 +37,12 @@ func CreateSubscriptionNFT(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Subscription NFT created successfully", "nft": nft})
+	c.JSON(http.StatusCreated, gin.H{"message": "Perks NFT created successfully", "nft": nft})
 }
 
-// Get All Subscription NFTs
-func GetSubscriptionNFTs(c *gin.Context) {
-	var nfts []models.SubscriptionNFT
+// Get All Perks NFTs
+func GetPerkNFTs(c *gin.Context) {
+	var nfts []models.PerkNFT
 	DB := dbconfig.GetDb()
 
 	if err := DB.Find(&nfts).Error; err != nil {
@@ -52,10 +52,10 @@ func GetSubscriptionNFTs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"nfts": nfts})
 }
 
-// Get Subscription NFT by ID
-func GetSubscriptionNFT(c *gin.Context) {
+// Get Perks NFT by ID
+func GetPerkNFT(c *gin.Context) {
 	id := c.Param("id")
-	var nft models.SubscriptionNFT
+	var nft models.PerkNFT
 	DB := dbconfig.GetDb()
 
 	// Validate UUID
@@ -72,10 +72,10 @@ func GetSubscriptionNFT(c *gin.Context) {
 	c.JSON(http.StatusOK, nft)
 }
 
-// Update Subscription NFT
-func UpdateSubscriptionNFT(c *gin.Context) {
+// Update Perks NFT
+func UpdatePerkNFT(c *gin.Context) {
 	id := c.Param("id")
-	var nft models.SubscriptionNFT
+	var nft models.PerkNFT
 	DB := dbconfig.GetDb()
 
 	if _, err := uuid.Parse(id); err != nil {
@@ -98,13 +98,13 @@ func UpdateSubscriptionNFT(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Subscription NFT updated successfully", "nft": nft})
+	c.JSON(http.StatusOK, gin.H{"message": "Perks NFT updated successfully", "nft": nft})
 }
 
-// Delete Subscription NFT
-func DeleteSubscriptionNFT(c *gin.Context) {
+// Delete Perks NFT
+func DeletePerkNFT(c *gin.Context) {
 	id := c.Param("id")
-	var nft models.SubscriptionNFT
+	var nft models.PerkNFT
 	DB := dbconfig.GetDb()
 
 	if _, err := uuid.Parse(id); err != nil {
