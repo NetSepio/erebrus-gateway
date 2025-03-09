@@ -16,9 +16,9 @@ import (
 	"github.com/NetSepio/erebrus-gateway/contract"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/joho/godotenv"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -43,7 +43,7 @@ const (
 // Time thresholds for status changes
 const (
 	MaintenanceThreshold = 2 * time.Minute
-	OfflineThreshold    = 5 * time.Minute
+	OfflineThreshold     = 5 * time.Minute
 )
 
 // OnlineURI, MaintenanceURI, and OfflineURI are constants for token URIs
@@ -80,13 +80,13 @@ func Init() {
 
 	ticker := time.NewTicker(10 * time.Second)
 	quit := make(chan struct{})
-	
+
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
 				var nodes []models.Node
-				if err := db.Model(&models.Node{}).Find(&nodes).Error; err != nil {
+				if err := db.Debug().Model(&models.Node{}).Find(&nodes).Error; err != nil {
 					logrus.Error("failed to fetch nodes from db")
 					continue
 				}
@@ -144,7 +144,8 @@ func Init() {
 					if err != nil {
 						continue
 					}
-					
+
+					fmt.Println("AddrInfoFromP2pAddr")
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
 					if err != nil {
 						logrus.Error(err)
@@ -158,7 +159,7 @@ func Init() {
 					if !isConnected {
 						timeSinceLastPing := time.Since(nodeStates[node.PeerId].LastPing)
 						// Only update status if within our monitoring window
-						if timeSinceLastPing <= OfflineThreshold + time.Minute {
+						if timeSinceLastPing <= OfflineThreshold+time.Minute {
 							if timeSinceLastPing > OfflineThreshold {
 								newStatus = StatusOffline
 								nodeStatus = "inactive"
@@ -177,9 +178,15 @@ func Init() {
 						nodeStates[node.PeerId].LastPing = time.Now()
 					}
 
-					// Only update contract for peaq nodes and if status has changed
+					// Update contract status only for peaq nodes
+					fmt.Printf("Chain : %s, Node : %s, status: %s\n", strings.ToLower(node.Chain), node.PeerId, nodeStatus)
+					fmt.Printf("newStatus : %d, nodeStates[node.PeerId].ContractStatus : %d\n", newStatus, nodeStates[node.PeerId].ContractStatus)
+
 					if strings.ToLower(node.Chain) == "peaq" && newStatus != nodeStates[node.PeerId].ContractStatus {
 						go func(peerId string, status uint8) {
+							// Update contract status
+							fmt.Println("****************Updating contract status**************")
+							logrus.Infoln("Updating contract status starts")
 							if err := updateNodeContractStatus(peerId, status); err != nil {
 								logrus.Error("failed to update contract status: ", err.Error())
 								return
@@ -190,11 +197,12 @@ func Init() {
 
 					// Update database status
 					go func(n models.Node, status string) {
+						fmt.Println("****************Updating node status in db**************")
 						n.Status = status
 						if status == "active" {
 							n.LastPing = time.Now().Unix()
 						}
-						if err := db.Save(&n).Error; err != nil {
+						if err := db.Debug().Save(&n).Error; err != nil {
 							logrus.Error("failed to update node: ", err.Error())
 						}
 						nodelogs.LogNodeStatus(n.PeerId, status)
@@ -222,49 +230,49 @@ func formatNodeId(peerId string) string {
 
 func updateNodeContractStatus(nodeId string, status uint8) error {
 	formattedNodeId := formatNodeId(nodeId)
-	
+
 	// Load environment variables if not already loaded
 	if os.Getenv("CONTRACT_ADDRESS") == "" {
 		err := godotenv.Load()
 		if err != nil {
-			return fmt.Errorf("Error loading .env file: %v", err)
+			return fmt.Errorf("error loading .env file: %v", err)
 		}
 	}
 
 	// Connect to the Ethereum client
 	client, err := ethclient.Dial(os.Getenv("RPC_URL"))
 	if err != nil {
-		return fmt.Errorf("Failed to connect to the Ethereum client: %v", err)
+		return fmt.Errorf("failed to connect to the Ethereum client: %v", err)
 	}
 
 	// Create a new instance of the contract
 	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
 	instance, err := contract.NewContract(contractAddress, client)
 	if err != nil {
-		return fmt.Errorf("Failed to instantiate contract: %v", err)
+		return fmt.Errorf("failed to instantiate contract: %v\n", err)
 	}
 
 	// Create auth options for the transaction
 	privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
 	if err != nil {
-		return fmt.Errorf("Failed to create private key: %v", err)
+		return fmt.Errorf("failed to create private key: %v\n", err)
 	}
 
 	chainID, err := client.ChainID(context.Background())
 	if err != nil {
-		return fmt.Errorf("Failed to get chain ID: %v", err)
+		return fmt.Errorf("failed to get chain ID: %v\n", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
-		return fmt.Errorf("Failed to create transactor: %v", err)
+		return fmt.Errorf("failed to create transactor: %v", err)
 	}
 
 	// Get node details to fetch tokenId
 	opts := &bind.CallOpts{
 		From: auth.From,
 	}
-	
+
 	node, err := instance.Nodes(opts, formattedNodeId)
 	if err != nil {
 		return fmt.Errorf("Failed to get node details: %v", err)
@@ -295,7 +303,7 @@ func updateNodeContractStatus(nodeId string, status uint8) error {
 		return fmt.Errorf("Failed to update token URI: %v", err)
 	}
 
-	logrus.Infof("Node %s status updated to %d and token URI updated to %s. Transaction hash: %s", 
+	logrus.Infof("Node %s status updated to %d and token URI updated to %s. Transaction hash: %s",
 		formattedNodeId, status, uri, tx.Hash().Hex())
 	return nil
 }

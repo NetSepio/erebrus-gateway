@@ -12,7 +12,6 @@ import (
 	"github.com/NetSepio/erebrus-gateway/util/pkg/httpo"
 
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -102,7 +101,7 @@ func LogNodeStatus(peerID string, status string) error {
 			}
 
 			// Set the status in Redis
-			RedisClient.Set(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
+			RedisClient.SetEx(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
 			return nil
 		} else if err == nil {
 			// If the node log exists but status is different, create a new log
@@ -117,10 +116,10 @@ func LogNodeStatus(peerID string, status string) error {
 					return err
 				}
 				// Set the status in Redis
-				RedisClient.Set(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
+				RedisClient.SetEx(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
 				return nil
 			} else {
-				RedisClient.Set(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
+				RedisClient.SetEx(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
 				return nil
 			}
 		} else {
@@ -140,15 +139,15 @@ func LogNodeStatus(peerID string, status string) error {
 		}
 
 		// Update the status in Redis cache
-		RedisClient.Set(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
+		RedisClient.SetEx(Ctx, cacheKey, status, time.Hour*1) // Cache status for 1 hour
 		return nil
 	}
 
 	// If status in Redis already matches, just update the Redis cache timestamp
 	if err == nil && cachedStatus == status {
-		log.Info("Data alread exists : ", peerID, status)
+		// log.Info("Data alread exists : ", peerID, status)
 		// Reset the cache expiration time
-		RedisClient.Set(Ctx, cacheKey, status, time.Hour*1)
+		RedisClient.SetEx(Ctx, cacheKey, status, time.Hour*1)
 		return nil
 	}
 
