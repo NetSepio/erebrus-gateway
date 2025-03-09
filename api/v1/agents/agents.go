@@ -59,10 +59,13 @@ func addAgent(c *gin.Context) {
 	}
 	io.Copy(part, file)
 
-	// Add domain field
-	domain := c.PostForm("domain")
-	if domain != "" {
-		writer.WriteField("domain", domain)
+	// Add all form fields
+	formFields := []string{"domain", "avatar_img", "cover_img", "voice_model"}
+	for _, field := range formFields {
+		value := c.PostForm(field)
+		if value != "" {
+			writer.WriteField(field, value)
+		}
 	}
 
 	writer.Close()
