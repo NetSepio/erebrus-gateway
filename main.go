@@ -26,7 +26,9 @@ func main() {
 	logwrapper.Init()
 	app.Init()
 	ginApp := gin.Default()
-	dbconfig.DbInit()
+	if err := dbconfig.DbMigrations(); err != nil {
+		logwrapper.Errorf("Error mirating to database: %v", err)
+	}
 
 	// cors middleware
 	config := cors.DefaultConfig()

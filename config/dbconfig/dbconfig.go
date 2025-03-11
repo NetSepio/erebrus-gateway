@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/NetSepio/erebrus-gateway/models"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
@@ -48,7 +49,7 @@ func GetDb() *gorm.DB {
 	return db
 }
 
-func DbInit() error {
+func DbMigrations() error {
 	db := GetDb()
 
 	func() {
@@ -82,5 +83,14 @@ func DbInit() error {
 	); err != nil {
 		log.Fatal(err)
 	}
+
+	if err := func() error {
+		query := `SELECT setval('subscriptions_id_seq', (SELECT COALESCE(MAX(id), 1) FROM subscriptions), true);`
+		return db.Exec(query).Error
+	}(); err != nil {
+		logrus.Println("failed to set sequence value: ", err)
+		return err
+	}
+
 	return nil
 }
