@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ... existing code ...
 func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/agents")
 	{
@@ -60,7 +59,7 @@ func addAgent(c *gin.Context) {
 	io.Copy(part, file)
 
 	// Add all form fields
-	formFields := []string{"domain", "avatar_img", "cover_img", "voice_model"}
+	formFields := []string{"domain", "avatar_img", "cover_img", "voice_model", "organization"}
 	for _, field := range formFields {
 		value := c.PostForm(field)
 		if value != "" {
