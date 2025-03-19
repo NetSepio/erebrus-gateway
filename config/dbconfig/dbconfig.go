@@ -80,6 +80,7 @@ func DbMigrations() error {
 		&models.WalrusStorage{},
 		&models.CyreneAIAgent{},
 		&models.NFTSubscriptionMintAddress{},
+		&models.Agent{},
 	); err != nil {
 		log.Fatal(err)
 	}
