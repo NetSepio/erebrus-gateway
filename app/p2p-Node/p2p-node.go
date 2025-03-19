@@ -145,7 +145,6 @@ func Init() {
 						continue
 					}
 
-					fmt.Println("AddrInfoFromP2pAddr")
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
 					if err != nil {
 						logrus.Error(err)
