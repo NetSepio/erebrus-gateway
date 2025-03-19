@@ -22,7 +22,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.DELETE("/:server_domain/:agentId", deleteAgent)
 		g.PATCH("/:server_domain/:agentId", manageAgent)
 		
-		g.GET("/:wallet_address", getAgentsByWalletAddress)
+		g.GET("/wallet/:wallet_address", getAgentsByWalletAddress)
 	}
 }
 
@@ -49,18 +49,28 @@ func addAgent(c *gin.Context) {
 		return
 	}
 
+	// Read the character file content
+	file, err := files[0].Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open character file"})
+		return
+	}
+	defer file.Close()
+	
+	characterFileContent, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read character file"})
+		return
+	}
+	
+	// Reset file pointer for the next read
+	file.Seek(0, 0)
+
 	// Create new multipart form
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
 	// Add the file
-	file, err := files[0].Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process file"})
-		return
-	}
-	defer file.Close()
-
 	part, err := writer.CreateFormFile("character_file", files[0].Filename)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create form file"})
@@ -123,24 +133,66 @@ func addAgent(c *gin.Context) {
 			return
 		}
 
-		agent := models.Agent{
-			ID:            agentResponse.Agent.ID,
-			Name:          agentResponse.Agent.Name,
-			Clients:       agentResponse.Agent.Clients,
-			Status:        agentResponse.Agent.Status,
-			AvatarImg:     agentResponse.Agent.AvatarImg,
-			CoverImg:      agentResponse.Agent.CoverImg,
-			VoiceModel:    agentResponse.Agent.VoiceModel,
-			Organization:  agentResponse.Agent.Organization,
-			WalletAddress: walletAddress,
-			ServerDomain:  serverDomain,
+		// Convert clients array to string for database storage
+		clientsStr := ""
+		if len(agentResponse.Agent.Clients) > 0 {
+			clientsBytes, err := json.Marshal(agentResponse.Agent.Clients)
+			if err == nil {
+				clientsStr = string(clientsBytes)
+			}
 		}
 
-		// Store the agent in the database
-		if err := database.DB.Create(&agent).Error; err != nil {
+		// Create agent record for database
+		agent := models.Agent{
+			ID:             agentResponse.Agent.ID,
+			Name:           agentResponse.Agent.Name,
+			Clients:        clientsStr,
+			Status:         agentResponse.Agent.Status,
+			AvatarImg:      agentResponse.Agent.AvatarImg,
+			CoverImg:       agentResponse.Agent.CoverImg,
+			VoiceModel:     agentResponse.Agent.VoiceModel,
+			Organization:   agentResponse.Agent.Organization,
+			WalletAddress:  walletAddress,
+			ServerDomain:   serverDomain,
+			Domain:         agentResponse.Domain,
+			CharacterFile:  string(characterFileContent),
+		}
+
+		// Store in database
+		db := dbconfig.GetDb()
+		if err := db.Create(&agent).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store agent in database"})
 			return
 		}
+
+		// Parse the response as a generic map to modify it
+		var responseMap map[string]interface{}
+		if err := json.Unmarshal(respBody, &responseMap); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse response"})
+			return
+		}
+
+		// Move domain inside agent object
+		if agentMap, ok := responseMap["agent"].(map[string]interface{}); ok {
+			if domain, ok := responseMap["domain"].(string); ok {
+				agentMap["domain"] = domain
+				delete(responseMap, "domain")
+			}
+			// Add server_domain to agent object
+			agentMap["server_domain"] = serverDomain
+		}
+
+		// Convert back to JSON
+		updatedResponse, err := json.Marshal(responseMap)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process response"})
+			return
+		}
+
+		c.Header("Content-Type", "application/json")
+		c.Writer.WriteHeader(resp.StatusCode)
+		c.Writer.Write(updatedResponse)
+		return
 	}
 
 	c.Header("Content-Type", "application/json")
@@ -171,10 +223,10 @@ func getAgent(c *gin.Context) {
 
 func deleteAgent(c *gin.Context) {
 	serverDomain := c.Param("server_domain")
-	agentID := c.Param("agentId")
+	agentId := c.Param("agentId")
 
 	// Forward request to upstream service
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s/api/v1.0/agents/%s", serverDomain, agentId), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("https://%s/api/v1.0/agents/%s", serverDomain, agentId), nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
@@ -195,7 +247,9 @@ func deleteAgent(c *gin.Context) {
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		if err := database.DB.Where("id = ?", agentID).Delete(&models.Agent{}).Error; err != nil {
+		// Delete from database using Unscoped to perform a hard delete
+		db := dbconfig.GetDb()
+		if err := db.Unscoped().Where("id = ?", agentId).Delete(&models.Agent{}).Error; err != nil {
 			fmt.Printf("Error deleting agent from database: %v\n", err)
 		}
 	}
@@ -231,6 +285,20 @@ func manageAgent(c *gin.Context) {
 		return
 	}
 
+	if resp.StatusCode == http.StatusOK {
+		// Update agent status in database if action is pause/resume
+		if action == "pause" || action == "resume" {
+			db := dbconfig.GetDb()
+			status := "active"
+			if action == "pause" {
+				status = "inactive"
+			}
+			if err := db.Model(&models.Agent{}).Where("id = ?", agentId).Update("status", status).Error; err != nil {
+				fmt.Printf("Error updating agent status in database: %v\n", err)
+			}
+		}	
+	}
+
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
 }
 
@@ -254,14 +322,15 @@ func getAgents(c *gin.Context) {
 }
 
 func getAgentsByWalletAddress(c *gin.Context) {
-	walletAddress := c.Query("wallet_address")
+	walletAddress := c.Param("wallet_address")
 	if walletAddress == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Wallet address is required"})
 		return
 	}
 
 	var agents []models.Agent
-	if err := database.DB.Where("wallet_address = ?", walletAddress).Find(&agents).Error; err != nil {
+	db := dbconfig.GetDb()
+	if err := db.Where("wallet_address = ?", walletAddress).Find(&agents).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query agents"})
 		return
 	}
