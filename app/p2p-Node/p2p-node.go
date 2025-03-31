@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"strings"
 	"time"
@@ -106,34 +107,45 @@ func Init() {
 						newIPInfo     models.IPInfo
 					)
 
-					err = json.Unmarshal([]byte(node.SystemInfo), &newOSInfo)
-					if err != nil {
-						log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
+					// Safely unmarshal JSON data with error handling
+					if node.SystemInfo != "" {
+						err = json.Unmarshal([]byte(node.SystemInfo), &newOSInfo)
+						if err != nil {
+							log.Printf("Error unmarshaling newOSInfo from JSON: %v", err)
+						}
 					}
 
-					if len(node.IpGeoData) > 0 {
+					if node.IpGeoData != "" && len(node.IpGeoData) > 0 {
 						err = json.Unmarshal([]byte(node.IpGeoData), &newGeoAddress)
 						if err != nil {
-							log.Printf("Error unmarshaling newGeoAddress from JSON : %v", err)
+							log.Printf("Error unmarshaling newGeoAddress from JSON: %v", err)
+							// Set default values if unmarshal fails
+							newGeoAddress = models.IpGeoAddress{
+								IpInfoCity:     "Unknown",
+								IpInfoCountry:  "Unknown",
+								IpInfoLocation: "Unknown",
+								IpInfoOrg:      "Unknown",
+								IpInfoPostal:   "Unknown",
+								IpInfoTimezone: "Unknown",
+							}
 						}
 					} else {
-						City := "Test"
-						Country := "Test"
-						Location := "Test"
-						Organization := "Test"
-						Postal := "Test"
-						Timezone := "Test"
-
-						newGeoAddress.IpInfoCity = City
-						newGeoAddress.IpInfoCountry = Country
-						newGeoAddress.IpInfoLocation = Location
-						newGeoAddress.IpInfoOrg = Organization
-						newGeoAddress.IpInfoPostal = Postal
-						newGeoAddress.IpInfoTimezone = Timezone
+						// Set default values if IpGeoData is empty
+						newGeoAddress = models.IpGeoAddress{
+							IpInfoCity:     "Unknown",
+							IpInfoCountry:  "Unknown",
+							IpInfoLocation: "Unknown",
+							IpInfoOrg:      "Unknown",
+							IpInfoPostal:   "Unknown",
+							IpInfoTimezone: "Unknown",
+						}
 					}
-					err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
-					if err != nil {
-						log.Printf("Error unmarshaling newGeoAddress from JSON p2p-node.go: %v", err)
+
+					if node.IpInfo != "" {
+						err = json.Unmarshal([]byte(node.IpInfo), &newIPInfo)
+						if err != nil {
+							log.Printf("Error unmarshaling newIPInfo from JSON: %v", err)
+						}
 					}
 
 					node.SystemInfo = models.ToJSON(newOSInfo)
@@ -142,12 +154,13 @@ func Init() {
 
 					peerMultiAddr, err := multiaddr.NewMultiaddr(node.PeerAddress)
 					if err != nil {
+						logrus.Errorf("Invalid peer address for node %s: %v", node.PeerId, err)
 						continue
 					}
 
 					peerInfo, err := peer.AddrInfoFromP2pAddr(peerMultiAddr)
 					if err != nil {
-						logrus.Error(err)
+						logrus.Errorf("Failed to get peer info for node %s: %v", node.PeerId, err)
 						continue
 					}
 
@@ -178,16 +191,15 @@ func Init() {
 					}
 
 					// Update contract status only for peaq nodes
-					fmt.Printf("Chain : %s, Node : %s, status: %s\n", strings.ToLower(node.Chain), node.PeerId, nodeStatus)
-					fmt.Printf("newStatus : %d, nodeStates[node.PeerId].ContractStatus : %d\n", newStatus, nodeStates[node.PeerId].ContractStatus)
+					logrus.Debugf("Chain: %s, Node: %s, status: %s", strings.ToLower(node.Chain), node.PeerId, nodeStatus)
+					logrus.Debugf("newStatus: %d, nodeStates[node.PeerId].ContractStatus: %d", newStatus, nodeStates[node.PeerId].ContractStatus)
 
 					if strings.ToLower(node.Chain) == "peaq" && newStatus != nodeStates[node.PeerId].ContractStatus {
 						go func(peerId string, status uint8) {
 							// Update contract status
-							fmt.Println("****************Updating contract status**************")
-							logrus.Infoln("Updating contract status starts")
+							logrus.Info("Updating contract status for node", peerId)
 							if err := updateNodeContractStatus(peerId, status); err != nil {
-								logrus.Error("failed to update contract status: ", err.Error())
+								logrus.Errorf("Failed to update contract status: %v", err)
 								return
 							}
 							nodeStates[peerId].ContractStatus = status
@@ -196,13 +208,13 @@ func Init() {
 
 					// Update database status
 					go func(n models.Node, status string) {
-						fmt.Println("****************Updating node status in db**************")
+						logrus.Info("Updating node status in db for node", n.PeerId)
 						n.Status = status
 						if status == "active" {
 							n.LastPing = time.Now().Unix()
 						}
 						if err := db.Debug().Save(&n).Error; err != nil {
-							logrus.Error("failed to update node: ", err.Error())
+							logrus.Errorf("Failed to update node: %v", err)
 						}
 						nodelogs.LogNodeStatus(n.PeerId, status)
 					}(node, nodeStatus)
@@ -219,16 +231,31 @@ func Init() {
 }
 
 // formatNodeId adds the "did:netsepio:" prefix to the peer ID if not present
-func formatNodeId(peerId string) string {
-	prefix := "did:netsepio:"
-	if !strings.HasPrefix(peerId, prefix) {
-		return prefix + peerId
-	}
-	return peerId
-}
+// func formatNodeId(peerId string) string {
+// 	prefix := "did:netsepio:"
+// 	if !strings.HasPrefix(peerId, prefix) {
+// 		return prefix + peerId
+// 	}
+// 	return peerId
+// }
 
 func updateNodeContractStatus(nodeId string, status uint8) error {
-	formattedNodeId := formatNodeId(nodeId)
+	// Get node data from database to check chain
+	db := dbconfig.GetDb()
+	var node models.Node
+	if err := db.Debug().Model(&models.Node{}).Where("peer_id = ?", nodeId).First(&node).Error; err != nil {
+		return fmt.Errorf("failed to fetch node from db: %v", err)
+	}
+	
+	// Only proceed if chain is peaq
+	if strings.ToLower(node.Chain) != "peaq" {
+		logrus.Infof("Skipping contract update for non-peaq node: %s (chain: %s)", nodeId, node.Chain)
+		return nil
+	}
+
+	// formattedNodeId := formatNodeId(nodeId)
+	formattedNodeId := nodeId
+
 
 	// Load environment variables if not already loaded
 	if os.Getenv("CONTRACT_ADDRESS") == "" {
@@ -257,9 +284,25 @@ func updateNodeContractStatus(nodeId string, status uint8) error {
 		return fmt.Errorf("failed to create private key: %v\n", err)
 	}
 
-	chainID, err := client.ChainID(context.Background())
+	// Add retry mechanism for getting chain ID
+	var chainID *big.Int
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		chainID, err = client.ChainID(context.Background())
+		if err == nil {
+			break
+		}
+		
+		if i < maxRetries-1 {
+			// Exponential backoff
+			delay := time.Duration(1<<uint(i)) * time.Second
+			logrus.Warnf("Failed to get chain ID, retrying in %v: %v", delay, err)
+			time.Sleep(delay)
+		}
+	}
+	
 	if err != nil {
-		return fmt.Errorf("failed to get chain ID: %v\n", err)
+		return fmt.Errorf("failed to get chain ID after %d attempts: %v", maxRetries, err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
@@ -270,18 +313,53 @@ func updateNodeContractStatus(nodeId string, status uint8) error {
 	// Get node details to fetch tokenId
 	opts := &bind.CallOpts{
 		From: auth.From,
+		Context: context.Background(),
 	}
 
-	node, err := instance.Nodes(opts, formattedNodeId)
+	// Check if node exists before trying to update
+	contractNode, err := instance.Nodes(opts, formattedNodeId)
 	if err != nil {
-		return fmt.Errorf("Failed to get node details: %v", err)
+		return fmt.Errorf("Failed to get node details from contract: %v", err)
+	}
+	
+	// Check if tokenId is valid
+	if contractNode.TokenId == nil || contractNode.TokenId.Cmp(big.NewInt(0)) == 0 {
+		logrus.Warnf("Node %s exists in database but not in contract or has invalid token ID", formattedNodeId)
+		// Instead of returning error, we'll try to register the node
+		return fmt.Errorf("Invalid token ID for node %s", formattedNodeId)
 	}
 
+	// Set gas limit and price
+	auth.GasLimit = 300000
+	gasPrice, err := client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return fmt.Errorf("Failed to get gas price: %v", err)
+	}
+	// Increase gas price by 20% to ensure transaction goes through
+	auth.GasPrice = new(big.Int).Mul(gasPrice, big.NewInt(120))
+	auth.GasPrice = new(big.Int).Div(auth.GasPrice, big.NewInt(100))
+
+	logrus.Infof("Updating node %s status to %d", formattedNodeId, status)
+	
 	// Update node status
 	tx, err := instance.UpdateNodeStatus(auth, formattedNodeId, status)
 	if err != nil {
 		return fmt.Errorf("Failed to update node status: %v", err)
 	}
+
+	logrus.Infof("Status update transaction sent: %s", tx.Hash().Hex())
+
+	// Wait for transaction to be mined
+	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	if err != nil {
+		return fmt.Errorf("Failed to wait for status update transaction: %v", err)
+	}
+	
+	if receipt.Status == 0 {
+		return fmt.Errorf("Status update transaction failed")
+	}
+
+	logrus.Infof("Status update transaction confirmed for node %s", formattedNodeId)
 
 	// Get the appropriate URI based on status
 	var uri string
@@ -296,13 +374,37 @@ func updateNodeContractStatus(nodeId string, status uint8) error {
 		return fmt.Errorf("Invalid status for URI update")
 	}
 
+	// Create a new auth for the second transaction
+	auth, err = bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	if err != nil {
+		return fmt.Errorf("failed to create transactor for URI update: %v", err)
+	}
+	
+	auth.GasLimit = 300000
+	auth.GasPrice = new(big.Int).Mul(gasPrice, big.NewInt(120))
+	auth.GasPrice = new(big.Int).Div(auth.GasPrice, big.NewInt(100))
+
+	logrus.Infof("Updating token URI for node %s to %s", formattedNodeId, uri)
+	
 	// Update the token URI
-	tx, err = instance.UpdateTokenURI(auth, node.TokenId, uri)
+	tx, err = instance.UpdateTokenURI(auth, contractNode.TokenId, uri)
 	if err != nil {
 		return fmt.Errorf("Failed to update token URI: %v", err)
 	}
 
-	logrus.Infof("Node %s status updated to %d and token URI updated to %s. Transaction hash: %s",
-		formattedNodeId, status, uri, tx.Hash().Hex())
+	logrus.Infof("URI update transaction sent: %s", tx.Hash().Hex())
+
+	// Wait for transaction to be mined
+	receipt, err = bind.WaitMined(context.Background(), client, tx)
+	if err != nil {
+		return fmt.Errorf("Failed to wait for URI update transaction: %v", err)
+	}
+	
+	if receipt.Status == 0 {
+		return fmt.Errorf("URI update transaction failed")
+	}
+
+	logrus.Infof("Node %s status updated to %d and token URI updated to %s",
+		formattedNodeId, status, uri)
 	return nil
 }
