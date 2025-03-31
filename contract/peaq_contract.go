@@ -29,9 +29,17 @@ var (
 	_ = abi.ConvertType
 )
 
+// DIDAttribute is an auto generated low-level Go binding around an user-defined struct.
+type DIDAttribute struct {
+	Name     []byte
+	Value    []byte
+	Validity uint32
+	Created  *big.Int
+}
+
 // ContractMetaData contains all meta data concerning the Contract contract.
 var ContractMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"AccessControlBadConfirmation\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"},{\"internalType\":\"bytes32\",\"name\":\"neededRole\",\"type\":\"bytes32\"}],\"name\":\"AccessControlUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721IncorrectOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721InsufficientApproval\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"approver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidApprover\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOperator\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ERC721InvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"receiver\",\"type\":\"address\"}],\"name\":\"ERC721InvalidReceiver\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"ERC721InvalidSender\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ERC721NonexistentToken\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"approved\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Approval\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"ApprovalForAll\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"string\",\"name\":\"nodeId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"data\",\"type\":\"string\"}],\"name\":\"CheckpointCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"string\",\"name\":\"nodeId\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"nodeAddr\",\"type\":\"address\"}],\"name\":\"NodeDeactivated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"string\",\"name\":\"id\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"spec\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"config\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"ipAddress\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"region\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"location\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"registrant\",\"type\":\"address\"}],\"name\":\"NodeRegistered\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"string\",\"name\":\"nodeId\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"enumNetSepioV1.Status\",\"name\":\"newStatus\",\"type\":\"uint8\"}],\"name\":\"NodeStatusUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"previousAdminRole\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"newAdminRole\",\"type\":\"bytes32\"}],\"name\":\"RoleAdminChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"RoleGranted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"}],\"name\":\"RoleRevoked\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"Transfer\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"ADMIN_ROLE\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"DEFAULT_ADMIN_ROLE\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"OPERATOR_ROLE\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"approve\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"checkpoint\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"counter\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"nodeId\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"data\",\"type\":\"string\"}],\"name\":\"createCheckpoint\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"nodeId\",\"type\":\"string\"}],\"name\":\"deactivateNode\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"getApproved\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"}],\"name\":\"getRoleAdmin\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"grantRole\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"hasRole\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"}],\"name\":\"isApprovedForAll\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"name\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"name\":\"nodes\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"spec\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"config\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"ipAddress\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"region\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"location\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"enumNetSepioV1.Status\",\"name\":\"status\",\"type\":\"uint8\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"ownerOf\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_addr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"id\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"spec\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"config\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"ipAddress\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"region\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"location\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"metadata\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"nftMetadata\",\"type\":\"string\"},{\"internalType\":\"address\",\"name\":\"_owner\",\"type\":\"address\"}],\"name\":\"registerNode\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"callerConfirmation\",\"type\":\"address\"}],\"name\":\"renounceRole\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"role\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"revokeRole\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"safeTransferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"operator\",\"type\":\"address\"},{\"internalType\":\"bool\",\"name\":\"approved\",\"type\":\"bool\"}],\"name\":\"setApprovalForAll\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"interfaceId\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"tokenIdToNodeId\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"tokenURI\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"}],\"name\":\"transferFrom\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"id\",\"type\":\"string\"},{\"internalType\":\"enumNetSepioV1.Status\",\"name\":\"newStatus\",\"type\":\"uint8\"}],\"name\":\"updateNodeStatus\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"tokenId\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"uri\",\"type\":\"string\"}],\"name\":\"updateTokenURI\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"type\":\"constructor\",\"inputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"AccessControlBadConfirmation\",\"type\":\"error\",\"inputs\":[]},{\"name\":\"AccessControlUnauthorizedAccount\",\"type\":\"error\",\"inputs\":[{\"name\":\"account\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"neededRole\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"name\":\"ERC721IncorrectOwner\",\"type\":\"error\",\"inputs\":[{\"name\":\"sender\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"owner\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"name\":\"ERC721InsufficientApproval\",\"type\":\"error\",\"inputs\":[{\"name\":\"operator\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"name\":\"ERC721InvalidApprover\",\"type\":\"error\",\"inputs\":[{\"name\":\"approver\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"name\":\"ERC721InvalidOperator\",\"type\":\"error\",\"inputs\":[{\"name\":\"operator\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"name\":\"ERC721InvalidOwner\",\"type\":\"error\",\"inputs\":[{\"name\":\"owner\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"name\":\"ERC721InvalidReceiver\",\"type\":\"error\",\"inputs\":[{\"name\":\"receiver\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"name\":\"ERC721InvalidSender\",\"type\":\"error\",\"inputs\":[{\"name\":\"sender\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"name\":\"ERC721NonexistentToken\",\"type\":\"error\",\"inputs\":[{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"name\":\"AddAttribute\",\"type\":\"event\",\"inputs\":[{\"name\":\"sender\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"address\"},{\"name\":\"did_account\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"},{\"name\":\"value\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"},{\"name\":\"validity\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"name\":\"Approval\",\"type\":\"event\",\"inputs\":[{\"name\":\"owner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"approved\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"indexed\":true,\"internalType\":\"uint256\"}],\"anonymous\":false},{\"name\":\"ApprovalForAll\",\"type\":\"event\",\"inputs\":[{\"name\":\"owner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"operator\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"approved\",\"type\":\"bool\",\"indexed\":false,\"internalType\":\"bool\"}],\"anonymous\":false},{\"name\":\"CheckpointCreated\",\"type\":\"event\",\"inputs\":[{\"name\":\"nodeId\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"data\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"}],\"anonymous\":false},{\"name\":\"NodeDeactivated\",\"type\":\"event\",\"inputs\":[{\"name\":\"nodeId\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"nodeAddr\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"name\":\"NodeRegistered\",\"type\":\"event\",\"inputs\":[{\"name\":\"id\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"did\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"name\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"addr\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"spec\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"config\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"ipAddress\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"region\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"location\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"metadata\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"owner\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"registrant\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"name\":\"NodeStatusUpdated\",\"type\":\"event\",\"inputs\":[{\"name\":\"nodeId\",\"type\":\"string\",\"indexed\":false,\"internalType\":\"string\"},{\"name\":\"newStatus\",\"type\":\"uint8\",\"indexed\":false,\"internalType\":\"enumNetSepioV1.Status\"}],\"anonymous\":false},{\"name\":\"RemoveAttribute\",\"type\":\"event\",\"inputs\":[{\"name\":\"did_account\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"}],\"anonymous\":false},{\"name\":\"RoleAdminChanged\",\"type\":\"event\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"previousAdminRole\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"newAdminRole\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"}],\"anonymous\":false},{\"name\":\"RoleGranted\",\"type\":\"event\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"account\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"sender\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"name\":\"RoleRevoked\",\"type\":\"event\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"indexed\":true,\"internalType\":\"bytes32\"},{\"name\":\"account\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"sender\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"name\":\"Transfer\",\"type\":\"event\",\"inputs\":[{\"name\":\"from\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"to\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"indexed\":true,\"internalType\":\"uint256\"}],\"anonymous\":false},{\"name\":\"UpdateAttribute\",\"type\":\"event\",\"inputs\":[{\"name\":\"sender\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"address\"},{\"name\":\"did_account\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"},{\"name\":\"value\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"},{\"name\":\"validity\",\"type\":\"uint32\",\"indexed\":false,\"internalType\":\"uint32\"}],\"anonymous\":false},{\"name\":\"ADMIN_ROLE\",\"type\":\"function\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"name\":\"DEFAULT_ADMIN_ROLE\",\"type\":\"function\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"name\":\"OPERATOR_ROLE\",\"type\":\"function\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"name\":\"addAttribute\",\"type\":\"function\",\"inputs\":[{\"name\":\"did_account\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"value\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"validity_for\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"nonpayable\"},{\"name\":\"approve\",\"type\":\"function\",\"inputs\":[{\"name\":\"to\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"balanceOf\",\"type\":\"function\",\"inputs\":[{\"name\":\"owner\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"name\":\"checkpoint\",\"type\":\"function\",\"inputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"},{\"name\":\"counter\",\"type\":\"function\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"name\":\"createCheckpoint\",\"type\":\"function\",\"inputs\":[{\"name\":\"nodeId\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"data\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"deactivateNode\",\"type\":\"function\",\"inputs\":[{\"name\":\"nodeId\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"getApproved\",\"type\":\"function\",\"inputs\":[{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"name\":\"getRoleAdmin\",\"type\":\"function\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"name\":\"grantRole\",\"type\":\"function\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"account\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"hasRole\",\"type\":\"function\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"account\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"name\":\"isApprovedForAll\",\"type\":\"function\",\"inputs\":[{\"name\":\"owner\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"operator\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"name\":\"name\",\"type\":\"function\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"},{\"name\":\"nodes\",\"type\":\"function\",\"inputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[{\"name\":\"addr\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"did\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"name\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"spec\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"config\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"ipAddress\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"region\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"location\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"metadata\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"owner\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"status\",\"type\":\"uint8\",\"internalType\":\"enumNetSepioV1.Status\"}],\"stateMutability\":\"view\"},{\"name\":\"ownerOf\",\"type\":\"function\",\"inputs\":[{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"name\":\"readAttribute\",\"type\":\"function\",\"inputs\":[{\"name\":\"did_account\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[{\"name\":\"\",\"type\":\"tuple\",\"components\":[{\"name\":\"name\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"value\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"validity\",\"type\":\"uint32\",\"internalType\":\"uint32\"},{\"name\":\"created\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"internalType\":\"structDID.Attribute\"}],\"stateMutability\":\"view\"},{\"name\":\"registerNode\",\"type\":\"function\",\"inputs\":[{\"name\":\"_addr\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"id\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"did\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"name\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"spec\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"config\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"ipAddress\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"region\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"location\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"metadata\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"nftMetadata\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"_owner\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"removeAttribute\",\"type\":\"function\",\"inputs\":[{\"name\":\"did_account\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"nonpayable\"},{\"name\":\"renounceRole\",\"type\":\"function\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"callerConfirmation\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"revokeRole\",\"type\":\"function\",\"inputs\":[{\"name\":\"role\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"account\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"safeTransferFrom\",\"type\":\"function\",\"inputs\":[{\"name\":\"from\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"to\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"safeTransferFrom\",\"type\":\"function\",\"inputs\":[{\"name\":\"from\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"to\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"data\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"setApprovalForAll\",\"type\":\"function\",\"inputs\":[{\"name\":\"operator\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"approved\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"supportsInterface\",\"type\":\"function\",\"inputs\":[{\"name\":\"interfaceId\",\"type\":\"bytes4\",\"internalType\":\"bytes4\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"name\":\"symbol\",\"type\":\"function\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"},{\"name\":\"tokenIdToNodeId\",\"type\":\"function\",\"inputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"},{\"name\":\"tokenURI\",\"type\":\"function\",\"inputs\":[{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"string\",\"internalType\":\"string\"}],\"stateMutability\":\"view\"},{\"name\":\"transferFrom\",\"type\":\"function\",\"inputs\":[{\"name\":\"from\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"to\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"updateAttribute\",\"type\":\"function\",\"inputs\":[{\"name\":\"did_account\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"name\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"value\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"validity_for\",\"type\":\"uint32\",\"internalType\":\"uint32\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"nonpayable\"},{\"name\":\"updateNodeStatus\",\"type\":\"function\",\"inputs\":[{\"name\":\"id\",\"type\":\"string\",\"internalType\":\"string\"},{\"name\":\"newStatus\",\"type\":\"uint8\",\"internalType\":\"enumNetSepioV1.Status\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"name\":\"updateTokenURI\",\"type\":\"function\",\"inputs\":[{\"name\":\"tokenId\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"uri\",\"type\":\"string\",\"internalType\":\"string\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"}]",
 }
 
 // ContractABI is the input ABI used to generate the binding from.
@@ -523,9 +531,10 @@ func (_Contract *ContractCallerSession) Name() (string, error) {
 
 // Nodes is a free data retrieval call binding the contract method 0xf5417ca2.
 //
-// Solidity: function nodes(string ) view returns(address addr, string name, string spec, string config, string ipAddress, string region, string location, string metadata, address owner, uint256 tokenId, uint8 status)
+// Solidity: function nodes(string ) view returns(address addr, string did, string name, string spec, string config, string ipAddress, string region, string location, string metadata, address owner, uint256 tokenId, uint8 status)
 func (_Contract *ContractCaller) Nodes(opts *bind.CallOpts, arg0 string) (struct {
 	Addr      common.Address
+	Did       string
 	Name      string
 	Spec      string
 	Config    string
@@ -542,6 +551,7 @@ func (_Contract *ContractCaller) Nodes(opts *bind.CallOpts, arg0 string) (struct
 
 	outstruct := new(struct {
 		Addr      common.Address
+		Did       string
 		Name      string
 		Spec      string
 		Config    string
@@ -558,16 +568,17 @@ func (_Contract *ContractCaller) Nodes(opts *bind.CallOpts, arg0 string) (struct
 	}
 
 	outstruct.Addr = *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
-	outstruct.Name = *abi.ConvertType(out[1], new(string)).(*string)
-	outstruct.Spec = *abi.ConvertType(out[2], new(string)).(*string)
-	outstruct.Config = *abi.ConvertType(out[3], new(string)).(*string)
-	outstruct.IpAddress = *abi.ConvertType(out[4], new(string)).(*string)
-	outstruct.Region = *abi.ConvertType(out[5], new(string)).(*string)
-	outstruct.Location = *abi.ConvertType(out[6], new(string)).(*string)
-	outstruct.Metadata = *abi.ConvertType(out[7], new(string)).(*string)
-	outstruct.Owner = *abi.ConvertType(out[8], new(common.Address)).(*common.Address)
-	outstruct.TokenId = *abi.ConvertType(out[9], new(*big.Int)).(**big.Int)
-	outstruct.Status = *abi.ConvertType(out[10], new(uint8)).(*uint8)
+	outstruct.Did = *abi.ConvertType(out[1], new(string)).(*string)
+	outstruct.Name = *abi.ConvertType(out[2], new(string)).(*string)
+	outstruct.Spec = *abi.ConvertType(out[3], new(string)).(*string)
+	outstruct.Config = *abi.ConvertType(out[4], new(string)).(*string)
+	outstruct.IpAddress = *abi.ConvertType(out[5], new(string)).(*string)
+	outstruct.Region = *abi.ConvertType(out[6], new(string)).(*string)
+	outstruct.Location = *abi.ConvertType(out[7], new(string)).(*string)
+	outstruct.Metadata = *abi.ConvertType(out[8], new(string)).(*string)
+	outstruct.Owner = *abi.ConvertType(out[9], new(common.Address)).(*common.Address)
+	outstruct.TokenId = *abi.ConvertType(out[10], new(*big.Int)).(**big.Int)
+	outstruct.Status = *abi.ConvertType(out[11], new(uint8)).(*uint8)
 
 	return *outstruct, err
 
@@ -575,9 +586,10 @@ func (_Contract *ContractCaller) Nodes(opts *bind.CallOpts, arg0 string) (struct
 
 // Nodes is a free data retrieval call binding the contract method 0xf5417ca2.
 //
-// Solidity: function nodes(string ) view returns(address addr, string name, string spec, string config, string ipAddress, string region, string location, string metadata, address owner, uint256 tokenId, uint8 status)
+// Solidity: function nodes(string ) view returns(address addr, string did, string name, string spec, string config, string ipAddress, string region, string location, string metadata, address owner, uint256 tokenId, uint8 status)
 func (_Contract *ContractSession) Nodes(arg0 string) (struct {
 	Addr      common.Address
+	Did       string
 	Name      string
 	Spec      string
 	Config    string
@@ -594,9 +606,10 @@ func (_Contract *ContractSession) Nodes(arg0 string) (struct {
 
 // Nodes is a free data retrieval call binding the contract method 0xf5417ca2.
 //
-// Solidity: function nodes(string ) view returns(address addr, string name, string spec, string config, string ipAddress, string region, string location, string metadata, address owner, uint256 tokenId, uint8 status)
+// Solidity: function nodes(string ) view returns(address addr, string did, string name, string spec, string config, string ipAddress, string region, string location, string metadata, address owner, uint256 tokenId, uint8 status)
 func (_Contract *ContractCallerSession) Nodes(arg0 string) (struct {
 	Addr      common.Address
+	Did       string
 	Name      string
 	Spec      string
 	Config    string
@@ -640,6 +653,37 @@ func (_Contract *ContractSession) OwnerOf(tokenId *big.Int) (common.Address, err
 // Solidity: function ownerOf(uint256 tokenId) view returns(address)
 func (_Contract *ContractCallerSession) OwnerOf(tokenId *big.Int) (common.Address, error) {
 	return _Contract.Contract.OwnerOf(&_Contract.CallOpts, tokenId)
+}
+
+// ReadAttribute is a free data retrieval call binding the contract method 0xb2028b7d.
+//
+// Solidity: function readAttribute(address did_account, bytes name) view returns((bytes,bytes,uint32,uint256))
+func (_Contract *ContractCaller) ReadAttribute(opts *bind.CallOpts, did_account common.Address, name []byte) (DIDAttribute, error) {
+	var out []interface{}
+	err := _Contract.contract.Call(opts, &out, "readAttribute", did_account, name)
+
+	if err != nil {
+		return *new(DIDAttribute), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(DIDAttribute)).(*DIDAttribute)
+
+	return out0, err
+
+}
+
+// ReadAttribute is a free data retrieval call binding the contract method 0xb2028b7d.
+//
+// Solidity: function readAttribute(address did_account, bytes name) view returns((bytes,bytes,uint32,uint256))
+func (_Contract *ContractSession) ReadAttribute(did_account common.Address, name []byte) (DIDAttribute, error) {
+	return _Contract.Contract.ReadAttribute(&_Contract.CallOpts, did_account, name)
+}
+
+// ReadAttribute is a free data retrieval call binding the contract method 0xb2028b7d.
+//
+// Solidity: function readAttribute(address did_account, bytes name) view returns((bytes,bytes,uint32,uint256))
+func (_Contract *ContractCallerSession) ReadAttribute(did_account common.Address, name []byte) (DIDAttribute, error) {
+	return _Contract.Contract.ReadAttribute(&_Contract.CallOpts, did_account, name)
 }
 
 // SupportsInterface is a free data retrieval call binding the contract method 0x01ffc9a7.
@@ -766,6 +810,27 @@ func (_Contract *ContractCallerSession) TokenURI(tokenId *big.Int) (string, erro
 	return _Contract.Contract.TokenURI(&_Contract.CallOpts, tokenId)
 }
 
+// AddAttribute is a paid mutator transaction binding the contract method 0xcc4a70ca.
+//
+// Solidity: function addAttribute(address did_account, bytes name, bytes value, uint32 validity_for) returns(bool)
+func (_Contract *ContractTransactor) AddAttribute(opts *bind.TransactOpts, did_account common.Address, name []byte, value []byte, validity_for uint32) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "addAttribute", did_account, name, value, validity_for)
+}
+
+// AddAttribute is a paid mutator transaction binding the contract method 0xcc4a70ca.
+//
+// Solidity: function addAttribute(address did_account, bytes name, bytes value, uint32 validity_for) returns(bool)
+func (_Contract *ContractSession) AddAttribute(did_account common.Address, name []byte, value []byte, validity_for uint32) (*types.Transaction, error) {
+	return _Contract.Contract.AddAttribute(&_Contract.TransactOpts, did_account, name, value, validity_for)
+}
+
+// AddAttribute is a paid mutator transaction binding the contract method 0xcc4a70ca.
+//
+// Solidity: function addAttribute(address did_account, bytes name, bytes value, uint32 validity_for) returns(bool)
+func (_Contract *ContractTransactorSession) AddAttribute(did_account common.Address, name []byte, value []byte, validity_for uint32) (*types.Transaction, error) {
+	return _Contract.Contract.AddAttribute(&_Contract.TransactOpts, did_account, name, value, validity_for)
+}
+
 // Approve is a paid mutator transaction binding the contract method 0x095ea7b3.
 //
 // Solidity: function approve(address to, uint256 tokenId) returns()
@@ -850,25 +915,46 @@ func (_Contract *ContractTransactorSession) GrantRole(role [32]byte, account com
 	return _Contract.Contract.GrantRole(&_Contract.TransactOpts, role, account)
 }
 
-// RegisterNode is a paid mutator transaction binding the contract method 0x29260b05.
+// RegisterNode is a paid mutator transaction binding the contract method 0x99c6359e.
 //
-// Solidity: function registerNode(address _addr, string id, string name, string spec, string config, string ipAddress, string region, string location, string metadata, string nftMetadata, address _owner) returns()
-func (_Contract *ContractTransactor) RegisterNode(opts *bind.TransactOpts, _addr common.Address, id string, name string, spec string, config string, ipAddress string, region string, location string, metadata string, nftMetadata string, _owner common.Address) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "registerNode", _addr, id, name, spec, config, ipAddress, region, location, metadata, nftMetadata, _owner)
+// Solidity: function registerNode(address _addr, string id, string did, string name, string spec, string config, string ipAddress, string region, string location, string metadata, string nftMetadata, address _owner) returns()
+func (_Contract *ContractTransactor) RegisterNode(opts *bind.TransactOpts, _addr common.Address, id string, did string, name string, spec string, config string, ipAddress string, region string, location string, metadata string, nftMetadata string, _owner common.Address) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "registerNode", _addr, id, did, name, spec, config, ipAddress, region, location, metadata, nftMetadata, _owner)
 }
 
-// RegisterNode is a paid mutator transaction binding the contract method 0x29260b05.
+// RegisterNode is a paid mutator transaction binding the contract method 0x99c6359e.
 //
-// Solidity: function registerNode(address _addr, string id, string name, string spec, string config, string ipAddress, string region, string location, string metadata, string nftMetadata, address _owner) returns()
-func (_Contract *ContractSession) RegisterNode(_addr common.Address, id string, name string, spec string, config string, ipAddress string, region string, location string, metadata string, nftMetadata string, _owner common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.RegisterNode(&_Contract.TransactOpts, _addr, id, name, spec, config, ipAddress, region, location, metadata, nftMetadata, _owner)
+// Solidity: function registerNode(address _addr, string id, string did, string name, string spec, string config, string ipAddress, string region, string location, string metadata, string nftMetadata, address _owner) returns()
+func (_Contract *ContractSession) RegisterNode(_addr common.Address, id string, did string, name string, spec string, config string, ipAddress string, region string, location string, metadata string, nftMetadata string, _owner common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.RegisterNode(&_Contract.TransactOpts, _addr, id, did, name, spec, config, ipAddress, region, location, metadata, nftMetadata, _owner)
 }
 
-// RegisterNode is a paid mutator transaction binding the contract method 0x29260b05.
+// RegisterNode is a paid mutator transaction binding the contract method 0x99c6359e.
 //
-// Solidity: function registerNode(address _addr, string id, string name, string spec, string config, string ipAddress, string region, string location, string metadata, string nftMetadata, address _owner) returns()
-func (_Contract *ContractTransactorSession) RegisterNode(_addr common.Address, id string, name string, spec string, config string, ipAddress string, region string, location string, metadata string, nftMetadata string, _owner common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.RegisterNode(&_Contract.TransactOpts, _addr, id, name, spec, config, ipAddress, region, location, metadata, nftMetadata, _owner)
+// Solidity: function registerNode(address _addr, string id, string did, string name, string spec, string config, string ipAddress, string region, string location, string metadata, string nftMetadata, address _owner) returns()
+func (_Contract *ContractTransactorSession) RegisterNode(_addr common.Address, id string, did string, name string, spec string, config string, ipAddress string, region string, location string, metadata string, nftMetadata string, _owner common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.RegisterNode(&_Contract.TransactOpts, _addr, id, did, name, spec, config, ipAddress, region, location, metadata, nftMetadata, _owner)
+}
+
+// RemoveAttribute is a paid mutator transaction binding the contract method 0xe8a81690.
+//
+// Solidity: function removeAttribute(address did_account, bytes name) returns(bool)
+func (_Contract *ContractTransactor) RemoveAttribute(opts *bind.TransactOpts, did_account common.Address, name []byte) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "removeAttribute", did_account, name)
+}
+
+// RemoveAttribute is a paid mutator transaction binding the contract method 0xe8a81690.
+//
+// Solidity: function removeAttribute(address did_account, bytes name) returns(bool)
+func (_Contract *ContractSession) RemoveAttribute(did_account common.Address, name []byte) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveAttribute(&_Contract.TransactOpts, did_account, name)
+}
+
+// RemoveAttribute is a paid mutator transaction binding the contract method 0xe8a81690.
+//
+// Solidity: function removeAttribute(address did_account, bytes name) returns(bool)
+func (_Contract *ContractTransactorSession) RemoveAttribute(did_account common.Address, name []byte) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveAttribute(&_Contract.TransactOpts, did_account, name)
 }
 
 // RenounceRole is a paid mutator transaction binding the contract method 0x36568abe.
@@ -997,6 +1083,27 @@ func (_Contract *ContractTransactorSession) TransferFrom(from common.Address, to
 	return _Contract.Contract.TransferFrom(&_Contract.TransactOpts, from, to, tokenId)
 }
 
+// UpdateAttribute is a paid mutator transaction binding the contract method 0x68b4b2c1.
+//
+// Solidity: function updateAttribute(address did_account, bytes name, bytes value, uint32 validity_for) returns(bool)
+func (_Contract *ContractTransactor) UpdateAttribute(opts *bind.TransactOpts, did_account common.Address, name []byte, value []byte, validity_for uint32) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateAttribute", did_account, name, value, validity_for)
+}
+
+// UpdateAttribute is a paid mutator transaction binding the contract method 0x68b4b2c1.
+//
+// Solidity: function updateAttribute(address did_account, bytes name, bytes value, uint32 validity_for) returns(bool)
+func (_Contract *ContractSession) UpdateAttribute(did_account common.Address, name []byte, value []byte, validity_for uint32) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateAttribute(&_Contract.TransactOpts, did_account, name, value, validity_for)
+}
+
+// UpdateAttribute is a paid mutator transaction binding the contract method 0x68b4b2c1.
+//
+// Solidity: function updateAttribute(address did_account, bytes name, bytes value, uint32 validity_for) returns(bool)
+func (_Contract *ContractTransactorSession) UpdateAttribute(did_account common.Address, name []byte, value []byte, validity_for uint32) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateAttribute(&_Contract.TransactOpts, did_account, name, value, validity_for)
+}
+
 // UpdateNodeStatus is a paid mutator transaction binding the contract method 0xca046c62.
 //
 // Solidity: function updateNodeStatus(string id, uint8 newStatus) returns()
@@ -1037,6 +1144,144 @@ func (_Contract *ContractSession) UpdateTokenURI(tokenId *big.Int, uri string) (
 // Solidity: function updateTokenURI(uint256 tokenId, string uri) returns()
 func (_Contract *ContractTransactorSession) UpdateTokenURI(tokenId *big.Int, uri string) (*types.Transaction, error) {
 	return _Contract.Contract.UpdateTokenURI(&_Contract.TransactOpts, tokenId, uri)
+}
+
+// ContractAddAttributeIterator is returned from FilterAddAttribute and is used to iterate over the raw logs and unpacked data for AddAttribute events raised by the Contract contract.
+type ContractAddAttributeIterator struct {
+	Event *ContractAddAttribute // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractAddAttributeIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractAddAttribute)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractAddAttribute)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractAddAttributeIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractAddAttributeIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractAddAttribute represents a AddAttribute event raised by the Contract contract.
+type ContractAddAttribute struct {
+	Sender     common.Address
+	DidAccount common.Address
+	Name       []byte
+	Value      []byte
+	Validity   uint32
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterAddAttribute is a free log retrieval operation binding the contract event 0x13aef52bc4a99da04591533072e304017e3fb76f43e7fadd25eb7f514c5ef6e5.
+//
+// Solidity: event AddAttribute(address sender, address did_account, bytes name, bytes value, uint32 validity)
+func (_Contract *ContractFilterer) FilterAddAttribute(opts *bind.FilterOpts) (*ContractAddAttributeIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "AddAttribute")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractAddAttributeIterator{contract: _Contract.contract, event: "AddAttribute", logs: logs, sub: sub}, nil
+}
+
+// WatchAddAttribute is a free log subscription operation binding the contract event 0x13aef52bc4a99da04591533072e304017e3fb76f43e7fadd25eb7f514c5ef6e5.
+//
+// Solidity: event AddAttribute(address sender, address did_account, bytes name, bytes value, uint32 validity)
+func (_Contract *ContractFilterer) WatchAddAttribute(opts *bind.WatchOpts, sink chan<- *ContractAddAttribute) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "AddAttribute")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractAddAttribute)
+				if err := _Contract.contract.UnpackLog(event, "AddAttribute", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseAddAttribute is a log parse operation binding the contract event 0x13aef52bc4a99da04591533072e304017e3fb76f43e7fadd25eb7f514c5ef6e5.
+//
+// Solidity: event AddAttribute(address sender, address did_account, bytes name, bytes value, uint32 validity)
+func (_Contract *ContractFilterer) ParseAddAttribute(log types.Log) (*ContractAddAttribute, error) {
+	event := new(ContractAddAttribute)
+	if err := _Contract.contract.UnpackLog(event, "AddAttribute", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
 }
 
 // ContractApprovalIterator is returned from FilterApproval and is used to iterate over the raw logs and unpacked data for Approval events raised by the Contract contract.
@@ -1705,6 +1950,7 @@ func (it *ContractNodeRegisteredIterator) Close() error {
 // ContractNodeRegistered represents a NodeRegistered event raised by the Contract contract.
 type ContractNodeRegistered struct {
 	Id         string
+	Did        string
 	Name       string
 	Addr       common.Address
 	Spec       string
@@ -1718,9 +1964,9 @@ type ContractNodeRegistered struct {
 	Raw        types.Log // Blockchain specific contextual infos
 }
 
-// FilterNodeRegistered is a free log retrieval operation binding the contract event 0x82189071033fcea7e114b7005cb54d47dbba9b5e188f3b13586e133a7187732b.
+// FilterNodeRegistered is a free log retrieval operation binding the contract event 0xe8bad63cf7bc329f82dbffea067529b741fe31701eea4aa34eb646029fd24f0c.
 //
-// Solidity: event NodeRegistered(string id, string name, address indexed addr, string spec, string config, string ipAddress, string region, string location, string metadata, address indexed owner, address indexed registrant)
+// Solidity: event NodeRegistered(string id, string did, string name, address indexed addr, string spec, string config, string ipAddress, string region, string location, string metadata, address indexed owner, address indexed registrant)
 func (_Contract *ContractFilterer) FilterNodeRegistered(opts *bind.FilterOpts, addr []common.Address, owner []common.Address, registrant []common.Address) (*ContractNodeRegisteredIterator, error) {
 
 	var addrRule []interface{}
@@ -1744,9 +1990,9 @@ func (_Contract *ContractFilterer) FilterNodeRegistered(opts *bind.FilterOpts, a
 	return &ContractNodeRegisteredIterator{contract: _Contract.contract, event: "NodeRegistered", logs: logs, sub: sub}, nil
 }
 
-// WatchNodeRegistered is a free log subscription operation binding the contract event 0x82189071033fcea7e114b7005cb54d47dbba9b5e188f3b13586e133a7187732b.
+// WatchNodeRegistered is a free log subscription operation binding the contract event 0xe8bad63cf7bc329f82dbffea067529b741fe31701eea4aa34eb646029fd24f0c.
 //
-// Solidity: event NodeRegistered(string id, string name, address indexed addr, string spec, string config, string ipAddress, string region, string location, string metadata, address indexed owner, address indexed registrant)
+// Solidity: event NodeRegistered(string id, string did, string name, address indexed addr, string spec, string config, string ipAddress, string region, string location, string metadata, address indexed owner, address indexed registrant)
 func (_Contract *ContractFilterer) WatchNodeRegistered(opts *bind.WatchOpts, sink chan<- *ContractNodeRegistered, addr []common.Address, owner []common.Address, registrant []common.Address) (event.Subscription, error) {
 
 	var addrRule []interface{}
@@ -1795,9 +2041,9 @@ func (_Contract *ContractFilterer) WatchNodeRegistered(opts *bind.WatchOpts, sin
 	}), nil
 }
 
-// ParseNodeRegistered is a log parse operation binding the contract event 0x82189071033fcea7e114b7005cb54d47dbba9b5e188f3b13586e133a7187732b.
+// ParseNodeRegistered is a log parse operation binding the contract event 0xe8bad63cf7bc329f82dbffea067529b741fe31701eea4aa34eb646029fd24f0c.
 //
-// Solidity: event NodeRegistered(string id, string name, address indexed addr, string spec, string config, string ipAddress, string region, string location, string metadata, address indexed owner, address indexed registrant)
+// Solidity: event NodeRegistered(string id, string did, string name, address indexed addr, string spec, string config, string ipAddress, string region, string location, string metadata, address indexed owner, address indexed registrant)
 func (_Contract *ContractFilterer) ParseNodeRegistered(log types.Log) (*ContractNodeRegistered, error) {
 	event := new(ContractNodeRegistered)
 	if err := _Contract.contract.UnpackLog(event, "NodeRegistered", log); err != nil {
@@ -1936,6 +2182,141 @@ func (_Contract *ContractFilterer) WatchNodeStatusUpdated(opts *bind.WatchOpts, 
 func (_Contract *ContractFilterer) ParseNodeStatusUpdated(log types.Log) (*ContractNodeStatusUpdated, error) {
 	event := new(ContractNodeStatusUpdated)
 	if err := _Contract.contract.UnpackLog(event, "NodeStatusUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractRemoveAttributeIterator is returned from FilterRemoveAttribute and is used to iterate over the raw logs and unpacked data for RemoveAttribute events raised by the Contract contract.
+type ContractRemoveAttributeIterator struct {
+	Event *ContractRemoveAttribute // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractRemoveAttributeIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractRemoveAttribute)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractRemoveAttribute)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractRemoveAttributeIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractRemoveAttributeIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractRemoveAttribute represents a RemoveAttribute event raised by the Contract contract.
+type ContractRemoveAttribute struct {
+	DidAccount common.Address
+	Name       []byte
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterRemoveAttribute is a free log retrieval operation binding the contract event 0x8d8507f4f79e585e0cbbdeff53c51bfb6ffa6d44fbcc86e46ece2fad02b5d902.
+//
+// Solidity: event RemoveAttribute(address did_account, bytes name)
+func (_Contract *ContractFilterer) FilterRemoveAttribute(opts *bind.FilterOpts) (*ContractRemoveAttributeIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "RemoveAttribute")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractRemoveAttributeIterator{contract: _Contract.contract, event: "RemoveAttribute", logs: logs, sub: sub}, nil
+}
+
+// WatchRemoveAttribute is a free log subscription operation binding the contract event 0x8d8507f4f79e585e0cbbdeff53c51bfb6ffa6d44fbcc86e46ece2fad02b5d902.
+//
+// Solidity: event RemoveAttribute(address did_account, bytes name)
+func (_Contract *ContractFilterer) WatchRemoveAttribute(opts *bind.WatchOpts, sink chan<- *ContractRemoveAttribute) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "RemoveAttribute")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractRemoveAttribute)
+				if err := _Contract.contract.UnpackLog(event, "RemoveAttribute", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseRemoveAttribute is a log parse operation binding the contract event 0x8d8507f4f79e585e0cbbdeff53c51bfb6ffa6d44fbcc86e46ece2fad02b5d902.
+//
+// Solidity: event RemoveAttribute(address did_account, bytes name)
+func (_Contract *ContractFilterer) ParseRemoveAttribute(log types.Log) (*ContractRemoveAttribute, error) {
+	event := new(ContractRemoveAttribute)
+	if err := _Contract.contract.UnpackLog(event, "RemoveAttribute", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -2584,6 +2965,144 @@ func (_Contract *ContractFilterer) WatchTransfer(opts *bind.WatchOpts, sink chan
 func (_Contract *ContractFilterer) ParseTransfer(log types.Log) (*ContractTransfer, error) {
 	event := new(ContractTransfer)
 	if err := _Contract.contract.UnpackLog(event, "Transfer", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractUpdateAttributeIterator is returned from FilterUpdateAttribute and is used to iterate over the raw logs and unpacked data for UpdateAttribute events raised by the Contract contract.
+type ContractUpdateAttributeIterator struct {
+	Event *ContractUpdateAttribute // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractUpdateAttributeIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractUpdateAttribute)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractUpdateAttribute)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractUpdateAttributeIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractUpdateAttributeIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractUpdateAttribute represents a UpdateAttribute event raised by the Contract contract.
+type ContractUpdateAttribute struct {
+	Sender     common.Address
+	DidAccount common.Address
+	Name       []byte
+	Value      []byte
+	Validity   uint32
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterUpdateAttribute is a free log retrieval operation binding the contract event 0x018be4d5e2634aefdb51c4ddd186f33072cfb5f6baf685579c2e214995dc9e4f.
+//
+// Solidity: event UpdateAttribute(address sender, address did_account, bytes name, bytes value, uint32 validity)
+func (_Contract *ContractFilterer) FilterUpdateAttribute(opts *bind.FilterOpts) (*ContractUpdateAttributeIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "UpdateAttribute")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractUpdateAttributeIterator{contract: _Contract.contract, event: "UpdateAttribute", logs: logs, sub: sub}, nil
+}
+
+// WatchUpdateAttribute is a free log subscription operation binding the contract event 0x018be4d5e2634aefdb51c4ddd186f33072cfb5f6baf685579c2e214995dc9e4f.
+//
+// Solidity: event UpdateAttribute(address sender, address did_account, bytes name, bytes value, uint32 validity)
+func (_Contract *ContractFilterer) WatchUpdateAttribute(opts *bind.WatchOpts, sink chan<- *ContractUpdateAttribute) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "UpdateAttribute")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractUpdateAttribute)
+				if err := _Contract.contract.UnpackLog(event, "UpdateAttribute", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseUpdateAttribute is a log parse operation binding the contract event 0x018be4d5e2634aefdb51c4ddd186f33072cfb5f6baf685579c2e214995dc9e4f.
+//
+// Solidity: event UpdateAttribute(address sender, address did_account, bytes name, bytes value, uint32 validity)
+func (_Contract *ContractFilterer) ParseUpdateAttribute(log types.Log) (*ContractUpdateAttribute, error) {
+	event := new(ContractUpdateAttribute)
+	if err := _Contract.contract.UnpackLog(event, "UpdateAttribute", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
