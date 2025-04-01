@@ -82,7 +82,7 @@ func DbInit() error {
 		&models.CyreneAIAgent{},
 		&models.NFTSubscriptionMintAddress{},
 	); err != nil {
-		log.Fatal(err)
+		log.Fatal("failed to automigration :", err)
 	}
 	return nil
 }
