@@ -33,6 +33,8 @@ func main() {
 	config.AllowAllOrigins = true
 	config.AllowHeaders = []string{"Authorization", "Content-Type"}
 	ginApp.Use(cors.New(config))
+	// cant accessable by localhost
+	config.AllowOrigins = []string{"http://localhost:3000"}
 
 	// adding health check
 	ginApp.GET("/ping", func(c *gin.Context) {
