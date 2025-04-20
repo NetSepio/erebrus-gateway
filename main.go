@@ -30,12 +30,11 @@ func main() {
 
 	// cors middleware
 	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"http://localhost:3000"}
+	config.AllowCredentials = true // if your frontend sends cookies or Authorization headers
 	config.AllowAllOrigins = true
 	config.AllowHeaders = []string{"Authorization", "Content-Type"}
-	config.AllowOrigins = []string{"http://localhost:3000"}
 	ginApp.Use(cors.New(config))
-	// cant accessable by localhost
-	
 
 	// adding health check
 	ginApp.GET("/ping", func(c *gin.Context) {
