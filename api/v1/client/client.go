@@ -3,8 +3,10 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -364,4 +366,72 @@ func GetClientBlobId(c *gin.Context) {
 	}
 
 	httpo.NewSuccessResponseP(200, "Client blobId fetched successfully", gin.H{"blobId": client.BlobId}).SendD(c)
+}
+
+func ClientDelete() {
+	db := dbconfig.GetDb()
+	var results []models.Erebrus
+
+	// Calculate the time 24 hours ago
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	if err := db.Where("created_at < ? AND LOWER(name) = ?", cutoff, "app").
+		Find(&results).Error; err != nil {
+		logwrapper.Errorf("failed to fetch clients for auto-delete: %s", err)
+	}
+
+	if len(results) > 0 {
+
+		for _, v := range results {
+
+			url := fmt.Sprintf(v.Domain+"/api/v1.0/client/%s", v.UUID)
+
+			urlReq, err := http.NewRequest(http.MethodDelete, url, bytes.NewReader(nil))
+
+			if err != nil {
+				fmt.Println("Error creating request:", err)
+				return
+			}
+
+			client := &http.Client{}
+			resp, err := client.Do(urlReq)
+			if err != nil {
+				fmt.Println("Error making request:", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			fmt.Println("Status:", resp.Status)
+
+			if resp.StatusCode == http.StatusOK {
+				if err := db.Delete(v).Error; err != nil {
+					logwrapper.Errorf("failed to delete data from database: %s", err)
+					return
+				}
+
+			}
+
+		}
+
+	}
+
+}
+
+func AutoClientDelete() {
+	// Run the function once at startup if needed
+	ClientDelete()
+
+	// Set up a ticker to run every hour
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	// Run the function every hour in a goroutine
+	go func() {
+		for range ticker.C {
+			ClientDelete()
+		}
+	}()
+
+	// Keep the main function running
+	select {}
 }

@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/NetSepio/erebrus-gateway/api"
+	"github.com/NetSepio/erebrus-gateway/api/v1/client"
 	"github.com/NetSepio/erebrus-gateway/app"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/redisconfig"
@@ -42,6 +43,7 @@ func main() {
 	ginApp.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"status": 404, "message": "Invalid Endpoint Request"})
 	})
+	client.AutoClientDelete()
 	api.ApplyRoutes(ginApp)
 	ginApp.Run(":" + os.Getenv("HTTP_PORT"))
 
