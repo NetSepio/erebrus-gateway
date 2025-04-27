@@ -6,7 +6,7 @@ import (
 
 type Agent struct {
 	ID             string    `json:"id" gorm:"primaryKey"`
-	CreatedAt      time.Time `json:"created_at" gorm:"autoCreateTime"`
+	CreatedAt      time.Time `json:"created_at" gorm:"autoCreaeTime"`
 	UpdatedAt      time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 	Name           string    `json:"name"`
 	Clients        string    `json:"clients"` 

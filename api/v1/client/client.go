@@ -2,9 +2,13 @@ package client
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
@@ -364,4 +368,123 @@ func GetClientBlobId(c *gin.Context) {
 	}
 
 	httpo.NewSuccessResponseP(200, "Client blobId fetched successfully", gin.H{"blobId": client.BlobId}).SendD(c)
+}
+
+func ClientDelete() {
+	fmt.Println("ClientDelete function called")
+	logwrapper.Info("🚀 Starting ClientDelete process")
+
+	db := dbconfig.GetDb().Debug()
+	var results []models.Erebrus
+
+	// Calculate the time 24 hours ago
+	cutoff := time.Now().Add(-24 * time.Hour)
+	logwrapper.Infof("🕒 Cutoff time for deletion: %s\n", cutoff)
+
+	// Fetch records older than 24 hours with name 'app'
+	logwrapper.Info("🔍 Fetching clients eligible for auto-delete")
+	if err := db.Where("created_at < ? AND LOWER(name) = ?", cutoff, "app").
+		Find(&results).Error; err != nil {
+		logwrapper.Errorf("❌ Failed to fetch clients for auto-delete: %s", err)
+		return
+	}
+
+	logwrapper.Infof("📋 Number of clients found for deletion: %d", len(results))
+
+	if len(results) > 0 {
+		for _, v := range results {
+			logwrapper.Infof("👤 Processing client - UUID: %s, Domain: %s", v.UUID, v.Domain)
+
+			url := fmt.Sprintf("%s/api/v1.0/client/%s", v.Domain, v.UUID)
+			logwrapper.Infof("🌐 DELETE request URL: %s", url)
+
+			urlReq, err := http.NewRequest(http.MethodDelete, url, bytes.NewReader(nil))
+			if err != nil {
+				logwrapper.Errorf("⚙️ Error creating DELETE request: %s", err)
+				continue
+			}
+
+			client := &http.Client{}
+			logwrapper.Info("📡 Sending DELETE request")
+			resp, err := client.Do(urlReq)
+			if err != nil {
+				logwrapper.Errorf("🚫 Error making DELETE request: %s\n", err)
+				continue
+			}
+			defer resp.Body.Close()
+
+			logwrapper.Infof("📬 Received response - Status: %s\n", resp.Status)
+
+			if resp.StatusCode == http.StatusOK {
+				logwrapper.Infof("✅ DELETE request successful for UUID: %s. Deleting from database...\n", v.UUID)
+				if err := db.Delete(&v).Error; err != nil {
+					logwrapper.Errorf("🛑 Failed to delete client from database: %s\n", err)
+					continue
+				}
+				logwrapper.Infof("🗑️ Successfully deleted client UUID: %s from database\n", v.UUID)
+			} else {
+				logwrapper.Warnf("⚠️ DELETE request failed for UUID: %s with status code: %d\n", v.UUID, resp.StatusCode)
+			}
+		}
+	} else {
+		logwrapper.Info("ℹ️ No clients found for auto-delete")
+	}
+
+	logwrapper.Info("🏁 ClientDelete process completed\n")
+}
+
+func AutoClientDelete() {
+	// Run the function once at startup if needed
+	ClientDelete()
+
+	// Set up a ticker to run every hour
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	// Run the function every hour in a goroutine
+	go func() {
+		for range ticker.C {
+			ClientDelete()
+		}
+	}()
+
+	// Keep the main function running
+	select {}
+}
+
+func deleteRecords(db *sql.DB) {
+	// SQL query to delete the records
+	query := `
+		DELETE FROM erebrus
+		WHERE domain IN (
+			SELECT DISTINCT host
+			FROM erebrus
+			JOIN nodes ON nodes.peer_id != erebrus.node_id
+		);
+	`
+
+	// Execute the query
+	_, err := db.Exec(query)
+	if err != nil {
+		log.Fatalf("Error executing DELETE query: %v", err)
+	} else {
+		log.Println("Records deleted successfully")
+	}
+}
+
+func runEverySunday(db *sql.DB) {
+	for {
+		// Check if today is Sunday
+		now := time.Now()
+		if now.Weekday() == time.Sunday {
+			// Call the deleteRecords function to perform the delete
+			deleteRecords(db)
+
+			// Sleep for 24 hours to avoid running it multiple times on the same Sunday
+			time.Sleep(24 * time.Hour)
+		} else {
+			// Sleep for 1 hour and check again if it's Sunday
+			time.Sleep(time.Hour)
+		}
+	}
 }
