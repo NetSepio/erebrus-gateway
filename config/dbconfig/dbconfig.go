@@ -66,6 +66,9 @@ func DbMigrations() error {
 	if err := db.AutoMigrate(
 		&models.PerksToken{},
 		&models.PerkNFT{},
+		&models.Agent{},
+		&models.SubscriptionToken{},
+		&models.SubscriptionNFT{},
 		&models.NodeLog{},
 		&models.NodeActivity{},
 		&models.Node{},
@@ -82,7 +85,10 @@ func DbMigrations() error {
 		&models.NFTSubscriptionMintAddress{},
 		&models.Agent{},
 	); err != nil {
-		log.Fatal(err)
+		log.Fatal("failed to automigration :", err)
+	}
+	if err := db.Exec("SELECT setval('subscriptions_id_seq', (SELECT MAX(id) FROM subscriptions));").Error; err != nil {
+		log.Fatal("failed to set sequence value :", err)
 	}
 
 	if err := func() error {
