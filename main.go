@@ -37,8 +37,6 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 
 	}
-	gin.SetMode(gin.DebugMode)
-	dbconfig.DbInit()
 
 	// cors middleware
 	config := cors.DefaultConfig()
