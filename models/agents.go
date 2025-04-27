@@ -18,6 +18,6 @@ type Agent struct {
 	WalletAddress  string    `json:"wallet_address" gorm:"index"`
 	ServerDomain   string    `json:"server_domain"`
 	Domain         string    `json:"domain"`
-	CharacterFile  string    `json:"-"` 
+	CharacterFile  string    `json:"character_file"` 
 }
 

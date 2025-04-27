@@ -11,6 +11,7 @@ import (
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/gin-gonic/gin"
+	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
 )
 
 func ApplyRoutes(r *gin.RouterGroup) {
@@ -23,6 +24,10 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.PATCH("/:server_domain/:agentId", manageAgent)
 		
 		g.GET("/wallet/:wallet_address", getAgentsByWalletAddress)
+
+		configGroup := g.Group("/config")
+		configGroup.Use(paseto.PASETO(false))
+		configGroup.GET("/:agentId", getCharacterFileByAgentId)
 	}
 }
 
@@ -336,4 +341,45 @@ func getAgentsByWalletAddress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"agents": agents})
+}
+
+func getCharacterFileByAgentId(c *gin.Context) {
+	agentId := c.Param("agentId")
+	
+	// Get wallet address from the token context
+	walletAddress, exists := c.Get(paseto.CTX_WALLET_ADDRESS)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+	
+	walletAddressStr, ok := walletAddress.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid wallet address format in token"})
+		return
+	}
+	
+	if walletAddressStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Wallet address is required"})
+		return
+	}
+	
+	if agentId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Agent ID is required"})
+		return
+	}
+	
+	var agent models.Agent
+	db := dbconfig.GetDb()
+	if err := db.Where("wallet_address = ? AND id = ?", walletAddressStr, agentId).First(&agent).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found for your wallet address"})
+		return
+	}
+	
+	// Return the character file data
+	c.JSON(http.StatusOK, gin.H{
+		"agent_id": agent.ID,
+		"name": agent.Name,
+		"character_file": agent.CharacterFile,
+	})
 }
