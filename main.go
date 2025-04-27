@@ -27,6 +27,14 @@ func main() {
 	logwrapper.Init()
 	app.Init()
 	ginApp := gin.Default()
+
+	if os.Getenv("DB_HOST") == "debug" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+
+	}
+	gin.SetMode(gin.DebugMode)
 	dbconfig.DbInit()
 
 	// cors middleware
@@ -43,7 +51,8 @@ func main() {
 	ginApp.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"status": 404, "message": "Invalid Endpoint Request"})
 	})
-	client.AutoClientDelete()
+	go client.AutoClientDelete()
+
 	api.ApplyRoutes(ginApp)
 	ginApp.Run(":" + os.Getenv("HTTP_PORT"))
 

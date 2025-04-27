@@ -2,9 +2,11 @@ package client
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -447,4 +449,41 @@ func AutoClientDelete() {
 
 	// Keep the main function running
 	select {}
+}
+
+func deleteRecords(db *sql.DB) {
+	// SQL query to delete the records
+	query := `
+		DELETE FROM erebrus
+		WHERE domain IN (
+			SELECT DISTINCT host
+			FROM erebrus
+			JOIN nodes ON nodes.peer_id != erebrus.node_id
+		);
+	`
+
+	// Execute the query
+	_, err := db.Exec(query)
+	if err != nil {
+		log.Fatalf("Error executing DELETE query: %v", err)
+	} else {
+		log.Println("Records deleted successfully")
+	}
+}
+
+func runEverySunday(db *sql.DB) {
+	for {
+		// Check if today is Sunday
+		now := time.Now()
+		if now.Weekday() == time.Sunday {
+			// Call the deleteRecords function to perform the delete
+			deleteRecords(db)
+
+			// Sleep for 24 hours to avoid running it multiple times on the same Sunday
+			time.Sleep(24 * time.Hour)
+		} else {
+			// Sleep for 1 hour and check again if it's Sunday
+			time.Sleep(time.Hour)
+		}
+	}
 }
