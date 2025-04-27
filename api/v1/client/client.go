@@ -371,6 +371,7 @@ func GetClientBlobId(c *gin.Context) {
 }
 
 func ClientDelete() {
+	fmt.Println("ClientDelete function called")
 	logwrapper.Info("🚀 Starting ClientDelete process")
 
 	db := dbconfig.GetDb()
@@ -378,7 +379,7 @@ func ClientDelete() {
 
 	// Calculate the time 24 hours ago
 	cutoff := time.Now().Add(-24 * time.Hour)
-	logwrapper.Infof("🕒 Cutoff time for deletion: %s", cutoff)
+	logwrapper.Infof("🕒 Cutoff time for deletion: %s\n", cutoff)
 
 	// Fetch records older than 24 hours with name 'app'
 	logwrapper.Info("🔍 Fetching clients eligible for auto-delete")
@@ -407,29 +408,29 @@ func ClientDelete() {
 			logwrapper.Info("📡 Sending DELETE request")
 			resp, err := client.Do(urlReq)
 			if err != nil {
-				logwrapper.Errorf("🚫 Error making DELETE request: %s", err)
+				logwrapper.Errorf("🚫 Error making DELETE request: %s\n", err)
 				continue
 			}
 			defer resp.Body.Close()
 
-			logwrapper.Infof("📬 Received response - Status: %s", resp.Status)
+			logwrapper.Infof("📬 Received response - Status: %s\n", resp.Status)
 
 			if resp.StatusCode == http.StatusOK {
-				logwrapper.Infof("✅ DELETE request successful for UUID: %s. Deleting from database...", v.UUID)
+				logwrapper.Infof("✅ DELETE request successful for UUID: %s. Deleting from database...\n", v.UUID)
 				if err := db.Delete(&v).Error; err != nil {
-					logwrapper.Errorf("🛑 Failed to delete client from database: %s", err)
+					logwrapper.Errorf("🛑 Failed to delete client from database: %s\n", err)
 					continue
 				}
-				logwrapper.Infof("🗑️ Successfully deleted client UUID: %s from database", v.UUID)
+				logwrapper.Infof("🗑️ Successfully deleted client UUID: %s from database\n", v.UUID)
 			} else {
-				logwrapper.Warnf("⚠️ DELETE request failed for UUID: %s with status code: %d", v.UUID, resp.StatusCode)
+				logwrapper.Warnf("⚠️ DELETE request failed for UUID: %s with status code: %d\n", v.UUID, resp.StatusCode)
 			}
 		}
 	} else {
 		logwrapper.Info("ℹ️ No clients found for auto-delete")
 	}
 
-	logwrapper.Info("🏁 ClientDelete process completed")
+	logwrapper.Info("🏁 ClientDelete process completed\n")
 }
 
 func AutoClientDelete() {
