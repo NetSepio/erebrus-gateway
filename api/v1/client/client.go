@@ -374,7 +374,7 @@ func ClientDelete() {
 	fmt.Println("ClientDelete function called")
 	logwrapper.Info("🚀 Starting ClientDelete process")
 
-	db := dbconfig.GetDb()
+	db := dbconfig.GetDb().Debug()
 	var results []models.Erebrus
 
 	// Calculate the time 24 hours ago
