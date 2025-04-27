@@ -371,25 +371,24 @@ func GetClientBlobId(c *gin.Context) {
 }
 
 func ClientDelete() {
-	fmt.Println("ClientDelete function called")
-	logwrapper.Info("🚀 Starting ClientDelete process")
+	logwrapper.Log.Infoln("🚀 Starting ClientDelete process")
 
 	db := dbconfig.GetDb().Debug()
 	var results []models.Erebrus
 
 	// Calculate the time 24 hours ago
 	cutoff := time.Now().Add(-24 * time.Hour)
-	logwrapper.Infof("🕒 Cutoff time for deletion: %s\n", cutoff)
+	logwrapper.Log.Infoln("🕒 Cutoff time for deletion: %s\n", cutoff)
 
 	// Fetch records older than 24 hours with name 'app'
-	logwrapper.Info("🔍 Fetching clients eligible for auto-delete")
+	logwrapper.Log.Infoln("🔍 Fetching clients eligible for auto-delete")
 	if err := db.Where("created_at < ? AND LOWER(name) = ?", cutoff, "app").
 		Find(&results).Error; err != nil {
 		logwrapper.Errorf("❌ Failed to fetch clients for auto-delete: %s", err)
 		return
 	}
 
-	logwrapper.Infof("📋 Number of clients found for deletion: %d", len(results))
+	logwrapper.Infof("📋 Number of clients found for deletion: %d\n", len(results))
 
 	if len(results) > 0 {
 		for _, v := range results {
