@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/NetSepio/erebrus-gateway/api"
+	"github.com/NetSepio/erebrus-gateway/api/v1/client"
 	"github.com/NetSepio/erebrus-gateway/app"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/config/redisconfig"
@@ -26,7 +27,16 @@ func main() {
 	logwrapper.Init()
 	app.Init()
 	ginApp := gin.Default()
-	dbconfig.DbInit()
+	if err := dbconfig.DbMigrations(); err != nil {
+		logwrapper.Errorf("Error mirating to database: %v", err)
+	}
+
+	if os.Getenv("DB_HOST") == "debug" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+
+	}
 
 	// cors middleware
 	config := cors.DefaultConfig()
@@ -42,6 +52,8 @@ func main() {
 	ginApp.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{"status": 404, "message": "Invalid Endpoint Request"})
 	})
+	go client.AutoClientDelete()
+
 	api.ApplyRoutes(ginApp)
 	ginApp.Run(":" + os.Getenv("HTTP_PORT"))
 

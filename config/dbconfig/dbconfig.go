@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/NetSepio/erebrus-gateway/models"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
@@ -48,7 +49,7 @@ func GetDb() *gorm.DB {
 	return db
 }
 
-func DbInit() error {
+func DbMigrations() error {
 	db := GetDb()
 
 	func() {
@@ -65,6 +66,9 @@ func DbInit() error {
 	if err := db.AutoMigrate(
 		&models.PerksToken{},
 		&models.PerkNFT{},
+		&models.Agent{},
+		&models.SubscriptionToken{},
+		&models.SubscriptionNFT{},
 		&models.NodeLog{},
 		&models.NodeActivity{},
 		&models.Node{},
@@ -81,7 +85,19 @@ func DbInit() error {
 		&models.NFTSubscriptionMintAddress{},
 		&models.Agent{},
 	); err != nil {
-		log.Fatal(err)
+		log.Fatal("failed to automigration :", err)
 	}
+	if err := db.Exec("SELECT setval('subscriptions_id_seq', (SELECT MAX(id) FROM subscriptions));").Error; err != nil {
+		log.Fatal("failed to set sequence value :", err)
+	}
+
+	if err := func() error {
+		query := `SELECT setval('subscriptions_id_seq', (SELECT COALESCE(MAX(id), 1) FROM subscriptions), true);`
+		return db.Exec(query).Error
+	}(); err != nil {
+		logrus.Println("failed to set sequence value: ", err)
+		return err
+	}
+
 	return nil
 }
