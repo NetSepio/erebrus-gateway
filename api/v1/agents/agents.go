@@ -24,6 +24,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.PATCH("/:server_domain/:agentId", manageAgent)
 		
 		g.GET("/wallet/:wallet_address", getAgentsByWalletAddress)
+		g.GET("/public-config", getPublicConfig)
 
 		configGroup := g.Group("/config")
 		configGroup.Use(paseto.PASETO(false))
@@ -382,4 +383,78 @@ func getCharacterFileByAgentId(c *gin.Context) {
 		"name": agent.Name,
 		"character_file": agent.CharacterFile,
 	})
+}
+
+func getPublicConfig(c *gin.Context) {
+	var agents []models.Agent
+	db := dbconfig.GetDb()
+	if err := db.Find(&agents).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query agents"})
+		return
+	}
+
+	type CharacterFile struct {
+		Clients []string `json:"clients"`
+		Settings struct {
+			Secrets struct {
+				DiscordApplicationID string `json:"DISCORD_APPLICATION_ID"`
+				TwitterUsername     string `json:"TWITTER_USERNAME"`
+				TelegramBotToken    string `json:"TELEGRAM_BOT_TOKEN"`
+			} `json:"secrets"`
+		} `json:"settings"`
+	}
+
+	type ConfigResponse struct {
+		AgentID              string `json:"agent_id"`
+		DiscordApplicationID string `json:"discord_application_id,omitempty"`
+		TwitterUsername     string `json:"twitter_username,omitempty"`
+		TelegramBotToken    string `json:"telegram_bot_token,omitempty"`
+	}
+
+	var configs []ConfigResponse
+
+	for _, agent := range agents {
+		var charFile CharacterFile
+		if err := json.Unmarshal([]byte(agent.CharacterFile), &charFile); err != nil {
+			continue 
+		}
+
+		// Checking if any of the required clients are present
+		hasDiscord := false
+		hasTwitter := false
+		hasTelegram := false
+		for _, client := range charFile.Clients {
+			switch client {
+			case "discord":
+				hasDiscord = true
+			case "twitter":
+				hasTwitter = true
+			case "telegram":
+				hasTelegram = true
+			}
+		}
+
+		if (hasDiscord && charFile.Settings.Secrets.DiscordApplicationID != "") ||
+			(hasTwitter && charFile.Settings.Secrets.TwitterUsername != "") ||
+			(hasTelegram && charFile.Settings.Secrets.TelegramBotToken != "") {
+			
+			config := ConfigResponse{
+				AgentID: agent.ID,
+			}
+
+			if hasDiscord {
+				config.DiscordApplicationID = charFile.Settings.Secrets.DiscordApplicationID
+			}
+			if hasTwitter {
+				config.TwitterUsername = charFile.Settings.Secrets.TwitterUsername
+			}
+			if hasTelegram {
+				config.TelegramBotToken = charFile.Settings.Secrets.TelegramBotToken
+			}
+
+			configs = append(configs, config)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"configs": configs})
 }
