@@ -33,6 +33,11 @@ type NodeResponse struct {
 	TotalActiveDuration float64 `json:"totalUptime"`
 	// TodayActiveDuration float64 `json:"todayUpTime"`
 	UptimeUnit string `json:"upTimeUnit"`
+
+	NodeType         string  `json:"nodeType"`
+	NodeConfig       string  `json:"nodeConfig"`
+
+
 }
 
 func ToJSON(data interface{}) string {

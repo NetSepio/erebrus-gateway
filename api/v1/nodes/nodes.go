@@ -88,6 +88,8 @@ func FetchAllNodes(c *gin.Context) {
 
 		// response.TotalActiveDuration, response.TodayActiveDuration = nodeactivity.CalculateTotalAndTodayActiveDuration(i.PeerId)
 		response.UptimeUnit = "hrs"
+		response.NodeType = i.NodeType
+		response.NodeConfig = i.NodeConfig
 
 		// response.TotalActiveDuration = math.Round(i.TotalActiveDuration*100) / 100
 		// response.TodayActiveDuration = math.Round(i.TodayActiveDuration*100) / 100
