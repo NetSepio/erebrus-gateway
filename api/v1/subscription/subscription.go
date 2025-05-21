@@ -34,6 +34,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 		g.POST("/trial", TrialSubscription)
 		g.POST("/create-payment", CreatePaymentIntent)
 		g.GET("", CheckSubscription)
+		g.POST("/custom_duration", SubscriptionForCustomDuration)
 
 	}
 }
@@ -193,4 +194,65 @@ func HandleCanceledOrFailedPaymentIntent(eventDataRaw json.RawMessage) error {
 	}
 
 	return nil
+}
+
+func SubscriptionForCustomDuration(c *gin.Context) {
+
+	var (
+		oneMonth   = time.Now().AddDate(0, 1, 0)
+		threeMonth = time.Now().AddDate(0, 3, 0)
+		oneYear    = time.Now().AddDate(1, 0, 0)
+	)
+
+	// Map duration type to end time
+
+	var request struct {
+		DurationType int `json:"duration_type"`
+	}
+	err := c.BindJSON(&request)
+	if err != nil {
+		httpo.NewErrorResponse(http.StatusBadRequest, fmt.Sprintf("payload is invalid %s", err)).SendD(c)
+		return
+	}
+
+	var endTime time.Time
+	switch request.DurationType {
+	case 1:
+		endTime = oneMonth
+	case 2:
+		endTime = threeMonth
+	case 3:
+		endTime = oneYear
+	default:
+		httpo.NewErrorResponse(http.StatusBadRequest, "invalid duration type").SendD(c)
+		return
+	}
+
+	userId := c.GetString(paseto.CTX_USER_ID)
+
+	// Check if there is already an active trial subscription for the user
+	var existingSubscription models.Subscription
+	db := dbconfig.GetDb()
+	if err := db.Where("user_id = ? AND type = ? AND end_time > ?", userId, "trial", time.Now()).First(&existingSubscription).Error; err == nil {
+		// There is already an active trial subscription for the user
+		c.JSON(http.StatusBadRequest, gin.H{"error": "You already have an active trial subscription"})
+		return
+	}
+
+	// Create a new trial subscription
+	subscription := models.Subscription{
+		UserId:    userId,
+		StartTime: time.Now(),
+		EndTime:   endTime,
+		Type:      "TrialSubscription",
+	}
+
+	// Save the new trial subscription to the database
+	if err := db.Model(models.Subscription{}).Create(&subscription).Error; err != nil {
+		logwrapper.Errorf("Error creating subscription: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "subscription created"})
 }

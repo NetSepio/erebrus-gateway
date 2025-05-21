@@ -434,7 +434,7 @@ func ClientDelete() {
 
 func AutoClientDelete() {
 	// Run the function once at startup if needed
-	ClientDelete()
+	// ClientDelete()
 
 	// Set up a ticker to run every hour
 	ticker := time.NewTicker(1 * time.Hour)
