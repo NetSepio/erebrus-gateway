@@ -3,26 +3,26 @@ package agents
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
-	"fmt"
 
+	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
 	"github.com/NetSepio/erebrus-gateway/config/dbconfig"
 	"github.com/NetSepio/erebrus-gateway/models"
 	"github.com/gin-gonic/gin"
-	"github.com/NetSepio/erebrus-gateway/api/middleware/auth/paseto"
 )
 
 func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/agents")
 	{
-		g.POST("/:server_domain", addAgent)
-		g.GET("/:server_domain", getAgents)
-		g.GET("/:server_domain/:agentId", getAgent)
-		g.DELETE("/:server_domain/:agentId", deleteAgent)
-		g.PATCH("/:server_domain/:agentId", manageAgent)
-		
+		g.POST("/:peer_id", addAgent)
+		g.GET("/:peer_id", getAgents)
+		g.GET("/:peer_id/:agentId", getAgent)
+		g.DELETE("/:peer_id/:agentId", deleteAgent)
+		g.PATCH("/:peer_id/:agentId", manageAgent)
+
 		g.GET("/wallet/:wallet_address", getAgentsByWalletAddress)
 		g.GET("/public-config", getPublicConfig)
 
@@ -34,7 +34,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 
 func addAgent(c *gin.Context) {
 	// Get multipart form
-	serverDomain := c.Param("server_domain")
+	peer_id := c.Param("peer_id")
 	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid form data"})
@@ -62,13 +62,13 @@ func addAgent(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	
+
 	characterFileContent, err := io.ReadAll(file)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read character file"})
 		return
 	}
-	
+
 	// Reset file pointer for the next read
 	file.Seek(0, 0)
 
@@ -95,8 +95,19 @@ func addAgent(c *gin.Context) {
 
 	writer.Close()
 
+	// select domain from node table from database against peer_id
+	var serverDomain string
+	db := dbconfig.GetDb()
+
+	var node models.Node
+	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		return
+	}
+	serverDomain = node.Host
+
 	// Forward request to upstream service
-	req, err := http.NewRequest("POST", fmt.Sprintf("https://%s/api/v1.0/agents", serverDomain), body)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1.0/agents", serverDomain), body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
@@ -150,18 +161,18 @@ func addAgent(c *gin.Context) {
 
 		// Create agent record for database
 		agent := models.Agent{
-			ID:             agentResponse.Agent.ID,
-			Name:           agentResponse.Agent.Name,
-			Clients:        clientsStr,
-			Status:         agentResponse.Agent.Status,
-			AvatarImg:      agentResponse.Agent.AvatarImg,
-			CoverImg:       agentResponse.Agent.CoverImg,
-			VoiceModel:     agentResponse.Agent.VoiceModel,
-			Organization:   agentResponse.Agent.Organization,
-			WalletAddress:  walletAddress,
-			ServerDomain:   serverDomain,
-			Domain:         agentResponse.Domain,
-			CharacterFile:  string(characterFileContent),
+			ID:            agentResponse.Agent.ID,
+			Name:          agentResponse.Agent.Name,
+			Clients:       clientsStr,
+			Status:        agentResponse.Agent.Status,
+			AvatarImg:     agentResponse.Agent.AvatarImg,
+			CoverImg:      agentResponse.Agent.CoverImg,
+			VoiceModel:    agentResponse.Agent.VoiceModel,
+			Organization:  agentResponse.Agent.Organization,
+			WalletAddress: walletAddress,
+			ServerDomain:  serverDomain,
+			Domain:        agentResponse.Domain,
+			CharacterFile: string(characterFileContent),
 		}
 
 		// Store in database
@@ -207,11 +218,21 @@ func addAgent(c *gin.Context) {
 }
 
 func getAgent(c *gin.Context) {
-	serverDomain := c.Param("server_domain")
+	peer_id := c.Param("peer_id")
 	agentId := c.Param("agentId")
-	
+
+	var serverDomain string
+	db := dbconfig.GetDb()
+
+	var node models.Node
+	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		return
+	}
+	serverDomain = node.Host
+
 	// Forward request to upstream service
-	resp, err := http.Get(fmt.Sprintf("https://%s/api/v1.0/agents/%s", serverDomain, agentId))
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1.0/agents/%s", serverDomain, agentId))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch agent"})
 		return
@@ -228,11 +249,21 @@ func getAgent(c *gin.Context) {
 }
 
 func deleteAgent(c *gin.Context) {
-	serverDomain := c.Param("server_domain")
+	peer_id := c.Param("peer_id")
 	agentId := c.Param("agentId")
 
+	var serverDomain string
+	db := dbconfig.GetDb()
+
+	var node models.Node
+	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		return
+	}
+	serverDomain = node.Host
+
 	// Forward request to upstream service
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("https://%s/api/v1.0/agents/%s", serverDomain, agentId), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/api/v1.0/agents/%s", serverDomain, agentId), nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
@@ -266,12 +297,22 @@ func deleteAgent(c *gin.Context) {
 }
 
 func manageAgent(c *gin.Context) {
-	serverDomain := c.Param("server_domain")
+	peer_id := c.Param("peer_id")
 	agentId := c.Param("agentId")
 	action := c.Query("action")
 
+	var serverDomain string
+	db := dbconfig.GetDb()
+
+	var node models.Node
+	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		return
+	}
+	serverDomain = node.Host
+
 	// Forward request to upstream service
-	req, err := http.NewRequest("PATCH", fmt.Sprintf("https://%s/api/v1.0/agents/manage/%s?action=%s", serverDomain, agentId, action), nil)
+	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/api/v1.0/agents/manage/%s?action=%s", serverDomain, agentId, action), nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
@@ -302,16 +343,25 @@ func manageAgent(c *gin.Context) {
 			if err := db.Model(&models.Agent{}).Where("id = ?", agentId).Update("status", status).Error; err != nil {
 				fmt.Printf("Error updating agent status in database: %v\n", err)
 			}
-		}	
+		}
 	}
 
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
 }
 
 func getAgents(c *gin.Context) {
-	serverDomain := c.Param("server_domain")
-	// Forward request to upstream service	
-	resp, err := http.Get(fmt.Sprintf("https://%s/api/v1.0/agents", serverDomain))
+	peer_id := c.Param("peer_id")
+	// Forward request to upstream service
+	var serverDomain string
+	db := dbconfig.GetDb()
+
+	var node models.Node
+	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		return
+	}
+	serverDomain = node.Host
+	resp, err := http.Get(fmt.Sprintf("%s/api/v1.0/agents", serverDomain))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch agents"})
 		return
@@ -346,41 +396,41 @@ func getAgentsByWalletAddress(c *gin.Context) {
 
 func getCharacterFileByAgentId(c *gin.Context) {
 	agentId := c.Param("agentId")
-	
+
 	// Get wallet address from the token context
 	walletAddress, exists := c.Get(paseto.CTX_WALLET_ADDRESS)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
-	
+
 	walletAddressStr, ok := walletAddress.(string)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid wallet address format in token"})
 		return
 	}
-	
+
 	if walletAddressStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Wallet address is required"})
 		return
 	}
-	
+
 	if agentId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Agent ID is required"})
 		return
 	}
-	
+
 	var agent models.Agent
 	db := dbconfig.GetDb()
 	if err := db.Where("wallet_address = ? AND id = ?", walletAddressStr, agentId).First(&agent).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found for your wallet address"})
 		return
 	}
-	
+
 	// Return the character file data
 	c.JSON(http.StatusOK, gin.H{
-		"agent_id": agent.ID,
-		"name": agent.Name,
+		"agent_id":       agent.ID,
+		"name":           agent.Name,
 		"character_file": agent.CharacterFile,
 	})
 }
@@ -394,12 +444,12 @@ func getPublicConfig(c *gin.Context) {
 	}
 
 	type CharacterFile struct {
-		Clients []string `json:"clients"`
+		Clients  []string `json:"clients"`
 		Settings struct {
 			Secrets struct {
 				DiscordApplicationID string `json:"DISCORD_APPLICATION_ID"`
-				TwitterUsername     string `json:"TWITTER_USERNAME"`
-				TelegramBotToken    string `json:"TELEGRAM_BOT_TOKEN"`
+				TwitterUsername      string `json:"TWITTER_USERNAME"`
+				TelegramBotToken     string `json:"TELEGRAM_BOT_TOKEN"`
 			} `json:"secrets"`
 		} `json:"settings"`
 	}
@@ -407,8 +457,8 @@ func getPublicConfig(c *gin.Context) {
 	type ConfigResponse struct {
 		AgentID              string `json:"agent_id"`
 		DiscordApplicationID string `json:"discord_application_id,omitempty"`
-		TwitterUsername     string `json:"twitter_username,omitempty"`
-		TelegramBotToken    string `json:"telegram_bot_token,omitempty"`
+		TwitterUsername      string `json:"twitter_username,omitempty"`
+		TelegramBotToken     string `json:"telegram_bot_token,omitempty"`
 	}
 
 	var configs []ConfigResponse
@@ -416,7 +466,7 @@ func getPublicConfig(c *gin.Context) {
 	for _, agent := range agents {
 		var charFile CharacterFile
 		if err := json.Unmarshal([]byte(agent.CharacterFile), &charFile); err != nil {
-			continue 
+			continue
 		}
 
 		// Checking if any of the required clients are present
@@ -437,7 +487,7 @@ func getPublicConfig(c *gin.Context) {
 		if (hasDiscord && charFile.Settings.Secrets.DiscordApplicationID != "") ||
 			(hasTwitter && charFile.Settings.Secrets.TwitterUsername != "") ||
 			(hasTelegram && charFile.Settings.Secrets.TelegramBotToken != "") {
-			
+
 			config := ConfigResponse{
 				AgentID: agent.ID,
 			}

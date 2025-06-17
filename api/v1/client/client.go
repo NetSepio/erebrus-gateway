@@ -378,7 +378,7 @@ func ClientDelete() {
 
 	// Calculate the time 24 hours ago
 	cutoff := time.Now().Add(-24 * time.Hour)
-	logwrapper.Log.Infoln("🕒 Cutoff time for deletion: %s\n", cutoff)
+	logwrapper.Log.Infof("🕒 Cutoff time for deletion: %s\n", cutoff)
 
 	// Fetch records older than 24 hours with name 'app'
 	logwrapper.Log.Infoln("🔍 Fetching clients eligible for auto-delete")
