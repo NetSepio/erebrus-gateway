@@ -101,7 +101,7 @@ func addAgent(c *gin.Context) {
 
 	var node models.Node
 	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node or node not found"})
 		return
 	}
 	serverDomain = node.Host
@@ -113,6 +113,13 @@ func addAgent(c *gin.Context) {
 		return
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	fmt.Println("===== Forwarding Request =====")
+	fmt.Println("URL:", req.URL.String())
+	fmt.Println("Headers:", req.Header)
+	fmt.Println("Payload (raw multipart body):")
+	fmt.Println(body.String()) // Note: this prints raw multipart, so it's a bit messy
+	fmt.Println("===== End of Request =====")
 
 	// Send request
 	client := &http.Client{}
@@ -226,7 +233,7 @@ func getAgent(c *gin.Context) {
 
 	var node models.Node
 	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node or node not found"})
 		return
 	}
 	serverDomain = node.Host
@@ -257,7 +264,7 @@ func deleteAgent(c *gin.Context) {
 
 	var node models.Node
 	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node or node not found"})
 		return
 	}
 	serverDomain = node.Host
@@ -306,7 +313,7 @@ func manageAgent(c *gin.Context) {
 
 	var node models.Node
 	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node or node not found"})
 		return
 	}
 	serverDomain = node.Host
@@ -357,7 +364,7 @@ func getAgents(c *gin.Context) {
 
 	var node models.Node
 	if err := db.Table("nodes").Where("peer_id = ?", peer_id).First(&node).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid peer_id or node not found"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid node or node not found"})
 		return
 	}
 	serverDomain = node.Host
