@@ -17,11 +17,11 @@ import (
 func ApplyRoutes(r *gin.RouterGroup) {
 	g := r.Group("/agents")
 	{
-		g.POST("/:peer_id", addAgent)
-		g.GET("/:peer_id", getAgents)
-		g.GET("/:peer_id/:agentId", getAgent)
-		g.DELETE("/:peer_id/:agentId", deleteAgent)
-		g.PATCH("/:peer_id/:agentId", manageAgent)
+		g.POST("/:node_id", addAgent)
+		g.GET("/:node_id", getAgents)
+		g.GET("/:node_id/:agentId", getAgent)
+		g.DELETE("/:node_id/:agentId", deleteAgent)
+		g.PATCH("/:node_id/:agentId", manageAgent)
 
 		g.GET("/wallet/:wallet_address", getAgentsByWalletAddress)
 		g.GET("/public-config", getPublicConfig)
@@ -34,7 +34,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 
 func addAgent(c *gin.Context) {
 	// Get multipart form
-	peer_id := c.Param("peer_id")
+	peer_id := c.Param("node_id")
 	form, err := c.MultipartForm()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid form data"})
@@ -218,7 +218,7 @@ func addAgent(c *gin.Context) {
 }
 
 func getAgent(c *gin.Context) {
-	peer_id := c.Param("peer_id")
+	peer_id := c.Param("node_id")
 	agentId := c.Param("agentId")
 
 	var serverDomain string
@@ -249,7 +249,7 @@ func getAgent(c *gin.Context) {
 }
 
 func deleteAgent(c *gin.Context) {
-	peer_id := c.Param("peer_id")
+	peer_id := c.Param("node_id")
 	agentId := c.Param("agentId")
 
 	var serverDomain string
@@ -297,7 +297,7 @@ func deleteAgent(c *gin.Context) {
 }
 
 func manageAgent(c *gin.Context) {
-	peer_id := c.Param("peer_id")
+	peer_id := c.Param("node_id")
 	agentId := c.Param("agentId")
 	action := c.Query("action")
 
@@ -350,7 +350,7 @@ func manageAgent(c *gin.Context) {
 }
 
 func getAgents(c *gin.Context) {
-	peer_id := c.Param("peer_id")
+	peer_id := c.Param("node_id")
 	// Forward request to upstream service
 	var serverDomain string
 	db := dbconfig.GetDb()
