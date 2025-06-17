@@ -31,11 +31,10 @@ func main() {
 		logwrapper.Errorf("Error mirating to database: %v", err)
 	}
 
-	if os.Getenv("DB_HOST") == "debug" {
+	if os.Getenv("GIN_MODE") == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
 		gin.SetMode(gin.ReleaseMode)
-
 	}
 
 	// cors middleware
