@@ -535,7 +535,6 @@ func getAllAgents(c *gin.Context) {
 	var allAgents []interface{}
 	for _, node := range nodes {
 		serverDomain := node.Host
-		// print the url
 		fmt.Println("serverDomain : ", fmt.Sprintf("%s/api/v1.0/agents", serverDomain))
 		resp, err := http.Get(fmt.Sprintf("%s/api/v1.0/agents", serverDomain))
 		if err != nil {
@@ -550,7 +549,11 @@ func getAllAgents(c *gin.Context) {
 		if err := json.Unmarshal(body, &agents); err != nil {
 			continue // skip if response is not valid JSON
 		}
-		allAgents = append(allAgents, agents)
+		// Add node details along with agents
+		allAgents = append(allAgents, gin.H{
+			"node":   node,
+			"agents": agents,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"agents": allAgents})
