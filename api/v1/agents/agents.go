@@ -523,7 +523,7 @@ func getAllAgents(c *gin.Context) {
 	db := dbconfig.GetDb()
 
 	var nodes []models.Node
-	if err := db.Table("nodes").Where("status = ?", "active").Find(&nodes).Error; err != nil {
+	if err := db.Table("nodes").Where("status = ? AND node_config = ?", "active", "NEXUS").Find(&nodes).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to fetch active nodes"})
 		return
 	}
