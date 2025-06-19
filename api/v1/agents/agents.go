@@ -19,6 +19,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	{
 		g.POST("/:node_id", addAgent)
 		g.GET("/:node_id", getAgents)
+		g.GET("", getAllAgents)
 		g.GET("/:node_id/:agentId", getAgent)
 		g.DELETE("/:node_id/:agentId", deleteAgent)
 		g.PATCH("/:node_id/:agentId", manageAgent)
@@ -514,4 +515,43 @@ func getPublicConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"configs": configs})
+}
+
+func getAllAgents(c *gin.Context) {
+
+	// Forward request to upstream service
+	db := dbconfig.GetDb()
+
+	var nodes []models.Node
+	if err := db.Table("nodes").Where("status = ?", "active").Find(&nodes).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to fetch active nodes"})
+		return
+	}
+	if len(nodes) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No active nodes found"})
+		return
+	}
+
+	var allAgents []interface{}
+	for _, node := range nodes {
+		serverDomain := node.Host
+		// print the url
+		fmt.Println("serverDomain : ", fmt.Sprintf("%s/api/v1.0/agents", serverDomain))
+		resp, err := http.Get(fmt.Sprintf("%s/api/v1.0/agents", serverDomain))
+		if err != nil {
+			continue // skip this node if request fails
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue // skip this node if reading fails
+		}
+		var agents interface{}
+		if err := json.Unmarshal(body, &agents); err != nil {
+			continue // skip if response is not valid JSON
+		}
+		allAgents = append(allAgents, agents)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"agents": allAgents})
 }
