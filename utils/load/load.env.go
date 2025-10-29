@@ -19,7 +19,7 @@ type Config struct {
 	DB_USERNAME              string        `env:"DB_USERNAME,required"`
 	DB_PASSWORD              string        `env:"DB_PASSWORD,required"`
 	DB_NAME                  string        `env:"DB_NAME,required"`
-	DB_NAME2                  string        `env:"DB_NAME2"`
+	DB_NAME2                 string        `env:"DB_NAME2"`
 	DB_PORT                  int           `env:"DB_PORT,required"`
 	ALLOWED_ORIGIN           []string      `env:"ALLOWED_ORIGIN,required" envSeparator:","`
 	PASETO_SIGNED_BY         string        `env:"PASETO_SIGNED_BY,required"`

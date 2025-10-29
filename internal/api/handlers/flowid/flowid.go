@@ -26,6 +26,7 @@ func GetFlowId(c *gin.Context) {
 	userId := c.GetString(paseto.CTX_USER_ID)
 	walletAddress := c.Query("walletAddress")
 	chain_symbol := c.Query("chain")
+	platfrom := c.Query("platform")
 	var verify bool
 
 	if walletAddress == "" {
@@ -61,6 +62,9 @@ func GetFlowId(c *gin.Context) {
 		c.Set(paseto.CTX_VERIFIED, verify)
 	}
 	userAuthEULA := load.Cfg.AUTH_EULA
+	if platfrom == "cyrene" {
+		userAuthEULA = "I agree to CyreneAi Terms & Conditions specified at https://cyreneai.com/terms."
+	}
 	payload := GetFlowIdPayload{
 		FlowId: flowId,
 		Eula:   userAuthEULA,
