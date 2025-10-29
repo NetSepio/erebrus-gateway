@@ -38,7 +38,7 @@ jobs:
     needs: build_push
     runs-on: ubuntu-latest
     steps:
-    - name: Deploy on PROD server
+    - name: Deploy on Prodduction server
       if: github.ref == 'refs/heads/main' 
       uses: appleboy/ssh-action@v0.1.7
       with:         
@@ -55,24 +55,8 @@ jobs:
           echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
           docker pull ghcr.io/netsepio/gateway:main
           docker run --restart=on-failure:14 --dns=1.1.1.1 --name="gateway" --env-file=.env -p 3001:3000 --net=netsepio_prod_network -v "$(pwd)/identity.key:/app/secret/identity.key" -d ghcr.io/netsepio/gateway:main
-          
-    - name: Deploy on PROD server 
-      if: github.ref == 'refs/heads/aws_prod' 
-      uses: appleboy/ssh-action@v0.1.7
-      with:         
-        host: ${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}
-        username: ${{ secrets.AWS_REMOTE_SERVER_USERNAME }}
-        key:  ${{ secrets.AWS_REMOTE_SERVER_KEY }}
-        port: ${{ secrets.AWS_SSH_PORT }} 
-        script: |
-          pwd
-          cd gateway
-          docker stop gateway && docker rm gateway && docker image rm ghcr.io/netsepio/gateway:aws_prod
-          echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
-          docker pull ghcr.io/netsepio/gateway:aws_prod
-          docker run --restart=on-failure:14 --dns=1.1.1.1 --name="gateway" --env-file=.env -p 3000:3000 --net=netsepio_prod_network -d ghcr.io/netsepio/gateway:aws_prod
 
-    - name: Deploy on DEV server V1.1 
+    - name: Deploy on Dev server from V1.1 
       if: github.ref == 'refs/heads/v1.1' 
       uses: appleboy/ssh-action@v0.1.7
       with:         
