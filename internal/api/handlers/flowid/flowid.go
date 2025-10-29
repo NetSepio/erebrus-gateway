@@ -19,7 +19,7 @@ func ApplyRoutes(r *gin.RouterGroup) {
 	{
 		g.Use(paseto.PASETO(true))
 		g.GET("", GetFlowId)
-		g.GET("/cyreneai", GetFlowId)
+		g.GET("/cyreneai", GetFlowIdForCyreneAi)
 	}
 }
 
