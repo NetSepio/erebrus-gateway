@@ -1,0 +1,246 @@
+openapi: 3.0.3
+info:
+  title: Erebrus Gateway API v2
+  version: 2.0.0
+  description: |
+    Public API of the Erebrus gateway: auth, accounts, node discovery, VPN
+    client provisioning, USDC subscriptions, organizations, hosted apps, and
+    admin. FROZEN (v2.0): additive changes only.
+
+    Auth modes:
+      - User PASETO (wallet-signature or social login) — Authorization: Bearer
+      - Org API key — X-Api-Key header (org-scoped routes; metered)
+      - Node PASETO — node registration + WS upgrade only
+      - Admin = user PASETO with role=admin claim
+servers:
+  - url: https://gateway.erebrus.network
+paths:
+  # ───────────────────────── auth ─────────────────────────
+  /api/v2/auth/flowid:
+    get:
+      summary: Start a wallet-signature login (challenge)
+      security: []
+      parameters:
+        - { name: wallet_address, in: query, required: true, schema: { type: string } }
+        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol, apt, sui] } }
+      responses:
+        "200":
+          description: Challenge to sign. The EULA text identifies **Erebrus** (never NetSepio).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flow_id: { type: string }
+                  message: { type: string, example: "I accept the Erebrus Terms of Service https://erebrus.network/terms. Challenge: <flow_id>" }
+  /api/v2/auth/authenticate:
+    post:
+      summary: Complete wallet-signature login
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flow_id, signature]
+              properties:
+                flow_id: { type: string }
+                signature: { type: string }
+                public_key: { type: string, description: "Required for sol/apt/sui" }
+      responses:
+        "200": { description: "{ token (PASETO, 24h), user_id }" }
+        "401": { description: Bad signature / expired flow id }
+  /api/v2/auth/social:
+    post:
+      summary: Google/Apple sign-in (mobile)
+      security: []
+      responses: { "200": { description: "{ token, user_id } — verifies provider id_token" } }
+  /api/v2/auth/email:
+    post:
+      summary: Request email OTP / magic link
+      security: []
+      responses: { "200": { description: OTP sent } }
+  /api/v2/auth/email/verify:
+    post:
+      summary: Exchange OTP/magic-link for PASETO
+      security: []
+      responses: { "200": { description: "{ token, user_id }" } }
+
+  # ───────────────────────── account ─────────────────────────
+  /api/v2/account/profile:
+    get: { summary: Get profile, responses: { "200": { description: "User profile incl. wallet, chain, role, linked socials" } } }
+    patch: { summary: Update profile, responses: { "200": { description: Updated } } }
+
+  # ───────────────────────── nodes (discovery) ─────────────────────────
+  /api/v2/nodes:
+    get:
+      summary: List active nodes (cached in Redis, 10s TTL)
+      security: []
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [online, offline, draining], default: online } }
+      responses:
+        "200":
+          description: Public node directory — no raw IPs for stealth safety beyond connection endpoints
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NodePublic" }
+  /api/v2/nodes/register:
+    post:
+      summary: Node registration (challenge + signed response → node PASETO)
+      security: []
+      description: Two-step like user auth; node signs with its mnemonic-derived wallet key. Records identity{peer_id, did, ip_hash}, spec, capabilities.
+      responses: { "200": { description: "{ node_token (PASETO, role=node) }" } }
+  /api/v2/nodes/ws:
+    get:
+      summary: WebSocket upgrade for the node control plane
+      description: See ws-protocol.md (authoritative). Node PASETO required.
+      responses: { "101": { description: Switching protocols } }
+
+  # ───────────────────────── vpn clients ─────────────────────────
+  /api/v2/vpn/clients:
+    get:
+      summary: List my VPN clients
+      responses: { "200": { description: Clients with node/region/status } }
+    post:
+      summary: Provision a VPN client on a node
+      description: |
+        Requires entitlement (active subscription/trial, or org API key).
+        Flow: pending row committed → PUT node /api/v2/peers/{uuid} (10s
+        timeout, 2 retries, idempotent) → active. Returns the full credential
+        bundle: WireGuard conf (with REPLACE_WITH_PRIVATE_KEY placeholder),
+        vless://, hysteria2://, and a complete sing-box profile with
+        "auto" (urltest: wg→vless→hy2) and "stealth" (vless→hy2) groups.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, node_id, wg_public_key]
+              properties:
+                name: { type: string }
+                node_id: { type: string }
+                wg_public_key: { type: string }
+                wg_preshared_key: { type: string }
+                idempotency_key: { type: string }
+      responses:
+        "201": { description: Credential bundle }
+        "402": { description: No active entitlement }
+        "409": { description: Node draining or client limit reached }
+        "502": { description: Node unreachable — no client created }
+  /api/v2/vpn/clients/{id}:
+    delete: { summary: Delete client (gateway + node), responses: { "204": { description: Deleted } } }
+  /api/v2/vpn/clients/{id}/config:
+    get:
+      summary: Re-fetch credential bundle (replaces v1 Walrus/PIN flow)
+      description: Authenticated proxy to node GET /api/v2/peers/{id}/credentials. Owner or admin only.
+      responses: { "200": { description: Credential bundle }, "404": { description: Not found } }
+
+  # ───────────────────────── subscriptions & payments ─────────────────────────
+  /api/v2/subscriptions/plans:
+    get: { summary: List plans (price in USDC), security: [], responses: { "200": { description: Plans } } }
+  /api/v2/subscriptions:
+    get: { summary: My subscription + entitlement state, responses: { "200": { description: "status, source(crypto|nft|trial|admin), period end" } } }
+  /api/v2/subscriptions/trial:
+    post: { summary: Start one-time free trial, responses: { "201": { description: Trial active }, "409": { description: Already used } } }
+  /api/v2/payments:
+    post:
+      summary: Create a USDC payment request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id, chain]
+              properties:
+                plan_id: { type: string }
+                chain: { type: string, enum: [solana, base] }
+      responses:
+        "201":
+          description: Pay this via Reown AppKit, then confirm
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_id: { type: string }
+                  amount_usdc: { type: string, example: "9.99" }
+                  chain: { type: string }
+                  treasury_address: { type: string }
+                  reference: { type: string, description: "Solana: reference pubkey to include; Base: value to embed/expected exact amount" }
+                  expires_at: { type: integer, format: int64 }
+  /api/v2/payments/{id}/confirm:
+    post:
+      summary: Submit tx hash for on-chain verification
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [tx_hash], properties: { tx_hash: { type: string } } }
+      responses:
+        "200": { description: Confirmed — subscription activated }
+        "202": { description: Pending finality — background re-verifier will settle }
+        "409": { description: Tx already used / mismatch }
+
+  # ───────────────────────── organizations ─────────────────────────
+  /api/v2/orgs:
+    post: { summary: Create organization, responses: { "201": { description: Org created, caller is owner } } }
+  /api/v2/orgs/{id}/apikeys:
+    post: { summary: Issue API key (returned ONCE, stored hashed), responses: { "201": { description: "{ api_key }" } } }
+    get: { summary: List keys (prefixes only), responses: { "200": { description: Keys } } }
+  /api/v2/orgs/{id}/apikeys/{keyId}:
+    delete: { summary: Revoke key, responses: { "204": { description: Revoked } } }
+  /api/v2/orgs/{id}/usage:
+    get:
+      summary: Usage for a billing period
+      parameters: [{ name: period, in: query, schema: { type: string, example: "2026-06" } }]
+      responses: { "200": { description: "clients, api_calls, bandwidth_bytes, amount_due_usdc" } }
+  /api/v2/orgs/{id}/clients:
+    get: { summary: VPN clients provisioned under this org, responses: { "200": { description: Clients } } }
+  /api/v2/orgs/{id}/invoices:
+    get: { summary: Monthly invoices (settled in USDC via /payments), responses: { "200": { description: Invoices } } }
+
+  # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
+  /api/v2/apps:
+    get: { summary: My hosted apps, responses: { "200": { description: Apps } } }
+    post:
+      summary: Register an app exposure
+      description: |
+        Requires an active VPN client on a node with app_hosting capability.
+        visibility=global requires explicit T&C acceptance (timestamp stored).
+        Subdomain unique per node domain. Gateway dispatches sync_apps to node.
+      responses: { "201": { description: App registered }, "409": { description: Subdomain taken / node lacks capability } }
+  /api/v2/apps/{id}:
+    delete: { summary: Remove app exposure, responses: { "204": { description: Removed } } }
+
+  # ───────────────────────── admin ─────────────────────────
+  /api/v2/admin/stats:
+    get:
+      summary: Platform overview (admin)
+      responses:
+        "200":
+          description: |
+            nodes{online,offline,by_region}, users{total,active_30d,by_platform},
+            subscriptions{by_plan,by_source}, orgs{count}, traffic{bandwidth_30d},
+            payments{confirmed_30d_usdc}
+  /api/v2/admin/nodes: { get: { summary: All nodes incl. heartbeat snapshot (paginated/filterable), responses: { "200": { description: Nodes } } } }
+  /api/v2/admin/users: { get: { summary: Users (paginated, searchable), responses: { "200": { description: Users } } } }
+  /api/v2/admin/subscriptions: { get: { summary: Subscriptions (paginated), responses: { "200": { description: Subscriptions } } } }
+  /api/v2/admin/orgs: { get: { summary: Orgs + usage rollups, responses: { "200": { description: Orgs } } } }
+  /api/v2/admin/activity: { get: { summary: Activity/device analytics (usage patterns), responses: { "200": { description: Aggregates } } } }
+  /api/v2/admin/apps: { get: { summary: All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin), responses: { "200": { description: Apps } } } }
+components:
+  schemas:
+    NodePublic:
+      type: object
+      properties:
+        node_id: { type: string }
+        name: { type: string }
+        did: { type: string }
+        region: { type: string }
+        status: { type: string }
+        protocols: { type: array, items: { type: string } }
+        capabilities: { type: object }
+        speedtest: { type: object, properties: { download_mbps: { type: number }, upload_mbps: { type: number }, latency_ms: { type: number } } }
+        load_pct: { type: number, description: Coarse load indicator for picker UX }
