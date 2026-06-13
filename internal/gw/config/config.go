@@ -40,10 +40,12 @@ type Config struct {
 	RedisHost     string `env:"REDIS_HOST" envDefault:"localhost:6379"`
 	RedisPassword string `env:"REDIS_PASSWORD"`
 
-	// entitlement / NFT gating (no money in v2.0 — trial + NFT ownership only)
-	NFTGateChain    string        `env:"NFT_GATE_CHAIN" envDefault:"evm"`
-	NFTGateContract string        `env:"NFT_GATE_CONTRACT"` // ERC-721 collection; empty = NFT gating disabled
-	NFTGateRPCURL   string        `env:"NFT_GATE_RPC_URL"`
+	// entitlement / NFT gating (no money in v2.0 — trial + NFT ownership only).
+	// v2.0 targets Solana Metaplex Core; NFT_GATE_CONTRACT is the collection
+	// address (Solana) or ERC-721 contract (EVM, future).
+	NFTGateChain    string        `env:"NFT_GATE_CHAIN" envDefault:"solana"`
+	NFTGateContract string        `env:"NFT_GATE_CONTRACT"`                 // collection address; empty = NFT gating disabled
+	NFTGateRPCURL   string        `env:"NFT_GATE_RPC_URL"`                  // Solana: a DAS-capable endpoint (e.g. Helius)
 	NFTGatePeriod   time.Duration `env:"NFT_GATE_PERIOD" envDefault:"720h"` // re-verify window (30d)
 	NFTGatePlanID   string        `env:"NFT_GATE_PLAN_ID" envDefault:"pro"`
 
