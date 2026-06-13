@@ -40,13 +40,12 @@ type Config struct {
 	RedisHost     string `env:"REDIS_HOST" envDefault:"localhost:6379"`
 	RedisPassword string `env:"REDIS_PASSWORD"`
 
-	// payments
-	SolanaRPCURL         string `env:"SOLANA_RPC_URL"`
-	SolanaTreasury       string `env:"SOLANA_TREASURY_ADDRESS"`
-	BaseRPCURL           string `env:"BASE_RPC_URL"`
-	BaseTreasury         string `env:"BASE_TREASURY_ADDRESS"`
-	BaseMinConfirmations int    `env:"BASE_MIN_CONFIRMATIONS" envDefault:"6"`
-	PaymentExpiryMinutes int    `env:"PAYMENT_EXPIRY_MINUTES" envDefault:"30"`
+	// entitlement / NFT gating (no money in v2.0 — trial + NFT ownership only)
+	NFTGateChain    string        `env:"NFT_GATE_CHAIN" envDefault:"evm"`
+	NFTGateContract string        `env:"NFT_GATE_CONTRACT"` // ERC-721 collection; empty = NFT gating disabled
+	NFTGateRPCURL   string        `env:"NFT_GATE_RPC_URL"`
+	NFTGatePeriod   time.Duration `env:"NFT_GATE_PERIOD" envDefault:"720h"` // re-verify window (30d)
+	NFTGatePlanID   string        `env:"NFT_GATE_PLAN_ID" envDefault:"pro"`
 
 	// email
 	ResendAPIKey string `env:"RESEND_API_KEY"`

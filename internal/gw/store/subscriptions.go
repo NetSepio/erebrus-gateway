@@ -81,6 +81,26 @@ func (s *Store) StartTrial(ctx context.Context, userID, planID string, period ti
 	return &sub, nil
 }
 
+// GrantNFTSubscription creates or refreshes a user's NFT-gated subscription,
+// extending the period on each successful ownership re-check. One per user
+// (idx_subs_one_nft).
+func (s *Store) GrantNFTSubscription(ctx context.Context, userID, planID string, period time.Duration) (*Subscription, error) {
+	end := time.Now().Add(period)
+	var sub Subscription
+	err := s.db.QueryRowContext(ctx,
+		`INSERT INTO subscriptions (user_id, plan_id, source, status, current_period_end)
+		 VALUES ($1, $2, 'nft', 'active', $3)
+		 ON CONFLICT (user_id) WHERE source = 'nft'
+		 DO UPDATE SET status='active', plan_id=EXCLUDED.plan_id, current_period_end=EXCLUDED.current_period_end
+		 RETURNING id, plan_id, source, status, current_period_end, created_at`,
+		userID, planID, end).
+		Scan(&sub.ID, &sub.PlanID, &sub.Source, &sub.Status, &sub.CurrentPeriodEnd, &sub.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
 // CountActiveSubscriptionsByPlan returns active subscription counts per plan (admin).
 func (s *Store) CountActiveSubscriptionsByPlan(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx,

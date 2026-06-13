@@ -57,8 +57,14 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 		}
 	}
 
-	// Resolve node API endpoint.
-	baseURL, nodeToken, status, err := s.store.NodeAPI(c, req.NodeID)
+	s.doProvision(c, uid, "", req.NodeID, req.Name, req.WGPublicKey, req.WGPresharedKey)
+}
+
+// doProvision performs the node-proxied provisioning steps shared by the user
+// and org (API-key) paths: resolve the node, commit a pending client, call the
+// node (idempotent, retried), then activate. Writes the response.
+func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPSK string) {
+	baseURL, nodeToken, status, err := s.store.NodeAPI(c, nodeID)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "node not found")
 		return
@@ -77,14 +83,13 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 	}
 
 	// Commit a pending client row; its id is the peer id used on the node.
-	clientID, err := s.store.CreateClient(c, uid, "", req.NodeID, req.Name, req.WGPublicKey)
+	clientID, err := s.store.CreateClient(c, uid, org, nodeID, name, wgPub)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to create client")
 		return
 	}
-
 	bundle, err := s.nodes.UpsertPeer(c, baseURL, nodeToken, clientID, nodeclient.PeerRequest{
-		Name: req.Name, WGPublicKey: req.WGPublicKey, WGPresharedKey: req.WGPresharedKey,
+		Name: name, WGPublicKey: wgPub, WGPresharedKey: wgPSK,
 	})
 	if err != nil {
 		_ = s.store.DeleteClient(c, clientID) // roll back the pending row

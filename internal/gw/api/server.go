@@ -8,6 +8,7 @@ import (
 
 	"github.com/NetSepio/gateway/internal/gw/cache"
 	"github.com/NetSepio/gateway/internal/gw/config"
+	"github.com/NetSepio/gateway/internal/gw/nftgate"
 	"github.com/NetSepio/gateway/internal/gw/nodeclient"
 	"github.com/NetSepio/gateway/internal/gw/nodehub"
 	"github.com/NetSepio/gateway/internal/gw/store"
@@ -24,11 +25,12 @@ type Server struct {
 	hub    *nodehub.Hub
 	cache  *cache.Cache
 	nodes  *nodeclient.Client
+	nft    nftgate.Checker
 }
 
 // New builds the API server.
-func New(cfg *config.Config, st *store.Store, tm *token.Manager, hub *nodehub.Hub, c *cache.Cache) *Server {
-	return &Server{cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New()}
+func New(cfg *config.Config, st *store.Store, tm *token.Manager, hub *nodehub.Hub, c *cache.Cache, nft nftgate.Checker) *Server {
+	return &Server{cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(), nft: nft}
 }
 
 // Router wires all routes.
@@ -76,10 +78,31 @@ func (s *Server) Router() *gin.Engine {
 		user.DELETE("/vpn/clients/:id", s.handleDeleteClient)
 		user.GET("/vpn/clients/:id/config", s.handleClientConfig)
 
+		// entitlement: trial + NFT gating only (no money in v2.0)
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)
-		user.POST("/payments", s.handleCreatePayment)
-		user.POST("/payments/:id/confirm", s.handleConfirmPayment)
+		user.POST("/subscriptions/nft/refresh", s.handleNFTRefresh)
+
+		// organizations (owner/member, user-authed management)
+		user.POST("/orgs", s.handleCreateOrg)
+		user.GET("/orgs", s.handleListOrgs)
+		user.GET("/orgs/:id", s.handleGetOrg)
+		user.GET("/orgs/:id/members", s.handleListMembers)
+		user.POST("/orgs/:id/members", s.handleAddMember)
+		user.GET("/orgs/:id/apikeys", s.handleListAPIKeys)
+		user.POST("/orgs/:id/apikeys", s.handleCreateAPIKey)
+		user.DELETE("/orgs/:id/apikeys/:keyId", s.handleRevokeAPIKey)
+		user.GET("/orgs/:id/usage", s.handleOrgUsage)
+		user.GET("/orgs/:id/clients", s.handleOrgClients)
+	}
+
+	// org programmatic access (X-Api-Key) — scoped to the key's org
+	orgapi := v2.Group("/org")
+	orgapi.Use(s.authAPIKey())
+	{
+		orgapi.POST("/vpn/clients", s.handleOrgProvisionClient)
+		orgapi.GET("/vpn/clients", s.handleOrgListClients)
+		orgapi.GET("/usage", s.handleOrgSelfUsage)
 	}
 
 	// admin routes
@@ -90,6 +113,8 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/nodes", s.handleAdminNodes)
 		admin.GET("/users", s.handleAdminUsers)
 		admin.GET("/subscriptions", s.handleAdminSubscriptions)
+		admin.GET("/orgs", s.handleAdminOrgs)
+		admin.GET("/orgs/:id/usage", s.handleAdminOrgUsage)
 		admin.POST("/nodes/:id/command", s.handleAdminNodeCommand)
 	}
 

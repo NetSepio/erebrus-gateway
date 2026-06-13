@@ -13,6 +13,7 @@ const (
 	ctxUserID = "user_id"
 	ctxWallet = "wallet"
 	ctxRole   = "role"
+	ctxOrgID  = "org_id"
 )
 
 // authUser validates a user/admin PASETO bearer token and stores identity in
@@ -54,6 +55,28 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// authAPIKey validates an org API key (X-Api-Key), sets the org in context, and
+// meters the call. Used for programmatic, org-scoped routes.
+func (s *Server) authAPIKey() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := strings.TrimSpace(c.GetHeader("X-Api-Key"))
+		if key == "" {
+			fail(c, http.StatusUnauthorized, "X-Api-Key header required")
+			return
+		}
+		orgID, err := s.store.LookupAPIKey(c, key)
+		if err != nil {
+			fail(c, http.StatusUnauthorized, "invalid or revoked API key")
+			return
+		}
+		c.Set(ctxOrgID, orgID)
+		s.store.IncrAPICall(c, orgID) // best-effort metering
+		c.Next()
+	}
+}
+
+func orgID(c *gin.Context) string { return c.GetString(ctxOrgID) }
 
 func bearer(c *gin.Context) string {
 	h := c.GetHeader("Authorization")
