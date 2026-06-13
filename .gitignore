@@ -1,4 +1,7 @@
 .env
+# compiled binaries (root build output)
+/gateway
+/server
 settings.json
 .vscode/launch.json
 # secrets — never commit key material
