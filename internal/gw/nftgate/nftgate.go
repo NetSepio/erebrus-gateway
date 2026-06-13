@@ -1,7 +1,8 @@
 // Package nftgate checks whether a wallet owns the gating NFT collection, used
-// as a (free) entitlement source alongside the trial. v2.0 supports EVM
-// ERC-721 collections via a JSON-RPC balanceOf call; other chains fall back to
-// "disabled" until implemented.
+// as a (free) entitlement source alongside the trial. v2.0 targets Solana
+// Metaplex Core (mpl-core) via the DAS searchAssets RPC; an EVM ERC-721
+// balanceOf checker is also provided for future use. Unconfigured or
+// unsupported chains fall back to "disabled".
 package nftgate
 
 import (
@@ -30,6 +31,8 @@ func New(chain, rpcURL, contract string) Checker {
 		return disabled{}
 	}
 	switch chain {
+	case "solana", "sol":
+		return newSolanaCore(rpcURL, contract)
 	case "evm":
 		return &evmChecker{rpcURL: rpcURL, contract: contract, http: &http.Client{Timeout: 8 * time.Second}}
 	default:
