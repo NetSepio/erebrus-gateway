@@ -19,6 +19,7 @@ import (
 	"github.com/NetSepio/gateway/internal/gw/api"
 	"github.com/NetSepio/gateway/internal/gw/cache"
 	"github.com/NetSepio/gateway/internal/gw/config"
+	"github.com/NetSepio/gateway/internal/gw/nftgate"
 	"github.com/NetSepio/gateway/internal/gw/nodehub"
 	"github.com/NetSepio/gateway/internal/gw/store"
 	"github.com/NetSepio/gateway/internal/gw/token"
@@ -72,13 +73,19 @@ func run(log *slog.Logger) error {
 	// Node control-plane hub.
 	hub := nodehub.New(st, log)
 
+	// NFT entitlement gate (disabled unless a collection + RPC are configured).
+	nft := nftgate.New(cfg.NFTGateChain, cfg.NFTGateRPCURL, cfg.NFTGateContract)
+	if nft.Enabled() {
+		log.Info("NFT gating enabled", "chain", cfg.NFTGateChain, "contract", cfg.NFTGateContract)
+	}
+
 	// Background maintenance: flip stale nodes offline, purge expired challenges.
 	go maintenance(ctx, st, log)
 
 	// HTTP server.
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,
-		Handler:           api.New(cfg, st, tokens, hub, c).Router(),
+		Handler:           api.New(cfg, st, tokens, hub, c, nft).Router(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {

@@ -12,6 +12,7 @@ import (
 func (s *Server) handleAdminStats(c *gin.Context) {
 	nodesByStatus, _ := s.store.CountNodesByStatus(c)
 	users, _ := s.store.CountUsers(c)
+	orgs, _ := s.store.CountOrgs(c)
 	subsByPlan, _ := s.store.CountActiveSubscriptionsByPlan(c)
 	since := time.Now().AddDate(0, 0, -30)
 	rx, tx, _ := s.store.TotalBandwidth(c, since)
@@ -22,6 +23,7 @@ func (s *Server) handleAdminStats(c *gin.Context) {
 			"connected": s.hub.Online(),
 		},
 		"users":         gin.H{"total": users},
+		"orgs":          gin.H{"total": orgs},
 		"subscriptions": gin.H{"by_plan": subsByPlan},
 		"traffic_30d":   gin.H{"rx_bytes": rx, "tx_bytes": tx},
 	})

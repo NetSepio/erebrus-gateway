@@ -59,6 +59,34 @@ type Subscription struct {
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
+// Org is a workspace owned by a user; members and API keys operate within it.
+type Org struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	OwnerUserID string    `json:"owner_user_id"`
+	Role        string    `json:"role,omitempty"` // caller's role, when listed for a user
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Member is a user's membership in an org.
+type Member struct {
+	UserID        string    `json:"user_id"`
+	WalletAddress string    `json:"wallet_address,omitempty"`
+	Role          string    `json:"role"`
+	AddedAt       time.Time `json:"added_at"`
+}
+
+// APIKey is an org-scoped credential (the secret is shown only once at creation).
+type APIKey struct {
+	ID         string     `json:"id"`
+	OrgID      string     `json:"org_id"`
+	Name       string     `json:"name,omitempty"`
+	Prefix     string     `json:"prefix"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
 // Client is a provisioned VPN client.
 type Client struct {
 	ID            string     `json:"id"`
