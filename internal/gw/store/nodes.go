@@ -41,13 +41,22 @@ func (s *Store) RegisterNode(ctx context.Context, r NodeRegistration) (string, e
 }
 
 // NodeAPI returns the gateway-reachable API base URL, bearer token and status
-// for a node, used when proxying provisioning calls.
+// for a node, used when proxying provisioning calls. When api_base_url was never
+// set at registration, it is derived from the node's last-reported IP.
 func (s *Store) NodeAPI(ctx context.Context, nodeID string) (baseURL, token, status string, err error) {
+	var ip string
 	err = s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(api_base_url,''), COALESCE(api_token,''), status FROM nodes WHERE id = $1`, nodeID).
-		Scan(&baseURL, &token, &status)
+		`SELECT COALESCE(api_base_url,''), COALESCE(api_token,''), status, COALESCE(ip,'')
+		 FROM nodes WHERE id = $1`, nodeID).
+		Scan(&baseURL, &token, &status, &ip)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", "", ErrNotFound
+	}
+	if err != nil {
+		return "", "", "", err
+	}
+	if baseURL == "" && ip != "" {
+		baseURL = "http://" + ip + ":9080"
 	}
 	return
 }
@@ -73,7 +82,12 @@ func (s *Store) ApplyHello(ctx context.Context, h HelloUpdate) error {
 		   ip = NULLIF($2,''), ip_hash = NULLIF($3,''), version = NULLIF($4,''),
 		   region = COALESCE(NULLIF($5,''), region),
 		   spec = $6::jsonb, capabilities = $7::jsonb, endpoints = $8::jsonb,
-		   protocols = $9, status = 'online', last_heartbeat = now(), updated_at = now()
+		   protocols = $9, status = 'online', last_heartbeat = now(), updated_at = now(),
+		   api_base_url = CASE
+		     WHEN COALESCE(api_base_url,'') = '' AND NULLIF($2,'') IS NOT NULL
+		     THEN 'http://' || $2 || ':9080'
+		     ELSE api_base_url
+		   END
 		 WHERE peer_id = $1`,
 		h.PeerID, h.IP, h.IPHash, h.Version, h.Region,
 		string(h.Spec), string(h.Capabilities), string(h.Endpoints), pq.Array(h.Protocols))
