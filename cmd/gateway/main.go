@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/NetSepio/gateway/internal/gw/api"
 	"github.com/NetSepio/gateway/internal/gw/cache"
 	"github.com/NetSepio/gateway/internal/gw/config"
+	"github.com/NetSepio/gateway/internal/gw/identity"
 	"github.com/NetSepio/gateway/internal/gw/nftgate"
 	"github.com/NetSepio/gateway/internal/gw/nodehub"
 	"github.com/NetSepio/gateway/internal/gw/store"
@@ -51,12 +53,20 @@ func run(log *slog.Logger) error {
 	defer st.Close()
 	log.Info("database ready")
 
-	// PASETO signer. Generate an ephemeral key in dev if none is configured.
-	pasetoKey := cfg.PasetoPrivateKey
-	if pasetoKey == "" {
+	// PASETO signer: explicit key, mnemonic-derived key, or ephemeral dev fallback.
+	pasetoKey, fromMnemonic, err := identity.ResolvePasetoKey(cfg.PasetoPrivateKey, cfg.Mnemonic)
+	if err != nil {
+		return fmt.Errorf("paseto key: %w", err)
+	}
+	switch {
+	case pasetoKey != "" && fromMnemonic:
+		log.Info("PASETO key derived from MNEMONIC", "path", identity.PasetoDerivationPath)
+	case pasetoKey != "":
+		log.Info("PASETO key loaded from PASETO_PRIVATE_KEY")
+	default:
 		_, sk, _ := ed25519.GenerateKey(rand.Reader)
 		pasetoKey = hex.EncodeToString(sk)
-		log.Warn("PASETO_PRIVATE_KEY not set — generated an ephemeral key; tokens will not survive restart")
+		log.Warn("PASETO_PRIVATE_KEY and MNEMONIC not set — generated an ephemeral key; tokens will not survive restart")
 	}
 	tokens, err := token.New(pasetoKey, cfg.PasetoSignedBy, cfg.PasetoExpiration)
 	if err != nil {

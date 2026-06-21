@@ -20,6 +20,7 @@ type Config struct {
 	Version       string `env:"VERSION" envDefault:"2.0.0"`
 
 	// auth
+	Mnemonic            string        `env:"MNEMONIC"` // derives PASETO key when PASETO_PRIVATE_KEY is empty
 	PasetoPrivateKey    string        `env:"PASETO_PRIVATE_KEY"`
 	PasetoExpiration    time.Duration `env:"PASETO_EXPIRATION" envDefault:"24h"`
 	PasetoSignedBy      string        `env:"PASETO_SIGNED_BY" envDefault:"Erebrus"`

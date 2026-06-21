@@ -48,7 +48,8 @@ services:
       DB_NAME: erebrus
       DB_SSLMODE: disable # local dev only — prod requires 'require'
       REDIS_HOST: redis:6379
-      # dev key — gateway refuses to start if empty; export PASETO_PRIVATE_KEY to override
+      # Stable PASETO signer: MNEMONIC (derived) or explicit PASETO_PRIVATE_KEY
+      MNEMONIC: ${GATEWAY_MNEMONIC:-}
       PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY:-}
       PASETO_EXPIRATION: 24h
       PASETO_SIGNED_BY: Erebrus
