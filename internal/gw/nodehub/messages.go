@@ -52,6 +52,7 @@ type Spec struct {
 
 // Capabilities advertises optional node features.
 type Capabilities struct {
+	AccessMode     string `json:"access_mode,omitempty"` // private | shared | public
 	AppHosting     bool   `json:"app_hosting"`
 	WildcardDomain string `json:"wildcard_domain"`
 }

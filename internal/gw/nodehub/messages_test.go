@@ -54,6 +54,28 @@ func TestParseCanonicalHello(t *testing.T) {
 	if len(h.Endpoints.VLESSReality.ShortIDs) != 1 || h.Endpoints.VLESSReality.SNI != "www.microsoft.com" {
 		t.Errorf("vless endpoint = %+v", h.Endpoints.VLESSReality)
 	}
+
+	// access_mode is optional in the canonical example but must round-trip when present.
+	var env2 Envelope
+	if err := json.Unmarshal([]byte(canonicalHello), &env2); err != nil {
+		t.Fatalf("unmarshal envelope: %v", err)
+	}
+	var h2 Hello
+	if err := json.Unmarshal(env2.Data, &h2); err != nil {
+		t.Fatalf("unmarshal hello: %v", err)
+	}
+	h2.Capabilities.AccessMode = "private"
+	caps, err := json.Marshal(h2.Capabilities)
+	if err != nil {
+		t.Fatalf("marshal capabilities: %v", err)
+	}
+	var got Capabilities
+	if err := json.Unmarshal(caps, &got); err != nil {
+		t.Fatalf("unmarshal capabilities: %v", err)
+	}
+	if got.AccessMode != "private" {
+		t.Errorf("access_mode = %q, want private", got.AccessMode)
+	}
 }
 
 func TestHeartbeatAndUsageRoundTrip(t *testing.T) {

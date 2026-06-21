@@ -1,7 +1,8 @@
 # Erebrus v2 local dev stack.
 #
-#   infra only (Phase 0+):   docker compose -f docker-compose.v2.yml up -d postgres redis
-#   full stack (Phase 3+):   docker compose -f docker-compose.v2.yml --profile full up -d --build
+#   infra only:              docker compose -f docker-compose.v2.yml up -d postgres redis
+#   gateway (no nodes yet):  docker compose -f docker-compose.v2.yml up -d --build postgres redis gateway
+#   full stack (+ nodes):    docker compose -f docker-compose.v2.yml --profile full up -d --build
 #
 # Layout assumption: erebrus-gateway/ and erebrus/ are sibling checkouts.
 
@@ -30,8 +31,9 @@ services:
       retries: 10
 
   gateway:
-    profiles: [full]
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.v2
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
