@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/NetSepio/gateway/internal/gw/nodeclient"
 	"github.com/NetSepio/gateway/internal/gw/store"
@@ -88,9 +89,8 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 		fail(c, http.StatusInternalServerError, "failed to create client")
 		return
 	}
-	bundle, err := s.nodes.UpsertPeer(c, baseURL, nodeToken, clientID, nodeclient.PeerRequest{
-		Name: name, WGPublicKey: wgPub, WGPresharedKey: wgPSK,
-	})
+	peerReq := nodeclient.PeerRequest{Name: name, WGPublicKey: wgPub, WGPresharedKey: wgPSK}
+	bundle, err := s.upsertPeerWithFallback(c, nodeID, baseURL, nodeToken, clientID, peerReq)
 	if err != nil {
 		_ = s.store.DeleteClient(c, clientID) // roll back the pending row
 		fail(c, http.StatusBadGateway, "node unreachable — no client created")
@@ -136,6 +136,45 @@ func (s *Server) handleClientConfig(c *gin.Context) {
 		return
 	}
 	c.Data(http.StatusOK, "application/json", raw)
+}
+
+// upsertPeerWithFallback tries the stored api_base_url first, then fallbacks
+// derived from the node's reported IP (covers missing/wrong registration URLs).
+func (s *Server) upsertPeerWithFallback(
+	c *gin.Context,
+	nodeID, baseURL, nodeToken, clientID string,
+	req nodeclient.PeerRequest,
+) (*nodeclient.Bundle, error) {
+	var lastErr error
+	for _, u := range nodeAPICandidates(c, s, nodeID, baseURL) {
+		bundle, err := s.nodes.UpsertPeer(c, u, nodeToken, clientID, req)
+		if err == nil {
+			return bundle, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func nodeAPICandidates(c *gin.Context, s *Server, nodeID, baseURL string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(u string) {
+		u = strings.TrimRight(strings.TrimSpace(u), "/")
+		if u == "" {
+			return
+		}
+		if _, ok := seen[u]; ok {
+			return
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	add(baseURL)
+	if node, err := s.store.GetNode(c, nodeID); err == nil && node.IP != "" {
+		add("http://" + node.IP + ":9080")
+	}
+	return out
 }
 
 // ownedClient loads the path :id client and checks the caller owns it (or is
