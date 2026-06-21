@@ -13,12 +13,12 @@ import (
 const flowIDTTL = 10 * time.Minute
 
 // challengeMessage builds the deterministic message the wallet signs. It must be
-// reproducible identically at /flowid and /authenticate.
+// reproducible identically at GET /auth and POST /auth.
 func (s *Server) challengeMessage(flowID string) string {
 	return s.cfg.AuthEULA + " Challenge: " + flowID
 }
 
-// handleFlowID starts a wallet-signature login: GET /api/v2/auth/flowid.
+// handleFlowID starts a wallet-signature login: GET /api/v2/auth.
 func (s *Server) handleFlowID(c *gin.Context) {
 	walletAddr := strings.TrimSpace(c.Query("wallet_address"))
 	chain := strings.TrimSpace(c.Query("chain"))
@@ -46,7 +46,7 @@ type authenticateReq struct {
 	PublicKey string `json:"public_key"`
 }
 
-// handleAuthenticate completes login: POST /api/v2/auth/authenticate.
+// handleAuthenticate completes login: POST /api/v2/auth.
 func (s *Server) handleAuthenticate(c *gin.Context) {
 	var req authenticateReq
 	if err := c.ShouldBindJSON(&req); err != nil || req.FlowID == "" || req.Signature == "" {

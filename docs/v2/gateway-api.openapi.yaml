@@ -16,7 +16,7 @@ servers:
   - url: https://gateway.erebrus.network
 paths:
   # ───────────────────────── auth ─────────────────────────
-  /api/v2/auth/flowid:
+  /api/v2/auth:
     get:
       summary: Start a wallet-signature login (challenge)
       security: []
@@ -33,7 +33,6 @@ paths:
                 properties:
                   flow_id: { type: string }
                   message: { type: string, example: "I accept the Erebrus Terms of Service https://erebrus.network/terms. Challenge: <flow_id>" }
-  /api/v2/auth/authenticate:
     post:
       summary: Complete wallet-signature login
       security: []
@@ -50,6 +49,33 @@ paths:
       responses:
         "200": { description: "{ token (PASETO, 24h), user_id }" }
         "401": { description: Bad signature / expired flow id }
+  /api/v2/auth/flowid:
+    get:
+      summary: "(deprecated) use GET /api/v2/auth"
+      security: []
+      deprecated: true
+      parameters:
+        - { name: wallet_address, in: query, required: true, schema: { type: string } }
+        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol, apt, sui] } }
+      responses:
+        "200": { description: Same as GET /api/v2/auth }
+  /api/v2/auth/authenticate:
+    post:
+      summary: "(deprecated) use POST /api/v2/auth"
+      security: []
+      deprecated: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flow_id, signature]
+              properties:
+                flow_id: { type: string }
+                signature: { type: string }
+                public_key: { type: string }
+      responses:
+        "200": { description: Same as POST /api/v2/auth }
   /api/v2/auth/social:
     post:
       summary: Google/Apple sign-in (mobile)

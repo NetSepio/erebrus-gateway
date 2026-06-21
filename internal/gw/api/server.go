@@ -51,9 +51,12 @@ func (s *Server) Router() *gin.Engine {
 
 	v2 := r.Group("/api/v2")
 
-	// auth (public)
+	// auth (public) — GET challenge, POST signed response
 	auth := v2.Group("/auth")
 	{
+		auth.GET("", s.handleFlowID)
+		auth.POST("", s.handleAuthenticate)
+		// deprecated v2.0 paths (existing clients)
 		auth.GET("/flowid", s.handleFlowID)
 		auth.POST("/authenticate", s.handleAuthenticate)
 	}
