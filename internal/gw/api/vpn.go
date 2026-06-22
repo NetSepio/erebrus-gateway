@@ -171,8 +171,14 @@ func nodeAPICandidates(c *gin.Context, s *Server, nodeID, baseURL string) []stri
 		out = append(out, u)
 	}
 	add(baseURL)
-	if node, err := s.store.GetNode(c, nodeID); err == nil && node.IP != "" {
-		add("http://" + node.IP + ":9080")
+	if node, err := s.store.GetNode(c, nodeID); err == nil {
+		if node.IP != "" {
+			add("http://" + node.IP + ":9080")
+		}
+		// Co-located gateway+node: public/hairpin URLs often fail from the host
+		// while the node API is listening on loopback (9080).
+		add("http://127.0.0.1:9080")
+		add("http://localhost:9080")
 	}
 	return out
 }
