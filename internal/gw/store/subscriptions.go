@@ -39,6 +39,31 @@ func (s *Store) GetPlan(ctx context.Context, id string) (*Plan, error) {
 	return &p, err
 }
 
+// HasConsumedTrial reports whether the user has ever started a v2 trial.
+func (s *Store) HasConsumedTrial(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1 AND source = 'trial')`,
+		userID).Scan(&exists)
+	return exists, err
+}
+
+// LastSubscription returns the user's most recent subscription row, if any.
+func (s *Store) LastSubscription(ctx context.Context, userID string) (*Subscription, error) {
+	var sub Subscription
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, plan_id, source, status, current_period_end, created_at
+		 FROM subscriptions
+		 WHERE user_id = $1
+		 ORDER BY current_period_end DESC NULLS LAST, created_at DESC
+		 LIMIT 1`, userID).
+		Scan(&sub.ID, &sub.PlanID, &sub.Source, &sub.Status, &sub.CurrentPeriodEnd, &sub.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &sub, err
+}
+
 // ActiveSubscription returns the user's current active, non-expired subscription
 // (the entitlement check). Returns ErrNotFound when there is none.
 func (s *Store) ActiveSubscription(ctx context.Context, userID string) (*Subscription, error) {

@@ -40,21 +40,27 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 	}
 	uid := userID(c)
 
-	// Entitlement: must have an active subscription/trial.
-	sub, err := s.store.ActiveSubscription(c, uid)
-	if errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusPaymentRequired, "no active subscription — start a trial or subscribe")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "entitlement check failed")
-		return
-	}
-	// Plan client limit.
-	if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {
-		if n, _ := s.store.CountActiveClientsByUser(c, uid); n >= plan.MaxClients {
-			fail(c, http.StatusConflict, "client limit reached for your plan")
+	// Entitlement: active subscription/trial, or admin role.
+	var sub *store.Subscription
+	if c.GetString(ctxRole) != token.RoleAdmin {
+		var err error
+		sub, err = s.store.ActiveSubscription(c, uid)
+		if errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusPaymentRequired, "no active subscription — renew on erebrus.io or hold the gating NFT")
 			return
+		}
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "entitlement check failed")
+			return
+		}
+	}
+	// Plan client limit (skipped for admin without an active sub row).
+	if sub != nil {
+		if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {
+			if n, _ := s.store.CountActiveClientsByUser(c, uid); n >= plan.MaxClients {
+				fail(c, http.StatusConflict, "client limit reached for your plan")
+				return
+			}
 		}
 	}
 

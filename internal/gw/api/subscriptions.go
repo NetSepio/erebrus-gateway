@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/NetSepio/gateway/internal/gw/store"
+	"github.com/NetSepio/gateway/internal/gw/token"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,19 +22,47 @@ func (s *Server) handlePlans(c *gin.Context) {
 
 // handleMySubscription returns the caller's current entitlement.
 func (s *Server) handleMySubscription(c *gin.Context) {
-	sub, err := s.store.ActiveSubscription(c, userID(c))
-	if errors.Is(err, store.ErrNotFound) {
-		ok(c, http.StatusOK, gin.H{"status": "none", "entitled": false, "nft_gating": s.nft.Enabled()})
+	uid := userID(c)
+	if c.GetString(ctxRole) == token.RoleAdmin {
+		ok(c, http.StatusOK, gin.H{
+			"status": "active", "entitled": true, "plan_id": "pro",
+			"source": "admin", "trial_consumed": false, "nft_gating": s.nft.Enabled(),
+		})
 		return
 	}
+
+	sub, err := s.store.ActiveSubscription(c, uid)
+	if err == nil {
+		ok(c, http.StatusOK, gin.H{
+			"status": sub.Status, "entitled": true, "plan_id": sub.PlanID,
+			"source": sub.Source, "current_period_end": sub.CurrentPeriodEnd,
+			"trial_consumed": sub.Source == "trial", "nft_gating": s.nft.Enabled(),
+		})
+		return
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusInternalServerError, "failed to load subscription")
+		return
+	}
+
+	trialConsumed, err := s.store.HasConsumedTrial(c, uid)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to load subscription")
 		return
 	}
-	ok(c, http.StatusOK, gin.H{
-		"status": sub.Status, "entitled": true, "plan_id": sub.PlanID,
-		"source": sub.Source, "current_period_end": sub.CurrentPeriodEnd,
-	})
+	resp := gin.H{
+		"entitled": false, "trial_consumed": trialConsumed,
+		"nft_gating": s.nft.Enabled(),
+	}
+	if last, err := s.store.LastSubscription(c, uid); err == nil {
+		resp["status"] = "expired"
+		resp["plan_id"] = last.PlanID
+		resp["source"] = last.Source
+		resp["current_period_end"] = last.CurrentPeriodEnd
+	} else if errors.Is(err, store.ErrNotFound) {
+		resp["status"] = "none"
+	}
+	ok(c, http.StatusOK, resp)
 }
 
 // handleStartTrial grants the one-time free trial (on the 'pro' plan).
