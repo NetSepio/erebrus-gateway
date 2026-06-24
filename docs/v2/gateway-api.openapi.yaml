@@ -13,7 +13,7 @@ info:
       - Node PASETO — node registration + WS upgrade only
       - Admin = user PASETO with role=admin claim
 servers:
-  - url: https://gateway.erebrus.network
+  - url: https://gateway.erebrus.io
 paths:
   # ───────────────────────── auth ─────────────────────────
   /api/v2/auth:
@@ -21,8 +21,18 @@ paths:
       summary: Start a wallet-signature login (challenge)
       security: []
       parameters:
-        - { name: wallet_address, in: query, required: true, schema: { type: string } }
-        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol] } }
+        - {
+            name: wallet_address,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: chain,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [evm, sol] },
+          }
       responses:
         "200":
           description: Challenge to sign. The EULA text identifies **Erebrus** (never NetSepio).
@@ -32,7 +42,11 @@ paths:
                 type: object
                 properties:
                   flow_id: { type: string }
-                  message: { type: string, example: "I accept the Erebrus Terms of Service https://erebrus.network/terms. Challenge: <flow_id>" }
+                  message:
+                    {
+                      type: string,
+                      example: "I accept the Erebrus Terms of Service https://erebrus.network/terms. Challenge: <flow_id>",
+                    }
     post:
       summary: Complete wallet-signature login
       security: []
@@ -46,7 +60,11 @@ paths:
                 flow_id: { type: string }
                 signature: { type: string }
                 public_key: { type: string, description: "Required for sol" }
-                ref: { type: string, description: "Optional referral code; binds referred_by once on first signup" }
+                ref:
+                  {
+                    type: string,
+                    description: "Optional referral code; binds referred_by once on first signup",
+                  }
       responses:
         "200": { description: "{ token (PASETO, 24h), user_id }" }
         "401": { description: Bad signature / expired flow id }
@@ -56,8 +74,18 @@ paths:
       security: []
       deprecated: true
       parameters:
-        - { name: wallet_address, in: query, required: true, schema: { type: string } }
-        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol] } }
+        - {
+            name: wallet_address,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: chain,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [evm, sol] },
+          }
       responses:
         "200": { description: Same as GET /api/v2/auth }
   /api/v2/auth/authenticate:
@@ -114,27 +142,55 @@ paths:
                 email: { type: string, format: email }
                 code: { type: string, example: "123456" }
       responses:
-        "200": { description: Updated user profile (email + email_verified=true) }
+        "200":
+          { description: Updated user profile (email + email_verified=true) }
         "401": { description: Wrong/expired code }
         "409": { description: Email already linked to another account }
         "429": { description: Too many attempts — request a new code }
 
   # ───────────────────────── account ─────────────────────────
   /api/v2/account/profile:
-    get: { summary: Get profile, responses: { "200": { description: "User profile incl. wallet, chain, role, linked socials" } } }
-    patch: { summary: Update profile, responses: { "200": { description: Updated } } }
+    get:
+      {
+        summary: Get profile,
+        responses:
+          {
+            "200":
+              {
+                description: "User profile incl. wallet, chain, role, linked socials",
+              },
+          },
+      }
+    patch:
+      {
+        summary: Update profile,
+        responses: { "200": { description: Updated } },
+      }
 
   # ───────────────────────── nodes (discovery) ─────────────────────────
   /api/v2/nodes:
     get:
       summary: List active nodes (cached in Redis, 10s TTL)
       security: []
+      description: >
+        OPTIONAL bearer enables tier-gated discovery: a node's min_tier hides it
+        from callers below that tier; an anonymous caller (tier 0) sees only the
+        open pool, admins see all.
       parameters:
         - { name: region, in: query, schema: { type: string } }
-        - { name: status, in: query, schema: { type: string, enum: [online, offline, draining], default: online } }
+        - {
+            name: status,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum: [online, offline, draining],
+                default: online,
+              },
+          }
       responses:
         "200":
-          description: Public node directory — no raw IPs; access_mode='private' nodes are excluded (public + shared only)
+          description: Public node directory — no raw IPs; access_mode='private' excluded; tier-gated by the caller
           content:
             application/json:
               schema:
@@ -151,7 +207,8 @@ paths:
         node to an org the operator belongs to (else 403).
       responses:
         "200": { description: "{ node_token (PASETO, role=node), node_id }" }
-        "403": { description: org_id given but caller is not a member of that org }
+        "403":
+          { description: org_id given but caller is not a member of that org }
   /api/v2/nodes/ws:
     get:
       summary: WebSocket upgrade for the node control plane
@@ -170,10 +227,31 @@ paths:
       description: Caller must operate the node (own it or share its org), else 403.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
-        - { name: range, in: query, schema: { type: string, default: "24h", description: "Go duration, clamped to 90 days" } }
-        - { name: step, in: query, schema: { type: string, default: "5m", description: "Downsample bucket (min 1m)" } }
+        - {
+            name: range,
+            in: query,
+            schema:
+              {
+                type: string,
+                default: "24h",
+                description: "Go duration, clamped to 90 days",
+              },
+          }
+        - {
+            name: step,
+            in: query,
+            schema:
+              {
+                type: string,
+                default: "5m",
+                description: "Downsample bucket (min 1m)",
+              },
+          }
       responses:
-        "200": { description: "{ node_id, range, step, points[] } — wg_peers, proxy_sessions, rx/tx_bytes, cpu/mem_pct per bucket" }
+        "200":
+          {
+            description: "{ node_id, range, step, points[] } — wg_peers, proxy_sessions, rx/tx_bytes, cpu/mem_pct per bucket",
+          }
         "403": { description: Not your node }
 
   # ───────────────────────── referrals (social) ─────────────────────────
@@ -193,14 +271,26 @@ paths:
                 properties:
                   code: { type: string }
                   referred_count: { type: integer }
-                  referred_by: { type: string, description: "Referrer wallet (truncated), if any" }
+                  referred_by:
+                    {
+                      type: string,
+                      description: "Referrer wallet (truncated), if any",
+                    }
                   recent:
                     type: array
                     items:
                       type: object
                       properties:
-                        wallet: { type: string, description: "Referee wallet (truncated)" }
-                        qualified: { type: boolean, description: "Referee has started their trial" }
+                        wallet:
+                          {
+                            type: string,
+                            description: "Referee wallet (truncated)",
+                          }
+                        qualified:
+                          {
+                            type: boolean,
+                            description: "Referee has started their trial",
+                          }
                         joined_at: { type: string, format: date-time }
 
   # ───────────────────────── rank / XP (social) ─────────────────────────
@@ -224,7 +314,8 @@ paths:
                   tier: { type: integer }
                   tier_name: { type: string }
                   next_tier_at: { type: integer, nullable: true }
-                  breakdown_by_kind: { type: object, additionalProperties: { type: integer } }
+                  breakdown_by_kind:
+                    { type: object, additionalProperties: { type: integer } }
   /api/v2/rank/claim:
     post:
       summary: Spend claimable XP on a reward
@@ -233,7 +324,12 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [reward], properties: { reward: { type: string, enum: [free_days] } } }
+            schema:
+              {
+                type: object,
+                required: [reward],
+                properties: { reward: { type: string, enum: [free_days] } },
+              }
       responses:
         "200": { description: "{ reward, xp_spent, days, subscription }" }
         "400": { description: Unknown reward }
@@ -242,12 +338,81 @@ paths:
     get:
       summary: Top users by XP or referrals (Redis-cached) + my rank
       parameters:
-        - { name: metric, in: query, schema: { type: string, enum: [xp, referrals], default: xp } }
-        - { name: period, in: query, schema: { type: string, enum: [all, 30d], default: all } }
+        - {
+            name: metric,
+            in: query,
+            schema: { type: string, enum: [xp, referrals], default: xp },
+          }
+        - {
+            name: period,
+            in: query,
+            schema: { type: string, enum: [all, 30d], default: all },
+          }
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
         - { name: offset, in: query, schema: { type: integer, default: 0 } }
       responses:
-        "200": { description: "{ metric, period, entries[{rank, wallet, value}], my_rank, my_value }" }
+        "200":
+          {
+            description: "{ metric, period, entries[{rank, wallet, value}], my_rank, my_value }",
+          }
+
+  # ───────────────────────── social verification + perks ─────────────────────────
+  /api/v2/social/accounts:
+    get:
+      {
+        summary: My verified social accounts,
+        responses:
+          {
+            "200":
+              { description: "[{provider, provider_id, handle, verified_at}]" },
+          },
+      }
+  /api/v2/social/telegram:
+    post:
+      summary: Verify + link a Telegram account (Login Widget payload)
+      description: "Body = the widget's key=value fields incl. hash. HMAC-verified against TELEGRAM_BOT_TOKEN. First link awards social_verified XP."
+      responses:
+        "200": { description: "{ provider, handle, newly_linked }" }
+        "401": { description: Verification failed }
+        "409": { description: Linked to another account }
+        "503": { description: TELEGRAM_BOT_TOKEN not configured }
+  /api/v2/social/x:
+    post:
+      summary: Verify + link an X account (OAuth2 access token)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                required: [access_token],
+                properties: { access_token: { type: string } },
+              }
+      responses:
+        "200": { description: "{ provider, handle, newly_linked }" }
+        "401": { description: Verification failed }
+        "409": { description: Linked to another account }
+  /api/v2/perks:
+    get:
+      {
+        summary: Perk catalog,
+        tier-annotated (unlocked/granted),
+        responses:
+          {
+            "200":
+              {
+                description: "{ tier, perks[{id, name, type, min_tier, unlocked, granted}] }",
+              },
+          },
+      }
+  /api/v2/perks/me:
+    get:
+      {
+        summary: My granted perks,
+        responses:
+          { "200": { description: "[{perk_id, name, type, granted_at}]" } },
+      }
 
   # ───────────────────────── vpn clients ─────────────────────────
   /api/v2/vpn/clients:
@@ -281,16 +446,29 @@ paths:
         "409": { description: Node draining or client limit reached }
         "502": { description: Node unreachable — no client created }
   /api/v2/vpn/clients/{id}:
-    delete: { summary: Delete client (gateway + node), responses: { "204": { description: Deleted } } }
+    delete:
+      {
+        summary: Delete client (gateway + node),
+        responses: { "204": { description: Deleted } },
+      }
   /api/v2/vpn/clients/{id}/config:
     get:
       summary: Re-fetch credential bundle (replaces v1 Walrus/PIN flow)
       description: Authenticated proxy to node GET /api/v2/peers/{id}/credentials. Owner or admin only.
-      responses: { "200": { description: Credential bundle }, "404": { description: Not found } }
+      responses:
+        {
+          "200": { description: Credential bundle },
+          "404": { description: Not found },
+        }
 
   # ───────────────────────── subscriptions & payments ─────────────────────────
   /api/v2/subscriptions/plans:
-    get: { summary: List plans (price in USDC), security: [], responses: { "200": { description: Plans } } }
+    get:
+      {
+        summary: List plans (price in USDC),
+        security: [],
+        responses: { "200": { description: Plans } },
+      }
   # No money in v2.0 (locked): entitlement = trial OR NFT (OR rank-granted free
   # days, future). The USDC /payments routes were removed; crypto_payments stays
   # in the schema for a future paid tier.
@@ -307,13 +485,35 @@ paths:
                 properties:
                   status: { type: string, enum: [active, expired, none] }
                   entitled: { type: boolean }
-                  source: { type: string, enum: [trial, nft, admin, rank], description: "What grants the entitlement" }
+                  source:
+                    {
+                      type: string,
+                      enum: [trial, nft, admin, rank],
+                      description: "What grants the entitlement",
+                    }
                   plan_id: { type: string }
-                  trial_consumed: { type: boolean, description: "Whether the user ever started their one trial" }
-                  current_period_end: { type: string, format: date-time, nullable: true }
-                  nft_gating: { type: boolean, description: "Whether NFT gating is configured on this gateway" }
+                  trial_consumed:
+                    {
+                      type: boolean,
+                      description: "Whether the user ever started their one trial",
+                    }
+                  current_period_end:
+                    { type: string, format: date-time, nullable: true }
+                  nft_gating:
+                    {
+                      type: boolean,
+                      description: "Whether NFT gating is configured on this gateway",
+                    }
   /api/v2/subscriptions/trial:
-    post: { summary: "Start the one-time free trial (7 days, plan 'pro')", responses: { "201": { description: Trial active }, "409": { description: Already used } } }
+    post:
+      {
+        summary: "Start the one-time free trial (7 days, plan 'pro')",
+        responses:
+          {
+            "201": { description: Trial active },
+            "409": { description: Already used },
+          },
+      }
   /api/v2/subscriptions/nft/refresh:
     post:
       summary: Verify the gating NFT and grant/refresh a 30-day entitlement
@@ -330,34 +530,78 @@ paths:
 
   # ───────────────────────── organizations ─────────────────────────
   /api/v2/orgs:
-    post: { summary: Create organization, responses: { "201": { description: Org created, caller is owner } } }
+    post:
+      {
+        summary: Create organization,
+        responses: { "201": { description: Org created, caller is owner } },
+      }
   /api/v2/orgs/{id}/apikeys:
-    post: { summary: Issue API key (returned ONCE, stored hashed), responses: { "201": { description: "{ api_key }" } } }
-    get: { summary: List keys (prefixes only), responses: { "200": { description: Keys } } }
+    post:
+      {
+        summary: Issue API key (returned ONCE,
+        stored hashed),
+        responses: { "201": { description: "{ api_key }" } },
+      }
+    get:
+      {
+        summary: List keys (prefixes only),
+        responses: { "200": { description: Keys } },
+      }
   /api/v2/orgs/{id}/apikeys/{keyId}:
-    delete: { summary: Revoke key, responses: { "204": { description: Revoked } } }
+    delete:
+      { summary: Revoke key, responses: { "204": { description: Revoked } } }
   /api/v2/orgs/{id}/usage:
     get:
       summary: Usage for a billing period
-      parameters: [{ name: period, in: query, schema: { type: string, example: "2026-06" } }]
-      responses: { "200": { description: "clients, api_calls, bandwidth_bytes, amount_due_usdc" } }
+      parameters:
+        [
+          {
+            name: period,
+            in: query,
+            schema: { type: string, example: "2026-06" },
+          },
+        ]
+      responses:
+        {
+          "200":
+            {
+              description: "clients, api_calls, bandwidth_bytes, amount_due_usdc",
+            },
+        }
   /api/v2/orgs/{id}/clients:
-    get: { summary: VPN clients provisioned under this org, responses: { "200": { description: Clients } } }
+    get:
+      {
+        summary: VPN clients provisioned under this org,
+        responses: { "200": { description: Clients } },
+      }
   /api/v2/orgs/{id}/invoices:
-    get: { summary: Monthly invoices (settled in USDC via /payments), responses: { "200": { description: Invoices } } }
+    get:
+      {
+        summary: Monthly invoices (settled in USDC via /payments),
+        responses: { "200": { description: Invoices } },
+      }
 
   # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
   /api/v2/apps:
-    get: { summary: My hosted apps, responses: { "200": { description: Apps } } }
+    get:
+      { summary: My hosted apps, responses: { "200": { description: Apps } } }
     post:
       summary: Register an app exposure
       description: |
         Requires an active VPN client on a node with app_hosting capability.
         visibility=global requires explicit T&C acceptance (timestamp stored).
         Subdomain unique per node domain. Gateway dispatches sync_apps to node.
-      responses: { "201": { description: App registered }, "409": { description: Subdomain taken / node lacks capability } }
+      responses:
+        {
+          "201": { description: App registered },
+          "409": { description: Subdomain taken / node lacks capability },
+        }
   /api/v2/apps/{id}:
-    delete: { summary: Remove app exposure, responses: { "204": { description: Removed } } }
+    delete:
+      {
+        summary: Remove app exposure,
+        responses: { "204": { description: Removed } },
+      }
 
   # ───────────────────────── admin ─────────────────────────
   /api/v2/admin/stats:
@@ -369,13 +613,96 @@ paths:
             nodes{online,offline,by_region}, users{total,active_30d,by_platform},
             subscriptions{by_plan,by_source}, orgs{count}, traffic{bandwidth_30d},
             payments{confirmed_30d_usdc}
-  /api/v2/admin/nodes: { get: { summary: All nodes incl. heartbeat snapshot (paginated/filterable), responses: { "200": { description: Nodes } } } }
-  /api/v2/admin/nodes/{id}/metrics: { get: { summary: Time-series metrics for any node (range/step like operator), responses: { "200": { description: "{ node_id, range, step, points[] }" } } } }
-  /api/v2/admin/users: { get: { summary: Users (paginated, searchable), responses: { "200": { description: Users } } } }
-  /api/v2/admin/subscriptions: { get: { summary: Subscriptions (paginated), responses: { "200": { description: Subscriptions } } } }
-  /api/v2/admin/orgs: { get: { summary: Orgs + usage rollups, responses: { "200": { description: Orgs } } } }
-  /api/v2/admin/activity: { get: { summary: Activity/device analytics (usage patterns), responses: { "200": { description: Aggregates } } } }
-  /api/v2/admin/apps: { get: { summary: "All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin)", responses: { "200": { description: Apps } } } }
+  /api/v2/admin/nodes:
+    {
+      get:
+        {
+          summary: All nodes incl. heartbeat snapshot (paginated/filterable),
+          responses: { "200": { description: Nodes } },
+        },
+    }
+  /api/v2/admin/nodes/{id}/metrics:
+    {
+      get:
+        {
+          summary: Time-series metrics for any node (range/step like operator),
+          responses:
+            { "200": { description: "{ node_id, range, step, points[] }" } },
+        },
+    }
+  /api/v2/admin/nodes/{id}/min_tier:
+    {
+      post:
+        {
+          summary: "Set a node's premium-pool tier gate",
+          responses:
+            {
+              "200": { description: "{ node_id, min_tier }" },
+              "404": { description: Node not found },
+            },
+        },
+    }
+  /api/v2/admin/perks:
+    {
+      post:
+        {
+          summary: "Create/update a catalog perk (type nft|xp|free_days|node_pool)",
+          responses: { "200": { description: Saved } },
+        },
+    }
+  /api/v2/admin/perks/{id}/grant:
+    {
+      post:
+        {
+          summary: "Grant a perk to a user (by user_id or wallet)",
+          responses:
+            {
+              "200": { description: Granted },
+              "404": { description: No user for wallet },
+            },
+        },
+    }
+  /api/v2/admin/users:
+    {
+      get:
+        {
+          summary: Users (paginated,
+          searchable),
+          responses: { "200": { description: Users } },
+        },
+    }
+  /api/v2/admin/subscriptions:
+    {
+      get:
+        {
+          summary: Subscriptions (paginated),
+          responses: { "200": { description: Subscriptions } },
+        },
+    }
+  /api/v2/admin/orgs:
+    {
+      get:
+        {
+          summary: Orgs + usage rollups,
+          responses: { "200": { description: Orgs } },
+        },
+    }
+  /api/v2/admin/activity:
+    {
+      get:
+        {
+          summary: Activity/device analytics (usage patterns),
+          responses: { "200": { description: Aggregates } },
+        },
+    }
+  /api/v2/admin/apps:
+    {
+      get:
+        {
+          summary: "All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin)",
+          responses: { "200": { description: Apps } },
+        },
+    }
 components:
   schemas:
     NodePublic:
@@ -386,8 +713,25 @@ components:
         did: { type: string }
         region: { type: string }
         status: { type: string }
-        access_mode: { type: string, enum: [public, shared], description: "private nodes are not listed here" }
+        access_mode:
+          {
+            type: string,
+            enum: [public, shared],
+            description: "private nodes are not listed here",
+          }
+        min_tier:
+          { type: integer, description: "premium-pool tier gate (0 = open pool)" }
         protocols: { type: array, items: { type: string } }
         capabilities: { type: object }
-        speedtest: { type: object, properties: { download_mbps: { type: number }, upload_mbps: { type: number }, latency_ms: { type: number } } }
-        load_pct: { type: number, description: Coarse load indicator for picker UX }
+        speedtest:
+          {
+            type: object,
+            properties:
+              {
+                download_mbps: { type: number },
+                upload_mbps: { type: number },
+                latency_ms: { type: number },
+              },
+          }
+        load_pct:
+          { type: number, description: Coarse load indicator for picker UX }
