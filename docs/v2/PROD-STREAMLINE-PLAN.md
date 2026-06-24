@@ -11,8 +11,9 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `fbc2c84` (S3 entitlements) ·
-`ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) · `0a5b46a` (decisions) · `7eb96f3` (S1).
+DB. Last commits (LOCAL, **not pushed**): `c1b6690`/`3dea83a` (S4 operator) ·
+`238a911`/`fbc2c84` (S3) · `ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) ·
+`0a5b46a` (decisions) · `7eb96f3` (S1).
 
 **Done**
 - ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
@@ -38,6 +39,15 @@ DB. Last commits (LOCAL, **not pushed**): `fbc2c84` (S3 entitlements) ·
   already exist; `source` is free text so future `rank` free-days fit). OpenAPI:
   documented the real `/subscriptions/nft/refresh`, fixed the GET shape, removed
   the unimplemented USDC `/payments` routes (no money, locked). Commit `fbc2c84`.
+- ✅ **S4 operator layer** — nodes gain `owner_user_id` (resolved from the
+  registering wallet), optional `org_id` (validated against org membership at
+  registration, else 403), and `access_mode` (persisted from the WS hello caps).
+  New `node_metrics` per-minute rollup written from the heartbeat ingest, with a
+  retention prune (`NODE_METRICS_RETENTION`). `GET /operator/nodes`,
+  `GET /operator/nodes/:id/metrics?range&step` (NodeOperatedBy authz), and
+  `GET /admin/nodes/:id/metrics`. Public discovery now excludes
+  `access_mode=private` and surfaces `access_mode`. Migration `0004_node_metrics`.
+  Commits `3dea83a` (data plane) + `c1b6690` (endpoints).
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -49,16 +59,18 @@ DB. Last commits (LOCAL, **not pushed**): `fbc2c84` (S3 entitlements) ·
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S4 operator layer (NEXT):** node ownership (`owner_user_id` resolved from the
-  registering wallet, optional `org_id`), `access_mode` (public/private) from the
-  WS hello, `node_metrics` time-series (per-node rollup from the heartbeat/
-  usage_report ingest) + `GET /operator/nodes` and `.../:id/metrics` charts.
-  Details in §4. **First new migration since S2/S3:** `0004_node_metrics`
-  (next free number — `0003_email_auth` taken).
-- **Remaining migrations** (additive, idempotent): `0005_social_xp` (xp_events,
-  xp_claims, social_accounts — **email/email_verified already done in S2**),
-  `0006_referrals_perks`, `0007_activity_log`. Schema in §7.
-- Recommended order: **S4** (operator dashboards, most visible) → S5–S8b.
+- **S5 referrals (NEXT):** stable `users.referral_code` (short, shareable) +
+  immutable `referred_by_user_id` (self-referral blocked, one referrer/user) on
+  signup `?ref=CODE`. Qualifying action = the **referee's first trial start** →
+  referrer **+100 XP**, referee **+25** (the XP ledger lands here even though
+  tiers/leaderboard are S6). `GET /api/v2/referrals/me`. Details in §5a. The
+  trial-start hook is `handleStartTrial` (`api/subscriptions.go`). **Next free
+  migration is `0005`** (`0004_node_metrics` taken) — add `users.referral_code`,
+  `referred_by_user_id`, the xp columns + `xp_events` ledger (shared with S6).
+- **Remaining migrations** (additive, idempotent): `0005_social_xp`/referrals
+  (xp_events, xp_claims, social_accounts, users xp cols — **email/email_verified
+  already done in S2**), `0006_perks`, `0007_activity_log`. Schema in §7.
+- Recommended order: **S5 → S6 → S7** → S8/S8b.
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -148,7 +160,13 @@ Frontend uses **Reown AppKit** only; backend verifies signatures + issues PASETO
 
 ---
 
-## 4. Node-operator layer — ownership, visibility, charts (PR S4)
+## 4. Node-operator layer — ownership, visibility, charts (PR S4) ✅ DONE
+
+> Implemented in `3dea83a` (data plane) + `c1b6690` (endpoints), migration
+> `0004_node_metrics`. owner_user_id from the registering wallet; org_id
+> membership-validated; access_mode from the WS hello; per-minute node_metrics
+> rollup + operator/admin chart endpoints; private nodes excluded from discovery.
+> `min_tier` (tier-gated pool) is deferred to S7.
 
 Operators log in (wallet) and see **their** nodes (public, private, org) with
 live + historical charts.
@@ -312,7 +330,7 @@ activity_log(id, user_id, action, target, ip, user_agent, device, app, meta json
 S1  streamline: delete v1, one binary, prune deps          ✅ DONE (7eb96f3)
 S2  auth: Reown/EVM+SOL only, Resend email (optional)      ✅ DONE (68fe987, 22097cf)
 S3  entitlements: 7d trial + 30d NFT-direct + rank source  ✅ DONE (fbc2c84)
-S4  operator nodes: ownership, visibility, node_metrics + charts
+S4  operator nodes: ownership, visibility, node_metrics + charts  ✅ DONE (3dea83a, c1b6690)
 S5  referrals (qualify on referee trial start)
 S6  XP earn/claim, tiers, leaderboard
 S7  social verification (X/Telegram/email) + perks + tiered node pools
