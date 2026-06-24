@@ -22,7 +22,7 @@ paths:
       security: []
       parameters:
         - { name: wallet_address, in: query, required: true, schema: { type: string } }
-        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol, apt, sui] } }
+        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol] } }
       responses:
         "200":
           description: Challenge to sign. The EULA text identifies **Erebrus** (never NetSepio).
@@ -45,7 +45,7 @@ paths:
               properties:
                 flow_id: { type: string }
                 signature: { type: string }
-                public_key: { type: string, description: "Required for sol/apt/sui" }
+                public_key: { type: string, description: "Required for sol" }
       responses:
         "200": { description: "{ token (PASETO, 24h), user_id }" }
         "401": { description: Bad signature / expired flow id }
@@ -56,7 +56,7 @@ paths:
       deprecated: true
       parameters:
         - { name: wallet_address, in: query, required: true, schema: { type: string } }
-        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol, apt, sui] } }
+        - { name: chain, in: query, required: true, schema: { type: string, enum: [evm, sol] } }
       responses:
         "200": { description: Same as GET /api/v2/auth }
   /api/v2/auth/authenticate:
@@ -76,21 +76,47 @@ paths:
                 public_key: { type: string }
       responses:
         "200": { description: Same as POST /api/v2/auth }
-  /api/v2/auth/social:
-    post:
-      summary: Google/Apple sign-in (mobile)
-      security: []
-      responses: { "200": { description: "{ token, user_id } — verifies provider id_token" } }
+  # Email is OPTIONAL: it links a verified address to an already-authenticated
+  # wallet account (perks/ranking + recovery). It is never a login method and is
+  # never required to use the VPN. Disabled (503) unless RESEND_API_KEY is set.
   /api/v2/auth/email:
     post:
-      summary: Request email OTP / magic link
-      security: []
-      responses: { "200": { description: OTP sent } }
+      summary: Send a 6-digit OTP to link an email to the current account
+      description: Requires a wallet bearer token. Rate-limited (60s resend cooldown).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: "{ status: sent, expires_in: <seconds> }" }
+        "400": { description: Invalid email }
+        "409": { description: Email already linked to another account }
+        "429": { description: Resend cooldown — wait before requesting again }
+        "503": { description: Email not configured (no RESEND_API_KEY) }
   /api/v2/auth/email/verify:
     post:
-      summary: Exchange OTP/magic-link for PASETO
-      security: []
-      responses: { "200": { description: "{ token, user_id }" } }
+      summary: Verify the OTP and link the email (sets email_verified)
+      description: Requires a wallet bearer token. Max 5 attempts per code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, example: "123456" }
+      responses:
+        "200": { description: Updated user profile (email + email_verified=true) }
+        "401": { description: Wrong/expired code }
+        "409": { description: Email already linked to another account }
+        "429": { description: Too many attempts — request a new code }
 
   # ───────────────────────── account ─────────────────────────
   /api/v2/account/profile:
@@ -255,7 +281,7 @@ paths:
   /api/v2/admin/subscriptions: { get: { summary: Subscriptions (paginated), responses: { "200": { description: Subscriptions } } } }
   /api/v2/admin/orgs: { get: { summary: Orgs + usage rollups, responses: { "200": { description: Orgs } } } }
   /api/v2/admin/activity: { get: { summary: Activity/device analytics (usage patterns), responses: { "200": { description: Aggregates } } } }
-  /api/v2/admin/apps: { get: { summary: All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin), responses: { "200": { description: Apps } } } }
+  /api/v2/admin/apps: { get: { summary: "All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin)", responses: { "200": { description: Apps } } } }
 components:
   schemas:
     NodePublic:
