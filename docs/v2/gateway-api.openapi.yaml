@@ -133,7 +133,7 @@ paths:
         - { name: status, in: query, schema: { type: string, enum: [online, offline, draining], default: online } }
       responses:
         "200":
-          description: Public node directory — no raw IPs for stealth safety beyond connection endpoints
+          description: Public node directory — no raw IPs; access_mode='private' nodes are excluded (public + shared only)
           content:
             application/json:
               schema:
@@ -143,13 +143,37 @@ paths:
     post:
       summary: Node registration (challenge + signed response → node PASETO)
       security: []
-      description: Two-step like user auth; node signs with its mnemonic-derived wallet key. Records identity{peer_id, did, ip_hash}, spec, capabilities.
-      responses: { "200": { description: "{ node_token (PASETO, role=node) }" } }
+      description: >
+        Two-step like user auth; node signs with its mnemonic-derived wallet key.
+        Records identity{peer_id, did, ip_hash}, spec, capabilities. owner_user_id
+        is resolved from the registering wallet; an optional org_id attaches the
+        node to an org the operator belongs to (else 403).
+      responses:
+        "200": { description: "{ node_token (PASETO, role=node), node_id }" }
+        "403": { description: org_id given but caller is not a member of that org }
   /api/v2/nodes/ws:
     get:
       summary: WebSocket upgrade for the node control plane
       description: See ws-protocol.md (authoritative). Node PASETO required.
       responses: { "101": { description: Switching protocols } }
+
+  # ───────────────────────── operator (node owner) ─────────────────────────
+  /api/v2/operator/nodes:
+    get:
+      summary: My nodes (owned directly + via org)
+      description: Full operator detail incl. private nodes, access_mode, org_id, live load + bandwidth.
+      responses: { "200": { description: Operator node list } }
+  /api/v2/operator/nodes/{id}/metrics:
+    get:
+      summary: Time-series metrics for one of my nodes (charts)
+      description: Caller must operate the node (own it or share its org), else 403.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: range, in: query, schema: { type: string, default: "24h", description: "Go duration, clamped to 90 days" } }
+        - { name: step, in: query, schema: { type: string, default: "5m", description: "Downsample bucket (min 1m)" } }
+      responses:
+        "200": { description: "{ node_id, range, step, points[] } — wg_peers, proxy_sessions, rx/tx_bytes, cpu/mem_pct per bucket" }
+        "403": { description: Not your node }
 
   # ───────────────────────── vpn clients ─────────────────────────
   /api/v2/vpn/clients:
@@ -272,6 +296,7 @@ paths:
             subscriptions{by_plan,by_source}, orgs{count}, traffic{bandwidth_30d},
             payments{confirmed_30d_usdc}
   /api/v2/admin/nodes: { get: { summary: All nodes incl. heartbeat snapshot (paginated/filterable), responses: { "200": { description: Nodes } } } }
+  /api/v2/admin/nodes/{id}/metrics: { get: { summary: Time-series metrics for any node (range/step like operator), responses: { "200": { description: "{ node_id, range, step, points[] }" } } } }
   /api/v2/admin/users: { get: { summary: Users (paginated, searchable), responses: { "200": { description: Users } } } }
   /api/v2/admin/subscriptions: { get: { summary: Subscriptions (paginated), responses: { "200": { description: Subscriptions } } } }
   /api/v2/admin/orgs: { get: { summary: Orgs + usage rollups, responses: { "200": { description: Orgs } } } }
@@ -287,6 +312,7 @@ components:
         did: { type: string }
         region: { type: string }
         status: { type: string }
+        access_mode: { type: string, enum: [public, shared], description: "private nodes are not listed here" }
         protocols: { type: array, items: { type: string } }
         capabilities: { type: object }
         speedtest: { type: object, properties: { download_mbps: { type: number }, upload_mbps: { type: number }, latency_ms: { type: number } } }
