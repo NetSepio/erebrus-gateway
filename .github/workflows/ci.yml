@@ -5,9 +5,14 @@ on:
     branches: [main, prod, v2]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   go:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -17,7 +22,6 @@ jobs:
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
-      # advisory until the v2 re-layout lands (Phase 3), then make blocking
       - uses: golangci/golangci-lint-action@v6
         continue-on-error: true
         with:
@@ -25,6 +29,9 @@ jobs:
 
   gitleaks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,3 +39,4 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml

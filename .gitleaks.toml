@@ -4,8 +4,11 @@
 useDefault = true
 
 [allowlist]
-description = "templates and docs with placeholder values"
+description = "templates, docs, dev compose defaults, and removed legacy env sample"
 paths = [
   '''\.env\.example$''',
+  '''\.env-sample$''',
   '''docs/.*''',
+  '''docker-compose\.yml$''',
+  '''internal/.+_test\.go$''',
 ]
