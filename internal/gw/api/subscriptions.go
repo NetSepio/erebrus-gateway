@@ -31,12 +31,21 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 		return
 	}
 
+	// trial_consumed means "has the user ever started their one trial" — it is
+	// independent of which source currently entitles them (e.g. an NFT holder who
+	// previously used the trial still reports trial_consumed=true).
+	trialConsumed, err := s.store.HasConsumedTrial(c, uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load subscription")
+		return
+	}
+
 	sub, err := s.store.ActiveSubscription(c, uid)
 	if err == nil {
 		ok(c, http.StatusOK, gin.H{
 			"status": sub.Status, "entitled": true, "plan_id": sub.PlanID,
 			"source": sub.Source, "current_period_end": sub.CurrentPeriodEnd,
-			"trial_consumed": sub.Source == "trial", "nft_gating": s.nft.Enabled(),
+			"trial_consumed": trialConsumed, "nft_gating": s.nft.Enabled(),
 		})
 		return
 	}
@@ -45,11 +54,6 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 		return
 	}
 
-	trialConsumed, err := s.store.HasConsumedTrial(c, uid)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to load subscription")
-		return
-	}
 	resp := gin.H{
 		"entitled": false, "trial_consumed": trialConsumed,
 		"nft_gating": s.nft.Enabled(),
@@ -67,7 +71,7 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 
 // handleStartTrial grants the one-time free trial (on the 'pro' plan).
 func (s *Server) handleStartTrial(c *gin.Context) {
-	sub, err := s.store.StartTrial(c, userID(c), "pro", trialPeriod)
+	sub, err := s.store.StartTrial(c, userID(c), "pro", s.cfg.TrialPeriod)
 	if errors.Is(err, store.ErrTrialUsed) {
 		fail(c, http.StatusConflict, "trial already used")
 		return
@@ -80,7 +84,10 @@ func (s *Server) handleStartTrial(c *gin.Context) {
 }
 
 // handleNFTRefresh verifies the caller's wallet holds the gating NFT and
-// grants/refreshes an NFT-sourced entitlement.
+// grants/refreshes a 30-day NFT-sourced entitlement (NFT_GATE_PERIOD) directly,
+// regardless of trial state: a new user goes straight to 30 days; a user mid-
+// trial is upgraded (the 30d NFT row outlasts the 7d trial, so it becomes the
+// active entitlement). Refreshable while held; one per user (idx_subs_one_nft).
 func (s *Server) handleNFTRefresh(c *gin.Context) {
 	if !s.nft.Enabled() {
 		fail(c, http.StatusServiceUnavailable, "NFT gating is not configured")

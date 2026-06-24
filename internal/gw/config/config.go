@@ -41,8 +41,11 @@ type Config struct {
 	RedisPassword string `env:"REDIS_PASSWORD"`
 
 	// entitlement / NFT gating (no money in v2.0 — trial + NFT ownership only).
+	// General free trial: 7 days, one per user (idx_subs_one_trial).
+	TrialPeriod time.Duration `env:"TRIAL_PERIOD" envDefault:"168h"` // 7d
 	// v2.0 targets Solana Metaplex Core; NFT_GATE_CONTRACT is the collection
-	// address (Solana) or ERC-721 contract (EVM, future).
+	// address (Solana) or ERC-721 contract (EVM, future). NFT holders get 30 days
+	// directly (NFT_GATE_PERIOD), upgrading any active trial.
 	NFTGateChain    string        `env:"NFT_GATE_CHAIN" envDefault:"solana"`
 	NFTGateContract string        `env:"NFT_GATE_CONTRACT"`                 // collection address; empty = NFT gating disabled
 	NFTGateRPCURL   string        `env:"NFT_GATE_RPC_URL"`                  // Solana: a DAS-capable endpoint (e.g. Helius)
@@ -61,10 +64,19 @@ type Config struct {
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 	cfg := &Config{}
-	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+	if err := parseEnv(cfg); err != nil {
+		return nil, err
 	}
 	return cfg, nil
+}
+
+// parseEnv parses the process environment into cfg (no .env side-load), so
+// callers/tests can exercise defaults deterministically.
+func parseEnv(cfg *Config) error {
+	if err := env.Parse(cfg); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+	return nil
 }
 
 // DSN builds the Postgres connection string.
