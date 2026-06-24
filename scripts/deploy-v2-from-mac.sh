@@ -73,7 +73,7 @@ if [[ "${SKIP_COMMIT:-0}" != "1" ]]; then
             internal/api/vpn.go \
             scripts/deploy-v2-remote.sh \
             scripts/deploy-v2-from-mac.sh \
-            .github/workflows/deploy-v2.yml 2>/dev/null || true
+            .github/workflows/docker-publish.yml 2>/dev/null || true
     if git diff --cached --quiet; then
       log "Nothing staged to commit"
     else

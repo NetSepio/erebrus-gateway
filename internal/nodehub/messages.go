@@ -2,7 +2,7 @@
 // plane: HTTPS registration, the WebSocket hub, and persistence of node status,
 // heartbeats and per-client usage.
 //
-// The message structs below are a hand-mirrored copy of docs/v2/ws-protocol.md
+// The message structs below are a hand-mirrored copy of docs/ws-protocol.md
 // (FROZEN v2.0). The node repo carries the same structs in
 // erebrus/internal/gatewayclient/messages.go; both sides have contract tests
 // that marshal the canonical examples. Change ws-protocol.md first, then both.
