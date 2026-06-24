@@ -65,8 +65,9 @@ func (s *Server) Router() *gin.Engine {
 
 	v2 := r.Group("/api/v2")
 
-	// auth (public) — GET challenge, POST signed response
+	// auth (public) — GET challenge, POST signed response. Per-IP rate limited.
 	auth := v2.Group("/auth")
+	auth.Use(s.rateLimit("auth", s.cfg.RateLimitAuthPerMin))
 	{
 		auth.GET("", s.handleFlowID)
 		auth.POST("", s.handleAuthenticate)
@@ -80,7 +81,7 @@ func (s *Server) Router() *gin.Engine {
 
 	// node discovery (public) + control plane
 	v2.GET("/nodes", s.handleListNodes)
-	v2.POST("/nodes/register", s.handleNodeRegister)
+	v2.POST("/nodes/register", s.rateLimit("register", s.cfg.RateLimitRegisterPerMin), s.handleNodeRegister)
 	v2.GET("/nodes/ws", s.handleNodeWS) // auth handled inside (node PASETO)
 
 	// subscriptions: plans are public

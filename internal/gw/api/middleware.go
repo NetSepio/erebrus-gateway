@@ -3,10 +3,28 @@ package api
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/NetSepio/gateway/internal/gw/token"
 	"github.com/gin-gonic/gin"
 )
+
+// rateLimit is a per-IP fixed-window limiter (Redis-backed via cache.Allow,
+// fail-open). scope namespaces the counter; perMinute <= 0 disables it.
+func (s *Server) rateLimit(scope string, perMinute int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if perMinute <= 0 {
+			c.Next()
+			return
+		}
+		if !s.cache.Allow(c, "rl:"+scope+":"+c.ClientIP(), perMinute, time.Minute) {
+			c.Header("Retry-After", "60")
+			fail(c, http.StatusTooManyRequests, "rate limit exceeded; slow down")
+			return
+		}
+		c.Next()
+	}
+}
 
 // gin context keys.
 const (

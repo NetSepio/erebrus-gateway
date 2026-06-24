@@ -20,6 +20,10 @@ type Config struct {
 	TrustedProxies string `env:"TRUSTED_PROXIES"` // CSV of reverse-proxy IPs/CIDRs; empty = trust none
 	Version        string `env:"VERSION" envDefault:"2.0.0"`
 
+	// rate limiting (per-IP, per minute; <=0 disables). Redis-backed, fail-open.
+	RateLimitAuthPerMin     int `env:"RATE_LIMIT_AUTH_PER_MIN" envDefault:"30"`
+	RateLimitRegisterPerMin int `env:"RATE_LIMIT_REGISTER_PER_MIN" envDefault:"10"`
+
 	// auth
 	Mnemonic            string        `env:"MNEMONIC"` // derives PASETO key when PASETO_PRIVATE_KEY is empty
 	PasetoPrivateKey    string        `env:"PASETO_PRIVATE_KEY"`
