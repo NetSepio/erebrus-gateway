@@ -12,6 +12,13 @@ import (
 // APIKeyPrefix is the human-visible, non-secret prefix of every key.
 const APIKeyPrefix = "erebrus_sk_"
 
+// hashAPIKeyToken returns a deterministic digest for indexed DB lookup.
+// Org API keys are 192-bit random tokens (crypto/rand), not user passwords.
+func hashAPIKeyToken(token string) string {
+	sum := sha256.Sum256([]byte(token)) // CodeQL[go/weak-sensitive-data-hashing]: high-entropy API key, not a password; SHA-256 is standard for token fingerprinting (indexed lookup).
+	return hex.EncodeToString(sum[:])
+}
+
 // CreateAPIKey mints an org API key. The full secret is returned ONCE; only its
 // sha256 hash and display prefix are stored.
 func (s *Store) CreateAPIKey(ctx context.Context, orgID, name string) (secret string, key *APIKey, err error) {
@@ -20,8 +27,7 @@ func (s *Store) CreateAPIKey(ctx context.Context, orgID, name string) (secret st
 		return "", nil, err
 	}
 	secret = APIKeyPrefix + hex.EncodeToString(raw)
-	sum := sha256.Sum256([]byte(secret))
-	hash := hex.EncodeToString(sum[:])
+	hash := hashAPIKeyToken(secret)
 	prefix := secret[:len(APIKeyPrefix)+6] // erebrus_sk_ + 6 chars
 
 	var k APIKey
@@ -74,8 +80,7 @@ func (s *Store) RevokeAPIKey(ctx context.Context, orgID, keyID string) error {
 // LookupAPIKey resolves a presented secret to its org id, or ErrNotFound if the
 // key is unknown or revoked. It also bumps last_used_at.
 func (s *Store) LookupAPIKey(ctx context.Context, secret string) (orgID string, err error) {
-	sum := sha256.Sum256([]byte(secret))
-	hash := hex.EncodeToString(sum[:])
+	hash := hashAPIKeyToken(secret)
 	err = s.db.QueryRowContext(ctx,
 		`UPDATE api_keys SET last_used_at = now()
 		 WHERE key_hash=$1 AND revoked_at IS NULL
