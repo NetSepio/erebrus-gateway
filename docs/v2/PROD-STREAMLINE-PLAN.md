@@ -7,6 +7,46 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 ---
 
+## ⏱️ Status & handoff (updated 2026-06-21)
+
+**Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
+`cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
+DB. Last commits (LOCAL, **not pushed**): `0a5b46a` (decisions) · `7eb96f3` (S1).
+
+**Done**
+- ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
+  (gorm/libp2p/chromedp/openai gone; go-ethereum kept for EVM ecrecover). One
+  `Dockerfile` + `docker-compose.yml`. −20,789 lines.
+- ✅ **All product decisions locked** (see §9 + the per-feature sections).
+
+**Repo map (everything lives in `internal/gw/`)**
+- `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
+  (routes in `server.go`).
+- `store/` — Postgres (database/sql + lib/pq), explicit SQL migrations in
+  `store/migrations/` (currently **0001, 0002**). Query files per domain.
+- `token` (PASETO), `wallet` (EVM+SOL+apt+sui — **drop apt/sui in S2**),
+  `nftgate` (Solana DAS + EVM ERC721), `nodehub` (WS control plane),
+  `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
+
+**Start the next PR here**
+- **S2 auth:** strip Aptos/Sui from `wallet/`; add Resend email OTP (optional).
+- **S3 entitlements:** change `trialPeriod` **14d → 7d** at
+  `internal/gw/api/server.go:127`; NFT-direct-30d in `handleNFTRefresh`
+  (`api/subscriptions.go`) + `store.StartTrial` (`store/subscriptions.go:90`).
+- **New migrations to add** (additive, idempotent, next numbers): `0003_node_metrics`,
+  `0004_social_xp` (xp_events, xp_claims, social_accounts, users cols),
+  `0005_referrals_perks`, `0006_activity_log`. Schema in §7.
+- Recommended order: **S2 → S3 → S4** (operator dashboards, most visible) → S5–S8b.
+
+**Cross-repo context (for a fresh session)**
+- Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
+  to a cloud VM; has its own security audit + dashboard.
+- App repo `erebrus-vpn` (new, `com.erebrus.vpn`, branch main): v2 mobile code +
+  premium UI; needs native `libbox.aar` build + provisioner wiring.
+- Full project memory: `~/.claude/.../memory/erebrus-v2-rebuild.md`.
+
+---
+
 ## 0. Current state (grounded)
 
 - **v2 = `internal/gw/*`** (config, store [2 migrations], token PASETO, wallet
