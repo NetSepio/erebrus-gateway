@@ -106,6 +106,10 @@ func (s *Server) Router() *gin.Engine {
 		user.POST("/social/telegram", s.handleVerifyTelegram)
 		user.POST("/social/x", s.handleVerifyX)
 
+		// perks: catalog (tier-annotated) + my granted perks
+		user.GET("/perks", s.handleListPerks)
+		user.GET("/perks/me", s.handleMyPerks)
+
 		// entitlement: trial + NFT gating only (no money in v2.0)
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)
@@ -146,6 +150,8 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/nodes/:id/metrics", s.handleAdminNodeMetrics)
 		admin.POST("/nodes/:id/command", s.handleAdminNodeCommand)
 		admin.POST("/nodes/:id/min_tier", s.handleAdminSetNodeMinTier)
+		admin.POST("/perks", s.handleAdminUpsertPerk)
+		admin.POST("/perks/:id/grant", s.handleAdminGrantPerk)
 	}
 
 	return r
