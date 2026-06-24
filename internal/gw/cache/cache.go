@@ -67,6 +67,23 @@ func (c *Cache) Del(ctx context.Context, keys ...string) {
 	_ = c.rdb.Del(ctx, keys...).Err()
 }
 
+// Allow is a fixed-window per-key rate limiter (Redis INCR/EXPIRE). It fails
+// OPEN (returns true) when Redis is unavailable or the limit is non-positive, so
+// rate limiting never takes the gateway down.
+func (c *Cache) Allow(ctx context.Context, key string, limit int, window time.Duration) bool {
+	if c == nil || c.rdb == nil || limit <= 0 {
+		return true
+	}
+	n, err := c.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return true
+	}
+	if n == 1 {
+		_ = c.rdb.Expire(ctx, key, window).Err()
+	}
+	return n <= int64(limit)
+}
+
 // Ping reports whether Redis is reachable (false when caching is disabled).
 func (c *Cache) Ping(ctx context.Context) bool {
 	if c == nil || c.rdb == nil {
