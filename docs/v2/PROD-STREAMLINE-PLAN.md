@@ -11,9 +11,9 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `643553f`/`4fb4aab` (S6 XP/rank) ·
-`ec6cfaa` (S5) · `c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) ·
-`ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) · `0a5b46a` · `7eb96f3` (S1).
+DB. Last commits (LOCAL, **not pushed**): `3b42d09`/`17aba75`/`96e73c4` (S7
+social/perks/pools) · `643553f`/`4fb4aab` (S6) · `ec6cfaa` (S5) ·
+`c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) · S2 · `0a5b46a` · `7eb96f3` (S1).
 
 **Done**
 - ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
@@ -65,6 +65,15 @@ DB. Last commits (LOCAL, **not pushed**): `643553f`/`4fb4aab` (S6 XP/rank) ·
   30d` (Redis-cached + my_rank). Earn-vs-claim: `xp_claims` ledger + `POST
   /rank/claim {free_days}` (spends XP, stacks a `source='rank'` entitlement,
   logs IP+device). Migration `0006_xp_claims`. Commits `4fb4aab` + `643553f`.
+- ✅ **S7 social + perks + tier pools** — **tier-gated premium pool**:
+  `nodes.min_tier` (admin-set) filters discovery (optional-auth `callerTier`, tier
+  in cache key) + provisioning (403 below tier). **Social verify**: dependency-free
+  `socialverify` (Telegram Login Widget HMAC, X via `/2/users/me`); `POST
+  /social/{telegram,x}` + `GET /social/accounts`; first X/Telegram link →
+  `social_verified` +75 once/provider; email links into `social_accounts` too.
+  **Perks**: catalog + `user_perks` (`GET /perks` tier-annotated, `GET /perks/me`,
+  admin `POST /perks` + `/perks/:id/grant`). Migration `0007_social_perks`.
+  Commits `96e73c4` + `17aba75` + `3b42d09`.
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -76,17 +85,17 @@ DB. Last commits (LOCAL, **not pushed**): `643553f`/`4fb4aab` (S6 XP/rank) ·
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S7 social verify + perks + tiered node pools (NEXT):** social_accounts
-  (provider X|telegram|email, UNIQUE(provider, provider_id)) → first verify emits
-  `social_verified` XP (+75) via the existing `AwardXPOnce`. `perks(id, type[nft|
-  xp|free_days|node_pool], min_tier, meta)` + `user_perks`. **Tier-gated fast
-  pool**: add `nodes.min_tier` (default 0) and filter discovery + provisioning by
-  the caller's `tier` (deferred from S4). Endpoints: social link/verify, perks
-  list/grant. Details in §5d/§5e. **Next free migration `0007`** (`0006_xp_claims`
-  taken) — add social_accounts, perks, user_perks, nodes.min_tier.
-- **Remaining migrations** (additive, idempotent): `0007_social_perks`,
-  `0008_activity_log` (S8b). Schema in §7.
-- Recommended order: **S7** → S8/S8b.
+- **S8 prod hardening (NEXT):** per-IP rate limiting on `/auth/*` +
+  `/nodes/register` (Redis token-bucket); lock CORS to `ALLOWED_ORIGIN`;
+  Prometheus `/metrics` + `/readyz` (DB+Redis ping, distinct from `/healthz`);
+  set gin trusted proxies (so `ClientIP` is trustworthy); statement timeouts;
+  gateway→node calls over HTTPS. Details in §6. Mostly middleware/ops — likely
+  **no new migration** (S8b adds `0008_activity_log`).
+- **S8b activity/audit log:** `activity_log(user_id, action, target, ip,
+  user_agent, device, app, meta, created_at)` via a Gin middleware on
+  authenticated mutating routes; `GET /account/activity` + `GET /admin/activity`.
+  Migration `0008_activity_log`. Schema in §6.5/§7.
+- Recommended order: **S8 → S8b** (final).
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -252,7 +261,7 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
 - `GET /api/v2/leaderboard?metric=referrals|xp&period=all|30d` (Redis-cached,
   paginated) → rank, handle/wallet (truncated), count/xp. Plus my own rank.
 
-### 5d. Social verification (PR S7) — providers: X, Telegram, email
+### 5d. Social verification (PR S7) ✅ DONE — commit `17aba75` — providers: X, Telegram, email
 - **X (Twitter)** and **Telegram** via OAuth / bot-proof, plus **email** (the
   Resend OTP flow already in §2) → `social_accounts(user_id, provider,
   provider_id, handle, verified_at)`, `UNIQUE(provider, provider_id)`. Each first
@@ -260,7 +269,7 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
 - Providers are pluggable; ship X + Telegram + email now. Privacy: store the
   provider id + handle only, never tokens.
 
-### 5e. Perks → faster nodes — MECHANIC LOCKED: tier-gated premium pool
+### 5e. Perks → faster nodes — MECHANIC LOCKED: tier-gated premium pool ✅ DONE (commits `96e73c4`+`3b42d09`)
 - **Tier-gated node pool:** premium/high-throughput nodes carry `min_tier`
   (default 0). Discovery (`GET /api/v2/nodes`) and provisioning filter by the
   caller's `tier`, so higher tiers *see and can connect to* the fast pool;
@@ -349,7 +358,7 @@ S3  entitlements: 7d trial + 30d NFT-direct + rank source  ✅ DONE (fbc2c84)
 S4  operator nodes: ownership, visibility, node_metrics + charts  ✅ DONE (3dea83a, c1b6690)
 S5  referrals (qualify on referee trial start)              ✅ DONE (ec6cfaa)
 S6  XP earn/claim, tiers, leaderboard                       ✅ DONE (4fb4aab, 643553f)
-S7  social verification (X/Telegram/email) + perks + tiered node pools
+S7  social verification (X/Telegram/email) + perks + tiered node pools  ✅ DONE (96e73c4, 17aba75, 3b42d09)
 S8  prod hardening (parallel with S4–S7)
 S8b activity & audit log (IP + device) — webapp Activity section
 ```
