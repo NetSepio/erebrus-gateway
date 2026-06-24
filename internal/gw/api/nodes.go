@@ -21,6 +21,7 @@ type nodePublic struct {
 	DID          string          `json:"did"`
 	Region       string          `json:"region"`
 	Status       string          `json:"status"`
+	AccessMode   string          `json:"access_mode"`
 	Protocols    []string        `json:"protocols"`
 	Capabilities json.RawMessage `json:"capabilities"`
 	Endpoints    json.RawMessage `json:"endpoints"`
@@ -40,7 +41,7 @@ func (s *Server) handleListNodes(c *gin.Context) {
 		return
 	}
 
-	nodes, err := s.store.ListNodes(c, status, region)
+	nodes, err := s.store.ListDiscoverableNodes(c, status, region)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to list nodes")
 		return
@@ -49,8 +50,8 @@ func (s *Server) handleListNodes(c *gin.Context) {
 	for _, n := range nodes {
 		out = append(out, nodePublic{
 			NodeID: n.ID, Name: n.Name, DID: n.DID, Region: n.Region, Status: n.Status,
-			Protocols: n.Protocols, Capabilities: n.Capabilities, Endpoints: n.Endpoints,
-			Speedtest: n.Speedtest, LoadPct: loadPct(n.Load),
+			AccessMode: n.AccessMode, Protocols: n.Protocols, Capabilities: n.Capabilities,
+			Endpoints: n.Endpoints, Speedtest: n.Speedtest, LoadPct: loadPct(n.Load),
 		})
 	}
 	_ = s.cache.SetJSON(c, key, out, 10*time.Second)

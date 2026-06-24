@@ -84,6 +84,10 @@ func (s *Server) Router() *gin.Engine {
 		user.DELETE("/vpn/clients/:id", s.handleDeleteClient)
 		user.GET("/vpn/clients/:id/config", s.handleClientConfig)
 
+		// operator: my nodes (owned + via org) + per-node metric charts
+		user.GET("/operator/nodes", s.handleOperatorNodes)
+		user.GET("/operator/nodes/:id/metrics", s.handleOperatorNodeMetrics)
+
 		// entitlement: trial + NFT gating only (no money in v2.0)
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)
@@ -121,6 +125,7 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/subscriptions", s.handleAdminSubscriptions)
 		admin.GET("/orgs", s.handleAdminOrgs)
 		admin.GET("/orgs/:id/usage", s.handleAdminOrgUsage)
+		admin.GET("/nodes/:id/metrics", s.handleAdminNodeMetrics)
 		admin.POST("/nodes/:id/command", s.handleAdminNodeCommand)
 	}
 
