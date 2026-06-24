@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/NetSepio/gateway/internal/api"
+	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/cache"
 	"github.com/NetSepio/gateway/internal/config"
 	"github.com/NetSepio/gateway/internal/identity"
@@ -82,8 +83,11 @@ func run(log *slog.Logger) error {
 	}
 	defer c.Close()
 
+	metrics.Register()
+	metrics.SetGatewayInfo(cfg.Environment, version.Version, version.Tag)
+
 	// Node control-plane hub.
-	hub := nodehub.New(st, log)
+	hub := nodehub.New(st, log, cfg.Environment)
 
 	// NFT entitlement gate (disabled unless a collection + RPC are configured).
 	nft := nftgate.New(cfg.NFTGateChain, cfg.NFTGateRPCURL, cfg.NFTGateContract)
@@ -109,7 +113,7 @@ func run(log *slog.Logger) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		log.Info("gateway listening", "addr", srv.Addr, "version", version.Version)
+		log.Info("gateway listening", "addr", srv.Addr, "version", version.Version, "tag", version.Tag, "environment", cfg.Environment)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server error", "err", err)
 			stop()

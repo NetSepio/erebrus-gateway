@@ -6,14 +6,15 @@ import (
 	"github.com/NetSepio/gateway/internal/cache"
 	"github.com/NetSepio/gateway/internal/config"
 	"github.com/NetSepio/gateway/internal/mailer"
+	"github.com/NetSepio/gateway/internal/middleware"
 	"github.com/NetSepio/gateway/internal/nftgate"
 	"github.com/NetSepio/gateway/internal/nodeclient"
 	"github.com/NetSepio/gateway/internal/nodehub"
 	"github.com/NetSepio/gateway/internal/socialverify"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
-	"github.com/NetSepio/gateway/internal/version"
 	"github.com/gin-contrib/cors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,7 +30,6 @@ type Server struct {
 	nft      nftgate.Checker
 	mailer   *mailer.Mailer
 	xverify  *socialverify.XVerifier
-	metrics  *reqMetrics
 }
 
 // New builds the API server. platform is the live DB-backed settings object
@@ -43,7 +43,6 @@ func New(cfg *config.Config, platform *config.PlatformSettings, st *store.Store,
 	return &Server{
 		cfg: cfg, platform: platform, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(),
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(p.XAPIBaseURL),
-		metrics: &reqMetrics{},
 	}
 }
 
@@ -58,7 +57,7 @@ func (s *Server) Router() *gin.Engine {
 	// Empty => trust none (ClientIP = direct peer).
 	_ = r.SetTrustedProxies(splitCSVRaw(s.cfg.TrustedProxies))
 	r.Use(gin.Recovery())
-	r.Use(s.metricsMiddleware())
+	r.Use(middleware.Metrics(s.cfg.Environment))
 
 	corsCfg := cors.DefaultConfig()
 	corsCfg.AllowOrigins = splitCSV(s.cfg.AllowedOrigin)
@@ -66,9 +65,11 @@ func (s *Server) Router() *gin.Engine {
 	corsCfg.AllowMethods = []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsCfg))
 
-	r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok", "version": version.Version}) })
+	r.GET("/healthz", s.handleHealthz)
 	r.GET("/readyz", s.handleReadyz)
-	r.GET("/metrics", s.handleMetrics)
+	r.GET("/version", s.handleVersion)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	r.POST("/telemetry/event", s.handleTelemetryEvent)
 
 	v2 := r.Group("/api/v2")
 

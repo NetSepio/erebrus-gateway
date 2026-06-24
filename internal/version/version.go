@@ -1,5 +1,8 @@
-// Package version holds the gateway build version (injected via -ldflags).
+// Package version holds gateway build metadata (injected via -ldflags).
 package version
 
-// Version is set at link time: -X github.com/NetSepio/gateway/internal/version.Version=<tag>
+// Version is the auto-incremented release version (e.g. 2.0.428).
 var Version = "dev"
+
+// Tag is the source commit hash (short SHA in CI builds).
+var Tag = "unknown"

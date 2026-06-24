@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/NetSepio/gateway/internal/metrics"
+	"github.com/NetSepio/gateway/internal/middleware"
 	"github.com/NetSepio/gateway/internal/nodeclient"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
@@ -81,20 +83,31 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 // and org (API-key) paths: resolve the node, commit a pending client, call the
 // node (idempotent, retried), then activate. Writes the response.
 func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPSK string) {
+	client := middleware.DetectClient(c)
+	region := vpnRegion(c, s, nodeID)
+	env := s.cfg.Environment
+	recordVPN := func(status string) {
+		metrics.VPNConfigsGeneratedTotal.WithLabelValues(client, region, status, env).Inc()
+	}
+
 	baseURL, nodeToken, status, err := s.store.NodeAPI(c, nodeID)
 	if errors.Is(err, store.ErrNotFound) {
+		recordVPN("failed")
 		fail(c, http.StatusNotFound, "node not found")
 		return
 	}
 	if err != nil {
+		recordVPN("failed")
 		fail(c, http.StatusInternalServerError, "failed to resolve node")
 		return
 	}
 	if status == "draining" {
+		recordVPN("failed")
 		fail(c, http.StatusConflict, "node is draining")
 		return
 	}
 	if baseURL == "" {
+		recordVPN("failed")
 		fail(c, http.StatusBadGateway, "node has no reachable API endpoint")
 		return
 	}
@@ -102,6 +115,7 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 	// Commit a pending client row; its id is the peer id used on the node.
 	clientID, err := s.store.CreateClient(c, uid, org, nodeID, name, wgPub)
 	if err != nil {
+		recordVPN("failed")
 		fail(c, http.StatusInternalServerError, "failed to create client")
 		return
 	}
@@ -109,13 +123,16 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 	bundle, err := s.upsertPeerWithFallback(c, nodeID, baseURL, nodeToken, clientID, peerReq)
 	if err != nil {
 		_ = s.store.DeleteClient(c, clientID) // roll back the pending row
+		recordVPN("failed")
 		fail(c, http.StatusBadGateway, "node unreachable — no client created")
 		return
 	}
 	if err := s.store.SetClientActive(c, clientID, bundle.WGAddress); err != nil {
+		recordVPN("failed")
 		fail(c, http.StatusInternalServerError, "failed to activate client")
 		return
 	}
+	recordVPN("success")
 	c.Data(http.StatusCreated, "application/json", bundle.Raw)
 }
 
@@ -137,21 +154,38 @@ func (s *Server) handleDeleteClient(c *gin.Context) {
 
 // handleClientConfig re-fetches a client's credential bundle from its node.
 func (s *Server) handleClientConfig(c *gin.Context) {
+	client := middleware.DetectClient(c)
+	env := s.cfg.Environment
 	cl, err := s.ownedClient(c)
 	if err != nil {
 		return
 	}
+	region := vpnRegion(c, s, cl.NodeID)
+	recordVPN := func(status string) {
+		metrics.VPNConfigsGeneratedTotal.WithLabelValues(client, region, status, env).Inc()
+	}
+
 	baseURL, nodeToken, _, err := s.store.NodeAPI(c, cl.NodeID)
 	if err != nil || baseURL == "" {
+		recordVPN("failed")
 		fail(c, http.StatusBadGateway, "node unreachable")
 		return
 	}
 	raw, err := s.nodes.Credentials(c, baseURL, nodeToken, cl.ID)
 	if err != nil {
+		recordVPN("failed")
 		fail(c, http.StatusNotFound, "credentials not available")
 		return
 	}
+	recordVPN("success")
 	c.Data(http.StatusOK, "application/json", raw)
+}
+
+func vpnRegion(c *gin.Context, s *Server, nodeID string) string {
+	if node, err := s.store.GetNode(c, nodeID); err == nil {
+		return metrics.NormalizeRegion(node.Region)
+	}
+	return "unknown"
 }
 
 // upsertPeerWithFallback tries the stored api_base_url first, then fallbacks
