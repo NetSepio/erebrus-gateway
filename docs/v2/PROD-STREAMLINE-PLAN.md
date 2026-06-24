@@ -11,9 +11,9 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `c1b6690`/`3dea83a` (S4 operator) ·
-`238a911`/`fbc2c84` (S3) · `ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) ·
-`0a5b46a` (decisions) · `7eb96f3` (S1).
+DB. Last commits (LOCAL, **not pushed**): `ec6cfaa` (S5 referrals) ·
+`c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) ·
+`ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) · `0a5b46a` · `7eb96f3` (S1).
 
 **Done**
 - ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
@@ -48,6 +48,14 @@ DB. Last commits (LOCAL, **not pushed**): `c1b6690`/`3dea83a` (S4 operator) ·
   `GET /admin/nodes/:id/metrics`. Public discovery now excludes
   `access_mode=private` and surfaces `access_mode`. Migration `0004_node_metrics`.
   Commits `3dea83a` (data plane) + `c1b6690` (endpoints).
+- ✅ **S5 referrals** — `users.referral_code` (lazy, unique, no-ambiguous-chars
+  base32) + `referred_by_user_id` (self-FK, immutable, self-referral blocked, one
+  per user). `POST /auth` takes optional `ref` → `BindReferrer` on signup. The
+  **referee's first trial start** awards `referral_qualified` XP (referrer +100,
+  referee +25; weights in config). New append-only `xp_events` ledger + users xp
+  cols + `store.AwardXP` (event + cached `xp_earned` in one tx) — the **foundation
+  S6 builds tiers/claims/leaderboard on**. `GET /referrals/me`. Migration
+  `0005_referrals_xp`. Commit `ec6cfaa`.
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -59,18 +67,19 @@ DB. Last commits (LOCAL, **not pushed**): `c1b6690`/`3dea83a` (S4 operator) ·
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S5 referrals (NEXT):** stable `users.referral_code` (short, shareable) +
-  immutable `referred_by_user_id` (self-referral blocked, one referrer/user) on
-  signup `?ref=CODE`. Qualifying action = the **referee's first trial start** →
-  referrer **+100 XP**, referee **+25** (the XP ledger lands here even though
-  tiers/leaderboard are S6). `GET /api/v2/referrals/me`. Details in §5a. The
-  trial-start hook is `handleStartTrial` (`api/subscriptions.go`). **Next free
-  migration is `0005`** (`0004_node_metrics` taken) — add `users.referral_code`,
-  `referred_by_user_id`, the xp columns + `xp_events` ledger (shared with S6).
-- **Remaining migrations** (additive, idempotent): `0005_social_xp`/referrals
-  (xp_events, xp_claims, social_accounts, users xp cols — **email/email_verified
-  already done in S2**), `0006_perks`, `0007_activity_log`. Schema in §7.
-- Recommended order: **S5 → S6 → S7** → S8/S8b.
+- **S6 XP/tiers/leaderboard (NEXT):** `users.tier` derived from `xp_earned`
+  (thresholds §5b: T0/100/500/2000/10000; recompute on each AwardXP). `GET
+  /api/v2/rank/me` ({xp, tier, next_tier_at, breakdown_by_kind}), `GET
+  /api/v2/leaderboard?metric=referrals|xp&period=all|30d` (Redis-cached),
+  earn-vs-claim: new `xp_claims` ledger + `POST /api/v2/rank/claim`. Wire the
+  already-available XP drivers — `email_verified` (S2) and `operator_uptime_day`
+  (S4 heartbeats) — to emit `xp_events` via `store.AwardXP`. **Next free
+  migration `0006`** (`0005_referrals_xp` taken) — add `xp_claims`. `xp_events`,
+  the xp cols, and `AwardXP` already exist from S5.
+- **Remaining migrations** (additive, idempotent): `0006_xp_claims`,
+  `0007_social_perks` (social_accounts, perks, user_perks — S7),
+  `0008_activity_log` (S8b). Schema in §7.
+- Recommended order: **S6 → S7** → S8/S8b.
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -193,7 +202,7 @@ live + historical charts.
 
 The differentiator. "Prove your social layer → faster nodes + perks."
 
-### 5a. Referrals (PR S5)
+### 5a. Referrals (PR S5) ✅ DONE — commit `ec6cfaa`, migration `0005_referrals_xp`
 - Each user gets a stable `referral_code` (short, shareable). On signup, an
   optional `?ref=CODE` binds `referred_by_user_id` (immutable, self-referral
   blocked, one referrer per user).
@@ -331,7 +340,7 @@ S1  streamline: delete v1, one binary, prune deps          ✅ DONE (7eb96f3)
 S2  auth: Reown/EVM+SOL only, Resend email (optional)      ✅ DONE (68fe987, 22097cf)
 S3  entitlements: 7d trial + 30d NFT-direct + rank source  ✅ DONE (fbc2c84)
 S4  operator nodes: ownership, visibility, node_metrics + charts  ✅ DONE (3dea83a, c1b6690)
-S5  referrals (qualify on referee trial start)
+S5  referrals (qualify on referee trial start)              ✅ DONE (ec6cfaa)
 S6  XP earn/claim, tiers, leaderboard
 S7  social verification (X/Telegram/email) + perks + tiered node pools
 S8  prod hardening (parallel with S4–S7)
