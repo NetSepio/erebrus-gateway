@@ -46,6 +46,7 @@ paths:
                 flow_id: { type: string }
                 signature: { type: string }
                 public_key: { type: string, description: "Required for sol" }
+                ref: { type: string, description: "Optional referral code; binds referred_by once on first signup" }
       responses:
         "200": { description: "{ token (PASETO, 24h), user_id }" }
         "401": { description: Bad signature / expired flow id }
@@ -174,6 +175,33 @@ paths:
       responses:
         "200": { description: "{ node_id, range, step, points[] } — wg_peers, proxy_sessions, rx/tx_bytes, cpu/mem_pct per bucket" }
         "403": { description: Not your node }
+
+  # ───────────────────────── referrals (social) ─────────────────────────
+  /api/v2/referrals/me:
+    get:
+      summary: My referral code, who referred me, and recent referees
+      description: >
+        Code is short + shareable (allocated on first access). The qualifying
+        action is a referee's first trial start (referrer +100 XP, referee +25).
+      responses:
+        "200":
+          description: Referral summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string }
+                  referred_count: { type: integer }
+                  referred_by: { type: string, description: "Referrer wallet (truncated), if any" }
+                  recent:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        wallet: { type: string, description: "Referee wallet (truncated)" }
+                        qualified: { type: boolean, description: "Referee has started their trial" }
+                        joined_at: { type: string, format: date-time }
 
   # ───────────────────────── vpn clients ─────────────────────────
   /api/v2/vpn/clients:
