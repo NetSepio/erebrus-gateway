@@ -23,8 +23,8 @@ func (s *Server) handleGetProfile(c *gin.Context) {
 }
 
 type patchProfileReq struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	Name string `json:"name"`
+	// Email is not patchable here — link it via POST /api/v2/auth/email (verified).
 }
 
 // handlePatchProfile updates mutable profile fields.
@@ -34,7 +34,7 @@ func (s *Server) handlePatchProfile(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if err := s.store.UpdateProfile(c, userID(c), req.Name, req.Email); err != nil {
+	if err := s.store.UpdateProfile(c, userID(c), req.Name); err != nil {
 		fail(c, http.StatusInternalServerError, "failed to update profile")
 		return
 	}

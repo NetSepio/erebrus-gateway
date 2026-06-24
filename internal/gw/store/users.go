@@ -21,9 +21,9 @@ func (s *Store) UpsertUserByWallet(ctx context.Context, wallet, chain, adminWall
 		`INSERT INTO users (wallet_address, chain, role)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (wallet_address) DO UPDATE SET updated_at = now()
-		 RETURNING id, wallet_address, chain, role, COALESCE(email,''), COALESCE(name,''), created_at`,
+		 RETURNING id, wallet_address, chain, role, COALESCE(email,''), email_verified, COALESCE(name,''), created_at`,
 		wallet, chain, role).
-		Scan(&u.ID, &u.WalletAddress, &u.Chain, &u.Role, &u.Email, &u.Name, &u.CreatedAt)
+		Scan(&u.ID, &u.WalletAddress, &u.Chain, &u.Role, &u.Email, &u.EmailVerified, &u.Name, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -36,9 +36,9 @@ func (s *Store) GetUser(ctx context.Context, id string) (*User, error) {
 	var chain sql.NullString
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, COALESCE(wallet_address,''), COALESCE(chain,''), role,
-		        COALESCE(email,''), COALESCE(name,''), created_at
+		        COALESCE(email,''), email_verified, COALESCE(name,''), created_at
 		 FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.WalletAddress, &chain.String, &u.Role, &u.Email, &u.Name, &u.CreatedAt)
+		Scan(&u.ID, &u.WalletAddress, &chain.String, &u.Role, &u.Email, &u.EmailVerified, &u.Name, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -49,11 +49,13 @@ func (s *Store) GetUser(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UpdateProfile updates the mutable profile fields.
-func (s *Store) UpdateProfile(ctx context.Context, id, name, email string) error {
+// UpdateProfile updates the mutable profile fields. Email is intentionally NOT
+// settable here — it is only linked through the verified OTP flow (auth/email),
+// so a linked email is always proven (no unverified squatting on the UNIQUE col).
+func (s *Store) UpdateProfile(ctx context.Context, id, name string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET name = NULLIF($2,''), email = NULLIF($3,''), updated_at = now() WHERE id = $1`,
-		id, name, email)
+		`UPDATE users SET name = NULLIF($2,''), updated_at = now() WHERE id = $1`,
+		id, name)
 	return err
 }
 
@@ -68,7 +70,7 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 func (s *Store) ListUsers(ctx context.Context, limit, offset int) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, COALESCE(wallet_address,''), COALESCE(chain,''), role,
-		        COALESCE(email,''), COALESCE(name,''), created_at
+		        COALESCE(email,''), email_verified, COALESCE(name,''), created_at
 		 FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, err
@@ -77,7 +79,7 @@ func (s *Store) ListUsers(ctx context.Context, limit, offset int) ([]User, error
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.WalletAddress, &u.Chain, &u.Role, &u.Email, &u.Name, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.WalletAddress, &u.Chain, &u.Role, &u.Email, &u.EmailVerified, &u.Name, &u.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
