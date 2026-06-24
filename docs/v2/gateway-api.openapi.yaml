@@ -203,6 +203,52 @@ paths:
                         qualified: { type: boolean, description: "Referee has started their trial" }
                         joined_at: { type: string, format: date-time }
 
+  # ───────────────────────── rank / XP (social) ─────────────────────────
+  /api/v2/rank/me:
+    get:
+      summary: My XP standing (earned/claimed/claimable, tier, breakdown)
+      description: >
+        Lifetime earned XP drives tier (T0..T4 at 0/100/500/2000/10000, tunable)
+        and never decreases. Claimable = earned − claimed.
+      responses:
+        "200":
+          description: Rank snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  xp_earned: { type: integer }
+                  xp_claimed: { type: integer }
+                  xp_claimable: { type: integer }
+                  tier: { type: integer }
+                  tier_name: { type: string }
+                  next_tier_at: { type: integer, nullable: true }
+                  breakdown_by_kind: { type: object, additionalProperties: { type: integer } }
+  /api/v2/rank/claim:
+    post:
+      summary: Spend claimable XP on a reward
+      description: "v2.0 reward: free_days (XP_FREE_DAYS_COST → XP_FREE_DAYS_GRANT days, source='rank', stacked on the current period). Logged with IP + device."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reward], properties: { reward: { type: string, enum: [free_days] } } }
+      responses:
+        "200": { description: "{ reward, xp_spent, days, subscription }" }
+        "400": { description: Unknown reward }
+        "409": { description: Not enough claimable XP }
+  /api/v2/leaderboard:
+    get:
+      summary: Top users by XP or referrals (Redis-cached) + my rank
+      parameters:
+        - { name: metric, in: query, schema: { type: string, enum: [xp, referrals], default: xp } }
+        - { name: period, in: query, schema: { type: string, enum: [all, 30d], default: all } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200": { description: "{ metric, period, entries[{rank, wallet, value}], my_rank, my_value }" }
+
   # ───────────────────────── vpn clients ─────────────────────────
   /api/v2/vpn/clients:
     get:

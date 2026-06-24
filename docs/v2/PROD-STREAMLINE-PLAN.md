@@ -11,8 +11,8 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `ec6cfaa` (S5 referrals) ·
-`c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) ·
+DB. Last commits (LOCAL, **not pushed**): `643553f`/`4fb4aab` (S6 XP/rank) ·
+`ec6cfaa` (S5) · `c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) ·
 `ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) · `0a5b46a` · `7eb96f3` (S1).
 
 **Done**
@@ -56,6 +56,15 @@ DB. Last commits (LOCAL, **not pushed**): `ec6cfaa` (S5 referrals) ·
   cols + `store.AwardXP` (event + cached `xp_earned` in one tx) — the **foundation
   S6 builds tiers/claims/leaderboard on**. `GET /referrals/me`. Migration
   `0005_referrals_xp`. Commit `ec6cfaa`.
+- ✅ **S6 XP/tiers/leaderboard** — `users.tier` from lifetime `xp_earned`
+  (thresholds `XP_TIER_THRESHOLDS`, recomputed in `AwardXP`). `AwardXPOnce` +
+  `xp_events.dedup_key` make once/per-day/per-month awards idempotent; drivers
+  wired: email_verified (+25), nft_held (+50/mo), operator_uptime_day (+20/node/
+  day, in maintenance, cap 5/owner). `GET /rank/me` (earned/claimed/claimable/
+  tier/next_tier_at/breakdown). `GET /leaderboard?metric=xp|referrals&period=all|
+  30d` (Redis-cached + my_rank). Earn-vs-claim: `xp_claims` ledger + `POST
+  /rank/claim {free_days}` (spends XP, stacks a `source='rank'` entitlement,
+  logs IP+device). Migration `0006_xp_claims`. Commits `4fb4aab` + `643553f`.
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -67,19 +76,17 @@ DB. Last commits (LOCAL, **not pushed**): `ec6cfaa` (S5 referrals) ·
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S6 XP/tiers/leaderboard (NEXT):** `users.tier` derived from `xp_earned`
-  (thresholds §5b: T0/100/500/2000/10000; recompute on each AwardXP). `GET
-  /api/v2/rank/me` ({xp, tier, next_tier_at, breakdown_by_kind}), `GET
-  /api/v2/leaderboard?metric=referrals|xp&period=all|30d` (Redis-cached),
-  earn-vs-claim: new `xp_claims` ledger + `POST /api/v2/rank/claim`. Wire the
-  already-available XP drivers — `email_verified` (S2) and `operator_uptime_day`
-  (S4 heartbeats) — to emit `xp_events` via `store.AwardXP`. **Next free
-  migration `0006`** (`0005_referrals_xp` taken) — add `xp_claims`. `xp_events`,
-  the xp cols, and `AwardXP` already exist from S5.
-- **Remaining migrations** (additive, idempotent): `0006_xp_claims`,
-  `0007_social_perks` (social_accounts, perks, user_perks — S7),
+- **S7 social verify + perks + tiered node pools (NEXT):** social_accounts
+  (provider X|telegram|email, UNIQUE(provider, provider_id)) → first verify emits
+  `social_verified` XP (+75) via the existing `AwardXPOnce`. `perks(id, type[nft|
+  xp|free_days|node_pool], min_tier, meta)` + `user_perks`. **Tier-gated fast
+  pool**: add `nodes.min_tier` (default 0) and filter discovery + provisioning by
+  the caller's `tier` (deferred from S4). Endpoints: social link/verify, perks
+  list/grant. Details in §5d/§5e. **Next free migration `0007`** (`0006_xp_claims`
+  taken) — add social_accounts, perks, user_perks, nodes.min_tier.
+- **Remaining migrations** (additive, idempotent): `0007_social_perks`,
   `0008_activity_log` (S8b). Schema in §7.
-- Recommended order: **S6 → S7** → S8/S8b.
+- Recommended order: **S7** → S8/S8b.
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -212,7 +219,7 @@ The differentiator. "Prove your social layer → faster nodes + perks."
   separately (see §5b). `free_days` for top-N referrers each month is a
   claimable perk.
 
-### 5b. XP & ranking (PR S6) — DRIVERS LOCKED
+### 5b. XP & ranking (PR S6) ✅ DONE — commits `4fb4aab`+`643553f`, migration `0006_xp_claims` — DRIVERS LOCKED
 Four XP sources (all confirmed). `xp_events(user_id, kind, points, meta,
 created_at)` is an append-only ledger; `users.xp` is the cached sum; `users.tier`
 is derived. Starting weights are **tunable** (config, not hard-coded):
@@ -241,7 +248,7 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
   activity-log entry (§6.5) with IP + device.
 - `POST /api/v2/rank/claim` `{reward_id}` → grants the reward, logs the claim.
 
-### 5c. Leaderboard (PR S6)
+### 5c. Leaderboard (PR S6) ✅ DONE
 - `GET /api/v2/leaderboard?metric=referrals|xp&period=all|30d` (Redis-cached,
   paginated) → rank, handle/wallet (truncated), count/xp. Plus my own rank.
 
@@ -341,7 +348,7 @@ S2  auth: Reown/EVM+SOL only, Resend email (optional)      ✅ DONE (68fe987, 22
 S3  entitlements: 7d trial + 30d NFT-direct + rank source  ✅ DONE (fbc2c84)
 S4  operator nodes: ownership, visibility, node_metrics + charts  ✅ DONE (3dea83a, c1b6690)
 S5  referrals (qualify on referee trial start)              ✅ DONE (ec6cfaa)
-S6  XP earn/claim, tiers, leaderboard
+S6  XP earn/claim, tiers, leaderboard                       ✅ DONE (4fb4aab, 643553f)
 S7  social verification (X/Telegram/email) + perks + tiered node pools
 S8  prod hardening (parallel with S4–S7)
 S8b activity & audit log (IP + device) — webapp Activity section
