@@ -68,6 +68,7 @@ func (s *Server) handleEmailOTPStart(c *gin.Context) {
 		fail(c, http.StatusBadGateway, "failed to send email")
 		return
 	}
+	s.logActivity(c, uid, "auth.email.request", "")
 	ok(c, http.StatusOK, gin.H{"status": "sent", "expires_in": int(s.cfg.MagicLinkExpiration.Seconds())})
 }
 
@@ -123,6 +124,7 @@ func (s *Server) handleEmailOTPVerify(c *gin.Context) {
 	// Record email as a linked social account too (no social_verified XP — email
 	// has its own email_verified driver).
 	_, _ = s.store.LinkSocialAccount(c, uid, "email", email, "")
+	s.logActivity(c, uid, "auth.email.verify", "")
 
 	u, _ := s.store.GetUser(c, uid)
 	ok(c, http.StatusOK, u)

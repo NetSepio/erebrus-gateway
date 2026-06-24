@@ -88,5 +88,6 @@ func (s *Server) handleAuthenticate(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to issue token")
 		return
 	}
+	s.logActivity(c, u.ID, "auth.login", "") // audit (this route is public, no middleware)
 	ok(c, http.StatusOK, gin.H{"token": tok, "user_id": u.ID, "role": u.Role})
 }
