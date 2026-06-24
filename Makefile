@@ -3,8 +3,10 @@
 run:
 	go run ./cmd/gateway
 
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
 build:
-	CGO_ENABLED=0 go build -o gateway ./cmd/gateway
+	CGO_ENABLED=0 go build -ldflags "-X github.com/NetSepio/gateway/internal/version.Version=$(VERSION)" -o gateway ./cmd/gateway
 
 test:
 	go test ./...

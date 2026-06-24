@@ -1,6 +1,5 @@
 // Command gateway is the Erebrus v2 gateway: wallet auth, node discovery +
-// control plane (WebSocket hub), VPN client provisioning, USDC subscriptions,
-// and admin. It replaces the v1 app.Init bootstrap.
+// control plane (WebSocket hub), VPN client provisioning, entitlements, and admin.
 package main
 
 import (
@@ -17,15 +16,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/NetSepio/gateway/internal/gw/api"
-	"github.com/NetSepio/gateway/internal/gw/cache"
-	"github.com/NetSepio/gateway/internal/gw/config"
-	"github.com/NetSepio/gateway/internal/gw/identity"
-	"github.com/NetSepio/gateway/internal/gw/mailer"
-	"github.com/NetSepio/gateway/internal/gw/nftgate"
-	"github.com/NetSepio/gateway/internal/gw/nodehub"
-	"github.com/NetSepio/gateway/internal/gw/store"
-	"github.com/NetSepio/gateway/internal/gw/token"
+	"github.com/NetSepio/gateway/internal/api"
+	"github.com/NetSepio/gateway/internal/cache"
+	"github.com/NetSepio/gateway/internal/config"
+	"github.com/NetSepio/gateway/internal/identity"
+	"github.com/NetSepio/gateway/internal/mailer"
+	"github.com/NetSepio/gateway/internal/nftgate"
+	"github.com/NetSepio/gateway/internal/nodehub"
+	"github.com/NetSepio/gateway/internal/store"
+	"github.com/NetSepio/gateway/internal/token"
+	"github.com/NetSepio/gateway/internal/version"
 )
 
 func main() {
@@ -43,6 +43,9 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -52,25 +55,22 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	defer st.Close()
-	st.SetTierThresholds(cfg.XPTierThresholds)
+
+	platform, err := st.LoadPlatformSettings(ctx)
+	if err != nil {
+		return fmt.Errorf("platform settings: %w", err)
+	}
+	st.SetTierThresholds(platform.XPTierThresholds)
+	platformLive := &config.PlatformSettings{}
+	platformLive.Replace(platform)
 	log.Info("database ready")
 
-	// PASETO signer: explicit key, mnemonic-derived key, or ephemeral dev fallback.
-	pasetoKey, fromMnemonic, err := identity.ResolvePasetoKey(cfg.PasetoPrivateKey, cfg.Mnemonic)
+	pasetoKey, err := resolvePasetoKey(cfg, log)
 	if err != nil {
-		return fmt.Errorf("paseto key: %w", err)
+		return err
 	}
-	switch {
-	case pasetoKey != "" && fromMnemonic:
-		log.Info("PASETO key derived from MNEMONIC", "path", identity.PasetoDerivationPath)
-	case pasetoKey != "":
-		log.Info("PASETO key loaded from PASETO_PRIVATE_KEY")
-	default:
-		_, sk, _ := ed25519.GenerateKey(rand.Reader)
-		pasetoKey = hex.EncodeToString(sk)
-		log.Warn("PASETO_PRIVATE_KEY and MNEMONIC not set — generated an ephemeral key; tokens will not survive restart")
-	}
-	tokens, err := token.New(pasetoKey, cfg.PasetoSignedBy, cfg.PasetoExpiration)
+	plat := platformLive.Snapshot()
+	tokens, err := token.New(pasetoKey, plat.PasetoSignedBy, plat.PasetoExpiration)
 	if err != nil {
 		return err
 	}
@@ -100,16 +100,16 @@ func run(log *slog.Logger) error {
 	}
 
 	// Background maintenance: flip stale nodes offline, purge expired challenges.
-	go maintenance(ctx, st, cfg.NodeMetricsRetention, cfg.XPUptimeDay, log)
+	go maintenance(ctx, st, platformLive, log)
 
 	// HTTP server.
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,
-		Handler:           api.New(cfg, st, tokens, hub, c, nft, ml).Router(),
+		Handler:           api.New(cfg, platformLive, st, tokens, hub, c, nft, ml).Router(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		log.Info("gateway listening", "addr", srv.Addr, "version", cfg.Version)
+		log.Info("gateway listening", "addr", srv.Addr, "version", version.Version)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server error", "err", err)
 			stop()
@@ -123,11 +123,23 @@ func run(log *slog.Logger) error {
 	return srv.Shutdown(shutCtx)
 }
 
-// maintenance periodically marks unresponsive nodes offline (3 missed
-// heartbeats = 90s), purges expired login challenges + email OTPs, prunes node
-// metrics past the retention window, and awards operator-uptime XP (idempotent
-// per node per UTC day).
-func maintenance(ctx context.Context, st *store.Store, metricsRetention time.Duration, uptimePoints int64, log *slog.Logger) {
+// resolvePasetoKey derives the gateway PASETO signer from MNEMONIC. Validate()
+// already requires MNEMONIC in release; debug may use an ephemeral key.
+func resolvePasetoKey(cfg *config.Config, log *slog.Logger) (string, error) {
+	if key, err := identity.PasetoKeyFromMnemonic(cfg.Mnemonic); err == nil {
+		log.Info("PASETO key derived from MNEMONIC", "path", identity.PasetoDerivationPath)
+		return key, nil
+	} else if cfg.Mnemonic != "" {
+		return "", fmt.Errorf("paseto key from mnemonic: %w", err)
+	}
+	_, sk, _ := ed25519.GenerateKey(rand.Reader)
+	log.Warn("MNEMONIC not set — generated an ephemeral PASETO key; tokens will not survive restart")
+	return hex.EncodeToString(sk), nil
+}
+
+// maintenance periodically marks unresponsive nodes offline, purges stale data,
+// and awards operator-uptime XP (idempotent per node per UTC day).
+func maintenance(ctx context.Context, st *store.Store, platform *config.PlatformSettings, log *slog.Logger) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -135,14 +147,15 @@ func maintenance(ctx context.Context, st *store.Store, metricsRetention time.Dur
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			plat := platform.Snapshot()
 			mctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			if n, err := st.MarkStaleNodesOffline(mctx, 95*time.Second); err == nil && n > 0 {
 				log.Info("marked stale nodes offline", "count", n)
 			}
 			_ = st.PurgeExpiredFlowIDs(mctx)
 			_ = st.PurgeExpiredEmailOTPs(mctx)
-			_ = st.PurgeOldNodeMetrics(mctx, metricsRetention)
-			_ = st.AwardOperatorUptimeXP(mctx, uptimePoints)
+			_ = st.PurgeOldNodeMetrics(mctx, plat.NodeMetricsRetention)
+			_ = st.AwardOperatorUptimeXP(mctx, plat.XPUptimeDay)
 			cancel()
 		}
 	}

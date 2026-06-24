@@ -45,7 +45,7 @@ for cid in "${cids[@]}"; do
 done
 
 while IFS= read -r envfile; do
-  if grep -qE '^(MNEMONIC|GATEWAY_MNEMONIC|PASETO_PRIVATE_KEY|APP_PORT)=' "$envfile" 2>/dev/null; then
+  if grep -qE '^(MNEMONIC|APP_PORT)=' "$envfile" 2>/dev/null; then
     log "found $envfile"
     dirname "$envfile"
     exit 0

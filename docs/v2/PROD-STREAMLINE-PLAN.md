@@ -84,7 +84,7 @@ against a live Postgres+Redis on the deploy host, then push `v2` → `main`.
   allows `X-Erebrus-Client`. Commits `6c9e44d` + `4543614`. _Ops (doc, not code):
   DB `statement_timeout`, gateway→node HTTPS — see S8-QA._
 
-**Repo map (everything lives in `internal/gw/`)**
+**Repo map (everything lives in `internal/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
   (routes in `server.go`).
 - `store/` — Postgres (database/sql + lib/pq), explicit SQL migrations in
@@ -112,7 +112,7 @@ against a live Postgres+Redis on the deploy host, then push `v2` → `main`.
 
 ## 0. Current state (grounded)
 
-- **v2 = `internal/gw/*`** (config, store [2 migrations], token PASETO, wallet
+- **v2 = `internal/*`** (config, store [2 migrations], token PASETO, wallet
   verify, identity, nodehub WS, nodeclient, nftgate, cache, api [10 handlers,
   full route surface]). Entry: `cmd/gateway/main.go`.
 - **v1 legacy still present and compiled-adjacent:** `internal/{api, caching,
@@ -130,14 +130,14 @@ against a live Postgres+Redis on the deploy host, then push `v2` → `main`.
 
 1. Delete v1: `internal/{api,caching,database,p2p-Node,routines,server}`,
    `models/`, `app/`, `utils/` (audit `utils/` for anything v2 reuses — move the
-   2–3 helpers into `internal/gw/...` first), `cmd/main.go`, `cmd/server.go`,
+   2–3 helpers into `internal/...` first), `cmd/main.go`, `cmd/server.go`,
    `contract/`, the v1 `Dockerfile`.
 2. One entry point: `cmd/gateway/main.go` → rename to `cmd/erebrus-gateway`.
    `Dockerfile.v2` → `Dockerfile`; `docker-compose.v2.yml` → `docker-compose.yml`.
 3. `go mod tidy` — expect ~40% fewer deps; drop gorm/libp2p/chromedp/openai.
-4. CI: build/vet/test `./internal/gw/... ./cmd/...` only; gitleaks stays.
+4. CI: build/vet/test `./internal/... ./cmd/...` only; gitleaks stays.
 5. Acceptance: `go build ./... && go vet ./... && go test ./...` green with no
-   `internal/gw`-external packages; image builds; no behavior change to `/api/v2`.
+   `internal/`-external packages; image builds; no behavior change to `/api/v2`.
 
 > This is the single biggest PROD-readiness win and makes the repo legible.
 

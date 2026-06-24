@@ -3,9 +3,9 @@ info:
   title: Erebrus Gateway API v2
   version: 2.0.0
   description: |
-    Public API of the Erebrus gateway: auth, accounts, node discovery, VPN
-    client provisioning, USDC subscriptions, organizations, hosted apps, and
-    admin. FROZEN (v2.0): additive changes only.
+    Public API of the Erebrus gateway (gateway.erebrus.io): auth, accounts,
+    node discovery, VPN client provisioning, entitlements, organizations, and
+    admin. Webapp: erebrus.io / dev.erebrus.io. FROZEN (v2.0): additive only.
 
     Auth modes:
       - User PASETO (wallet-signature or social login) — Authorization: Bearer
@@ -58,7 +58,7 @@ paths:
                   message:
                     {
                       type: string,
-                      example: "I accept the Erebrus Terms of Service https://erebrus.network/terms. Challenge: <flow_id>",
+                      example: "I accept the Erebrus Terms of Service https://erebrus.io/terms. Challenge: <flow_id>",
                     }
     post:
       summary: Complete wallet-signature login
@@ -81,43 +81,6 @@ paths:
       responses:
         "200": { description: "{ token (PASETO, 24h), user_id }" }
         "401": { description: Bad signature / expired flow id }
-  /api/v2/auth/flowid:
-    get:
-      summary: "(deprecated) use GET /api/v2/auth"
-      security: []
-      deprecated: true
-      parameters:
-        - {
-            name: wallet_address,
-            in: query,
-            required: true,
-            schema: { type: string },
-          }
-        - {
-            name: chain,
-            in: query,
-            required: true,
-            schema: { type: string, enum: [evm, sol] },
-          }
-      responses:
-        "200": { description: Same as GET /api/v2/auth }
-  /api/v2/auth/authenticate:
-    post:
-      summary: "(deprecated) use POST /api/v2/auth"
-      security: []
-      deprecated: true
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [flow_id, signature]
-              properties:
-                flow_id: { type: string }
-                signature: { type: string }
-                public_key: { type: string }
-      responses:
-        "200": { description: Same as POST /api/v2/auth }
   # Email is OPTIONAL: it links a verified address to an already-authenticated
   # wallet account (perks/ranking + recovery). It is never a login method and is
   # never required to use the VPN. Disabled (503) unless RESEND_API_KEY is set.
@@ -483,17 +446,14 @@ paths:
           "404": { description: Not found },
         }
 
-  # ───────────────────────── subscriptions & payments ─────────────────────────
+  # ───────────────────────── subscriptions (trial + NFT; no payments yet) ─────
   /api/v2/subscriptions/plans:
     get:
       {
-        summary: List plans (price in USDC),
+        summary: List plans,
         security: [],
         responses: { "200": { description: Plans } },
       }
-  # No money in v2.0 (locked): entitlement = trial OR NFT (OR rank-granted free
-  # days, future). The USDC /payments routes were removed; crypto_payments stays
-  # in the schema for a future paid tier.
   /api/v2/subscriptions:
     get:
       summary: My subscription + entitlement state
@@ -587,7 +547,7 @@ paths:
         {
           "200":
             {
-              description: "clients, api_calls, bandwidth_bytes, amount_due_usdc",
+              description: "clients, api_calls, bandwidth_bytes",
             },
         }
   /api/v2/orgs/{id}/clients:
@@ -596,13 +556,6 @@ paths:
         summary: VPN clients provisioned under this org,
         responses: { "200": { description: Clients } },
       }
-  /api/v2/orgs/{id}/invoices:
-    get:
-      {
-        summary: Monthly invoices (settled in USDC via /payments),
-        responses: { "200": { description: Invoices } },
-      }
-
   # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
   /api/v2/apps:
     get:
@@ -632,9 +585,8 @@ paths:
       responses:
         "200":
           description: |
-            nodes{online,offline,by_region}, users{total,active_30d,by_platform},
-            subscriptions{by_plan,by_source}, orgs{count}, traffic{bandwidth_30d},
-            payments{confirmed_30d_usdc}
+            nodes{online,offline,by_status}, users{total}, subscriptions{by_plan},
+            orgs{total}, traffic_30d{rx_bytes,tx_bytes}
   /api/v2/admin/nodes:
     {
       get:
@@ -726,6 +678,28 @@ paths:
           responses: { "200": { description: Apps } },
         },
     }
+  /api/v2/admin/settings:
+    get:
+      summary: List platform_settings (XP, trials, rate limits, auth text, …)
+      responses:
+        "200": { description: "{ settings[{key, value, description}] }" }
+    patch:
+      summary: Update platform settings (hot-reloads rate limits, XP weights, PASETO TTL for new tokens)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [settings]
+              properties:
+                settings:
+                  type: object
+                  additionalProperties: { type: string }
+                  example: { trial_period: "168h", xp_referrer_points: "100" }
+      responses:
+        "200": { description: "{ status: updated }" }
+        "400": { description: Unknown key or invalid value }
 components:
   schemas:
     NodePublic:

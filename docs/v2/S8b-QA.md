@@ -11,7 +11,7 @@ go build ./... && go vet ./... && go test ./...   # ok
 ```
 
 DB-free coverage: `clientApp` platform classification; action-map shape;
-migration embed guard → `0008` (last migration).
+migration embed guard through `0010`.
 
 ## Live smoke test (host with Postgres + Redis)
 

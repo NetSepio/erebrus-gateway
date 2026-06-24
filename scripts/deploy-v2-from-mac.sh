@@ -68,9 +68,9 @@ git branch --show-current || true
 git status --short || true
 if [[ "${SKIP_COMMIT:-0}" != "1" ]]; then
   if [[ -n "$(git status --porcelain 2>/dev/null || true)" ]]; then
-    git add internal/gw/api/subscriptions.go \
-            internal/gw/store/subscriptions.go \
-            internal/gw/api/vpn.go \
+    git add internal/api/subscriptions.go \
+            internal/store/subscriptions.go \
+            internal/api/vpn.go \
             scripts/deploy-v2-remote.sh \
             scripts/deploy-v2-from-mac.sh \
             .github/workflows/deploy-v2.yml 2>/dev/null || true
