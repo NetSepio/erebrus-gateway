@@ -67,6 +67,14 @@ func (c *Cache) Del(ctx context.Context, keys ...string) {
 	_ = c.rdb.Del(ctx, keys...).Err()
 }
 
+// Ping reports whether Redis is reachable (false when caching is disabled).
+func (c *Cache) Ping(ctx context.Context) bool {
+	if c == nil || c.rdb == nil {
+		return false
+	}
+	return c.rdb.Ping(ctx).Err() == nil
+}
+
 // Close closes the underlying client.
 func (c *Cache) Close() error {
 	if c == nil || c.rdb == nil {

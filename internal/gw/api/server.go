@@ -28,6 +28,7 @@ type Server struct {
 	nft     nftgate.Checker
 	mailer  *mailer.Mailer
 	xverify *socialverify.XVerifier
+	metrics *reqMetrics
 }
 
 // New builds the API server.
@@ -35,6 +36,7 @@ func New(cfg *config.Config, st *store.Store, tm *token.Manager, hub *nodehub.Hu
 	return &Server{
 		cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(),
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(cfg.XAPIBaseURL),
+		metrics: &reqMetrics{},
 	}
 }
 
@@ -44,15 +46,22 @@ func (s *Server) Router() *gin.Engine {
 		gin.SetMode(s.cfg.GinMode)
 	}
 	r := gin.New()
+	// Trust only the configured reverse proxies so ClientIP (rate limiting +
+	// activity log) reflects the real client, not a spoofable X-Forwarded-For.
+	// Empty => trust none (ClientIP = direct peer).
+	_ = r.SetTrustedProxies(splitCSVRaw(s.cfg.TrustedProxies))
 	r.Use(gin.Recovery())
+	r.Use(s.metricsMiddleware())
 
 	corsCfg := cors.DefaultConfig()
 	corsCfg.AllowOrigins = splitCSV(s.cfg.AllowedOrigin)
-	corsCfg.AllowHeaders = []string{"Origin", "Content-Type", "Authorization", "X-Api-Key"}
+	corsCfg.AllowHeaders = []string{"Origin", "Content-Type", "Authorization", "X-Api-Key", "X-Erebrus-Client"}
 	corsCfg.AllowMethods = []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsCfg))
 
 	r.GET("/healthz", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok", "version": s.cfg.Version}) })
+	r.GET("/readyz", s.handleReadyz)
+	r.GET("/metrics", s.handleMetrics)
 
 	v2 := r.Group("/api/v2")
 
@@ -178,6 +187,33 @@ func splitCSV(s string) []string {
 	}
 	if len(out) == 0 {
 		out = []string{"*"}
+	}
+	return out
+}
+
+// splitCSVRaw is splitCSV without the "*" fallback: empty input yields nil (used
+// for trusted proxies, where nil means "trust none").
+func splitCSVRaw(s string) []string {
+	out := []string{}
+	cur := ""
+	for _, ch := range s {
+		if ch == ',' {
+			if cur != "" {
+				out = append(out, cur)
+			}
+			cur = ""
+			continue
+		}
+		if ch == ' ' {
+			continue
+		}
+		cur += string(ch)
+	}
+	if cur != "" {
+		out = append(out, cur)
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

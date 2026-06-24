@@ -13,11 +13,12 @@ import (
 // Config is the full gateway configuration.
 type Config struct {
 	// app
-	AppName       string `env:"APP_NAME" envDefault:"erebrus-gateway"`
-	AppPort       string `env:"APP_PORT" envDefault:"8080"`
-	GinMode       string `env:"GIN_MODE" envDefault:"release"`
-	AllowedOrigin string `env:"ALLOWED_ORIGIN" envDefault:"http://localhost:3000"`
-	Version       string `env:"VERSION" envDefault:"2.0.0"`
+	AppName        string `env:"APP_NAME" envDefault:"erebrus-gateway"`
+	AppPort        string `env:"APP_PORT" envDefault:"8080"`
+	GinMode        string `env:"GIN_MODE" envDefault:"release"`
+	AllowedOrigin  string `env:"ALLOWED_ORIGIN" envDefault:"http://localhost:3000"`
+	TrustedProxies string `env:"TRUSTED_PROXIES"` // CSV of reverse-proxy IPs/CIDRs; empty = trust none
+	Version        string `env:"VERSION" envDefault:"2.0.0"`
 
 	// auth
 	Mnemonic            string        `env:"MNEMONIC"` // derives PASETO key when PASETO_PRIVATE_KEY is empty
