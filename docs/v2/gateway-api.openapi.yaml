@@ -15,6 +15,19 @@ info:
 servers:
   - url: https://gateway.erebrus.io
 paths:
+  # ───────────────────────── ops (liveness / readiness / metrics) ─────────────────────────
+  /healthz:
+    get: { summary: Liveness, security: [], responses: { "200": { description: "{ status, version }" } } }
+  /readyz:
+    get:
+      summary: Readiness (DB required, Redis optional)
+      security: []
+      responses:
+        "200": { description: "{ status: ready, db: up, redis: up|disabled }" }
+        "503": { description: DB unreachable }
+  /metrics:
+    get: { summary: "Prometheus metrics (requests, WS nodes, DB pool). Firewall to internal scrapers in prod.", security: [], responses: { "200": { description: text exposition } } }
+
   # ───────────────────────── auth ─────────────────────────
   /api/v2/auth:
     get:

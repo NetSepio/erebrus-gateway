@@ -11,8 +11,8 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `3b42d09`/`17aba75`/`96e73c4` (S7
-social/perks/pools) · `643553f`/`4fb4aab` (S6) · `ec6cfaa` (S5) ·
+DB. Last commits (LOCAL, **not pushed**): `4543614`/`6c9e44d` (S8 harden) ·
+`3b42d09`/`17aba75`/`96e73c4` (S7) · `643553f`/`4fb4aab` (S6) · `ec6cfaa` (S5) ·
 `c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) · S2 · `0a5b46a` · `7eb96f3` (S1).
 
 **Done**
@@ -74,6 +74,12 @@ social/perks/pools) · `643553f`/`4fb4aab` (S6) · `ec6cfaa` (S5) ·
   **Perks**: catalog + `user_perks` (`GET /perks` tier-annotated, `GET /perks/me`,
   admin `POST /perks` + `/perks/:id/grant`). Migration `0007_social_perks`.
   Commits `96e73c4` + `17aba75` + `3b42d09`.
+- ✅ **S8 prod hardening** — per-IP Redis rate limiting (fail-open) on `/auth/*`
+  (30/min) + `/nodes/register` (10/min); `gin.SetTrustedProxies` from
+  `TRUSTED_PROXIES` (real ClientIP); `GET /readyz` (DB ping; Redis optional) +
+  dependency-free Prometheus `GET /metrics` (requests/WS nodes/DB pool); CORS
+  allows `X-Erebrus-Client`. Commits `6c9e44d` + `4543614`. _Ops (doc, not code):
+  DB `statement_timeout`, gateway→node HTTPS — see S8-QA._
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -85,17 +91,14 @@ social/perks/pools) · `643553f`/`4fb4aab` (S6) · `ec6cfaa` (S5) ·
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S8 prod hardening (NEXT):** per-IP rate limiting on `/auth/*` +
-  `/nodes/register` (Redis token-bucket); lock CORS to `ALLOWED_ORIGIN`;
-  Prometheus `/metrics` + `/readyz` (DB+Redis ping, distinct from `/healthz`);
-  set gin trusted proxies (so `ClientIP` is trustworthy); statement timeouts;
-  gateway→node calls over HTTPS. Details in §6. Mostly middleware/ops — likely
-  **no new migration** (S8b adds `0008_activity_log`).
-- **S8b activity/audit log:** `activity_log(user_id, action, target, ip,
-  user_agent, device, app, meta, created_at)` via a Gin middleware on
-  authenticated mutating routes; `GET /account/activity` + `GET /admin/activity`.
-  Migration `0008_activity_log`. Schema in §6.5/§7.
-- Recommended order: **S8 → S8b** (final).
+- **S8b activity/audit log (NEXT — FINAL PR):** `activity_log(id, user_id,
+  action, target, ip, user_agent, device, app, meta jsonb, created_at)` via a Gin
+  middleware on authenticated *mutating* routes (write an entry after success;
+  reference sensitive values by id, never dump). IP via `ClientIP` (trusted
+  proxies set in S8), device via `X-Erebrus-Client`, app inferred from the same
+  hint/UA. `GET /api/v2/account/activity?cursor=&limit=` (own, newest first) +
+  `GET /api/v2/admin/activity` (fleet-wide). Migration **`0008_activity_log`**.
+  Schema in §6.5/§7. After this the whole plan is complete.
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -284,7 +287,7 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
 
 ---
 
-## 6. Production hardening (PR S8 — parallel)
+## 6. Production hardening (PR S8 — parallel) ✅ DONE (commits `6c9e44d`+`4543614`)
 
 - **Secrets/config:** all via env (already), `sslmode=require`, real `MNEMONIC`,
   `RESEND_API_KEY`, treasury/RPC for nftgate. `.env.example` audited.
@@ -359,7 +362,7 @@ S4  operator nodes: ownership, visibility, node_metrics + charts  ✅ DONE (3dea
 S5  referrals (qualify on referee trial start)              ✅ DONE (ec6cfaa)
 S6  XP earn/claim, tiers, leaderboard                       ✅ DONE (4fb4aab, 643553f)
 S7  social verification (X/Telegram/email) + perks + tiered node pools  ✅ DONE (96e73c4, 17aba75, 3b42d09)
-S8  prod hardening (parallel with S4–S7)
+S8  prod hardening (parallel with S4–S7)                    ✅ DONE (6c9e44d, 4543614)
 S8b activity & audit log (IP + device) — webapp Activity section
 ```
 
