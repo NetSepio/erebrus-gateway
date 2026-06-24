@@ -80,7 +80,24 @@ func (s *Server) handleStartTrial(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to start trial")
 		return
 	}
+	// Qualifying action for referrals: the referee's first trial start awards XP
+	// to both parties. Best-effort — never fail the trial on an XP write. The
+	// one-trial-per-user index guarantees this path fires at most once per user.
+	s.awardReferralXP(c, userID(c))
 	ok(c, http.StatusCreated, sub)
+}
+
+// awardReferralXP grants referral XP when the user was referred: +referrer to the
+// referrer, +referee to the referee (weights from config).
+func (s *Server) awardReferralXP(c *gin.Context, refereeID string) {
+	referrerID, err := s.store.ReferrerOf(c, refereeID)
+	if err != nil || referrerID == "" {
+		return
+	}
+	_ = s.store.AwardXP(c, refereeID, "referral_qualified", s.cfg.XPRefereePoints,
+		map[string]any{"role": "referee", "referrer_id": referrerID})
+	_ = s.store.AwardXP(c, referrerID, "referral_qualified", s.cfg.XPReferrerPoints,
+		map[string]any{"role": "referrer", "referee_id": refereeID})
 }
 
 // handleNFTRefresh verifies the caller's wallet holds the gating NFT and

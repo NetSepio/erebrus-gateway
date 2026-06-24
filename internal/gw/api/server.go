@@ -88,6 +88,9 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/operator/nodes", s.handleOperatorNodes)
 		user.GET("/operator/nodes/:id/metrics", s.handleOperatorNodeMetrics)
 
+		// referrals (social layer): my code, who referred me, recent referees
+		user.GET("/referrals/me", s.handleReferralsMe)
+
 		// entitlement: trial + NFT gating only (no money in v2.0)
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)

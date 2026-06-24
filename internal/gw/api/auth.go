@@ -44,6 +44,7 @@ type authenticateReq struct {
 	FlowID    string `json:"flow_id"`
 	Signature string `json:"signature"`
 	PublicKey string `json:"public_key"`
+	Ref       string `json:"ref"` // optional referral code (binds once, on first signup)
 }
 
 // handleAuthenticate completes login: POST /api/v2/auth.
@@ -74,6 +75,13 @@ func (s *Server) handleAuthenticate(c *gin.Context) {
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to load user")
 		return
+	}
+	// Optional referral binding: sets referred_by once (immutable, self-blocked).
+	// XP is awarded later, on the referee's first trial start (the qualifying action).
+	if ref := strings.TrimSpace(req.Ref); ref != "" {
+		if referrerID, err := s.store.UserIDByReferralCode(c, ref); err == nil {
+			_, _ = s.store.BindReferrer(c, u.ID, referrerID)
+		}
 	}
 	tok, err := s.tokens.IssueUser(u.ID, u.WalletAddress, u.Chain, u.Role)
 	if err != nil {
