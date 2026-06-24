@@ -11,13 +11,24 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `0a5b46a` (decisions) · `7eb96f3` (S1).
+DB. Last commits (LOCAL, **not pushed**): `22097cf` (S2 email) · `68fe987`
+(S2 apt/sui) · `0a5b46a` (decisions) · `7eb96f3` (S1).
 
 **Done**
 - ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
   (gorm/libp2p/chromedp/openai gone; go-ethereum kept for EVM ecrecover). One
   `Dockerfile` + `docker-compose.yml`. −20,789 lines.
 - ✅ **All product decisions locked** (see §9 + the per-feature sections).
+- ✅ **S2 auth** — wallet auth limited to **EVM + Solana** (apt/sui verifiers +
+  blake2b-simd dep removed; `x/crypto` demoted to indirect). **Optional verified
+  email linking** via Resend OTP: authenticated `POST /api/v2/auth/email` +
+  `/auth/email/verify` (6-digit, sha256-hashed, 60s resend cooldown, 5-attempt
+  cap, one-email-one-account). Dependency-free `mailer/` (net/http; disabled →
+  503 when `RESEND_API_KEY` unset). Migration `0003_email_auth` (email_verified
+  col + email_otps table). Dead `GOOGLE_AUDIENCE` + the `/auth/social`
+  (Google/Apple) stub dropped — social logins resolve to a wallet via Reown/MWA,
+  so the backend only ever verifies a wallet signature. Email is **never** a
+  login method and **never** required for the VPN.
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -29,14 +40,14 @@ DB. Last commits (LOCAL, **not pushed**): `0a5b46a` (decisions) · `7eb96f3` (S1
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S2 auth:** strip Aptos/Sui from `wallet/`; add Resend email OTP (optional).
-- **S3 entitlements:** change `trialPeriod` **14d → 7d** at
-  `internal/gw/api/server.go:127`; NFT-direct-30d in `handleNFTRefresh`
+- **S3 entitlements (NEXT):** change `trialPeriod` **14d → 7d** at
+  `internal/gw/api/server.go:132`; NFT-direct-30d in `handleNFTRefresh`
   (`api/subscriptions.go`) + `store.StartTrial` (`store/subscriptions.go:90`).
-- **New migrations to add** (additive, idempotent, next numbers): `0003_node_metrics`,
-  `0004_social_xp` (xp_events, xp_claims, social_accounts, users cols),
-  `0005_referrals_perks`, `0006_activity_log`. Schema in §7.
-- Recommended order: **S2 → S3 → S4** (operator dashboards, most visible) → S5–S8b.
+- **New migrations to add** (additive, idempotent, next free number is **0004** —
+  `0003_email_auth` is taken by S2): `0004_node_metrics`, `0005_social_xp`
+  (xp_events, xp_claims, social_accounts — **email/email_verified already done in
+  S2**), `0006_referrals_perks`, `0007_activity_log`. Schema in §7.
+- Recommended order: **S3 → S4** (operator dashboards, most visible) → S5–S8b.
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -80,7 +91,12 @@ DB. Last commits (LOCAL, **not pushed**): `0a5b46a` (decisions) · `7eb96f3` (S1
 
 ---
 
-## 2. Auth — Reown + Solana/Ethereum mainnet + Resend (PR S2)
+## 2. Auth — Reown + Solana/Ethereum mainnet + Resend (PR S2) ✅ DONE
+
+> Implemented in commits `68fe987` (drop apt/sui) + `22097cf` (email linking).
+> Email is an **authenticated link** to a wallet account (not a login method);
+> `/auth/social` (Google/Apple) + `GOOGLE_AUDIENCE` removed (Reown/MWA resolve
+> social logins to a wallet signature). Resend client is dependency-free.
 
 Frontend uses **Reown AppKit** only; backend verifies signatures + issues PASETO.
 
@@ -262,9 +278,9 @@ ALTER nodes ADD owner_user_id uuid, org_id uuid NULL, access_mode text, min_tier
   -- owner_user_id resolved from the registering wallet; org_id set by the operator
   -- when starting the node (orgs are the existing API-key orgs, created via API).
 node_metrics(node_id, bucket timestamptz, wg_peers, proxy_sessions, rx_bytes, tx_bytes, cpu_pct, mem_pct)  PK(node_id, bucket)
+-- DONE in S2 (0003_email_auth): users.email_verified bool; email_otps(...).
 users ADD referral_code text UNIQUE, referred_by_user_id uuid NULL,
-  xp_earned bigint DEFAULT 0, xp_claimed bigint DEFAULT 0, tier int DEFAULT 0,
-  email text, email_verified bool;
+  xp_earned bigint DEFAULT 0, xp_claimed bigint DEFAULT 0, tier int DEFAULT 0;
 xp_events(id, user_id, kind, points, meta jsonb, created_at)              -- earned ledger (lifetime)
 xp_claims(id, user_id, kind, xp_spent bigint, reward, ip, device, meta jsonb, created_at)  -- claim ledger
 social_accounts(user_id, provider['x'|'telegram'|'email'], provider_id, handle, verified_at)  UNIQUE(provider, provider_id)
@@ -279,7 +295,7 @@ activity_log(id, user_id, action, target, ip, user_agent, device, app, meta json
 
 ```
 S1  streamline: delete v1, one binary, prune deps          ✅ DONE (7eb96f3)
-S2  auth: Reown/EVM+SOL only, Resend email (optional)
+S2  auth: Reown/EVM+SOL only, Resend email (optional)      ✅ DONE (68fe987, 22097cf)
 S3  entitlements: 7d trial + 30d NFT-direct + rank source
 S4  operator nodes: ownership, visibility, node_metrics + charts
 S5  referrals (qualify on referee trial start)
