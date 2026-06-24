@@ -52,6 +52,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	defer st.Close()
+	st.SetTierThresholds(cfg.XPTierThresholds)
 	log.Info("database ready")
 
 	// PASETO signer: explicit key, mnemonic-derived key, or ephemeral dev fallback.
@@ -99,7 +100,7 @@ func run(log *slog.Logger) error {
 	}
 
 	// Background maintenance: flip stale nodes offline, purge expired challenges.
-	go maintenance(ctx, st, cfg.NodeMetricsRetention, log)
+	go maintenance(ctx, st, cfg.NodeMetricsRetention, cfg.XPUptimeDay, log)
 
 	// HTTP server.
 	srv := &http.Server{
@@ -123,9 +124,10 @@ func run(log *slog.Logger) error {
 }
 
 // maintenance periodically marks unresponsive nodes offline (3 missed
-// heartbeats = 90s), purges expired login challenges + email OTPs, and prunes
-// node metrics past the retention window.
-func maintenance(ctx context.Context, st *store.Store, metricsRetention time.Duration, log *slog.Logger) {
+// heartbeats = 90s), purges expired login challenges + email OTPs, prunes node
+// metrics past the retention window, and awards operator-uptime XP (idempotent
+// per node per UTC day).
+func maintenance(ctx context.Context, st *store.Store, metricsRetention time.Duration, uptimePoints int64, log *slog.Logger) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -140,6 +142,7 @@ func maintenance(ctx context.Context, st *store.Store, metricsRetention time.Dur
 			_ = st.PurgeExpiredFlowIDs(mctx)
 			_ = st.PurgeExpiredEmailOTPs(mctx)
 			_ = st.PurgeOldNodeMetrics(mctx, metricsRetention)
+			_ = st.AwardOperatorUptimeXP(mctx, uptimePoints)
 			cancel()
 		}
 	}

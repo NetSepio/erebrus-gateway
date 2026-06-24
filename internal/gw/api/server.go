@@ -91,6 +91,9 @@ func (s *Server) Router() *gin.Engine {
 		// referrals (social layer): my code, who referred me, recent referees
 		user.GET("/referrals/me", s.handleReferralsMe)
 
+		// rank: my XP, tier, claimable balance, breakdown
+		user.GET("/rank/me", s.handleRankMe)
+
 		// entitlement: trial + NFT gating only (no money in v2.0)
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)

@@ -55,9 +55,17 @@ type Config struct {
 	// operator node metrics time-series retention (S4)
 	NodeMetricsRetention time.Duration `env:"NODE_METRICS_RETENTION" envDefault:"720h"` // 30d
 
-	// XP weights (tunable; §5b). Referral qualifying action = referee's first trial.
-	XPReferrerPoints int64 `env:"XP_REFERRER_POINTS" envDefault:"100"`
-	XPRefereePoints  int64 `env:"XP_REFEREE_POINTS" envDefault:"25"`
+	// XP weights + tiers (tunable; §5b).
+	XPReferrerPoints int64   `env:"XP_REFERRER_POINTS" envDefault:"100"` // referee's first trial
+	XPRefereePoints  int64   `env:"XP_REFEREE_POINTS" envDefault:"25"`
+	XPEmailVerified  int64   `env:"XP_EMAIL_VERIFIED" envDefault:"25"` // once
+	XPNFTHeld        int64   `env:"XP_NFT_HELD" envDefault:"50"`       // monthly while held
+	XPUptimeDay      int64   `env:"XP_UPTIME_DAY" envDefault:"20"`     // per healthy node, per UTC day
+	XPTierThresholds []int64 `env:"XP_TIER_THRESHOLDS" envSeparator:"," envDefault:"0,100,500,2000,10000"`
+
+	// Rank reward: spend XP for free entitlement days (source='rank').
+	XPFreeDaysCost  int64 `env:"XP_FREE_DAYS_COST" envDefault:"500"`
+	XPFreeDaysGrant int   `env:"XP_FREE_DAYS_GRANT" envDefault:"7"`
 
 	// email (optional — links a verified email to a wallet account via Resend OTP)
 	ResendAPIKey string `env:"RESEND_API_KEY"`

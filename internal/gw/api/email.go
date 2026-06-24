@@ -117,6 +117,9 @@ func (s *Server) handleEmailOTPVerify(c *gin.Context) {
 		return
 	}
 	_ = s.store.DeleteEmailOTPs(c, uid, email)
+	// XP driver: verifying an email earns XP once (best-effort).
+	_, _ = s.store.AwardXPOnce(c, uid, "email_verified", s.cfg.XPEmailVerified,
+		map[string]any{}, "email_verified:"+uid)
 
 	u, _ := s.store.GetUser(c, uid)
 	ok(c, http.StatusOK, u)
