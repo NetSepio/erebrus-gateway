@@ -87,12 +87,13 @@ func (s *Server) Router() *gin.Engine {
 	// subscriptions: plans are public
 	v2.GET("/subscriptions/plans", s.handlePlans)
 
-	// authenticated user routes
+	// authenticated user routes (audit-logged on successful mutations)
 	user := v2.Group("")
-	user.Use(s.authUser())
+	user.Use(s.authUser(), s.activityLog())
 	{
 		user.GET("/account/profile", s.handleGetProfile)
 		user.PATCH("/account/profile", s.handlePatchProfile)
+		user.GET("/account/activity", s.handleAccountActivity)
 
 		user.GET("/vpn/clients", s.handleListClients)
 		user.POST("/vpn/clients", s.handleProvisionClient)
@@ -149,9 +150,10 @@ func (s *Server) Router() *gin.Engine {
 
 	// admin routes
 	admin := v2.Group("/admin")
-	admin.Use(s.authUser(), s.requireAdmin())
+	admin.Use(s.authUser(), s.requireAdmin(), s.activityLog())
 	{
 		admin.GET("/stats", s.handleAdminStats)
+		admin.GET("/activity", s.handleAdminActivity)
 		admin.GET("/nodes", s.handleAdminNodes)
 		admin.GET("/users", s.handleAdminUsers)
 		admin.GET("/subscriptions", s.handleAdminSubscriptions)
