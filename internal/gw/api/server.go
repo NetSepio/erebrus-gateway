@@ -4,8 +4,6 @@
 package api
 
 import (
-	"time"
-
 	"github.com/NetSepio/gateway/internal/gw/cache"
 	"github.com/NetSepio/gateway/internal/gw/config"
 	"github.com/NetSepio/gateway/internal/gw/mailer"
@@ -128,8 +126,6 @@ func (s *Server) Router() *gin.Engine {
 
 	return r
 }
-
-const trialPeriod = 14 * 24 * time.Hour
 
 func splitCSV(s string) []string {
 	out := []string{}
