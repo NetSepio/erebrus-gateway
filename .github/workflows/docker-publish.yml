@@ -4,7 +4,8 @@
 # Image tags:     ghcr.io/netsepio/gateway:<full-sha>  (immutable)
 #                 ghcr.io/netsepio/gateway:<branch>    (main or prod — deploy this)
 #
-# Deploy: main → dev gateway dir; prod → production gateway dir (SSH, same host).
+# Deploy: copies deploy/docker-compose.yml + otel-collector-config.yaml to the
+# server, pulls the branch image, and runs gateway + otel-collector via compose.
 
 name: Docker publish
 
@@ -45,6 +46,23 @@ jobs:
     needs: build_push
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose manifests to dev server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AWS_REMOTE_SERVER_KEY }}
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="${GATEWAY_DIR_DEV:-gateway-dev}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${{ secrets.AWS_SSH_PORT }}")
+          SSH_TARGET="${{ secrets.AWS_REMOTE_SERVER_USERNAME }}@${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}"
+          ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p ~/${REMOTE_DIR}"
+          scp "${SSH_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
+            "${SSH_TARGET}:~/${REMOTE_DIR}/"
+
       - name: Deploy to dev (main branch)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -55,28 +73,21 @@ jobs:
           script: |
             set -euo pipefail
             GATEWAY_DIR="${GATEWAY_DIR_DEV:-$HOME/gateway-dev}"
-            CONTAINER_NAME=erebrus-gateway-dev
-            IMAGE=ghcr.io/netsepio/gateway:main
+            export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:main
+            export GATEWAY_CONTAINER_NAME=erebrus-gateway-dev
+            export OTEL_CONTAINER_NAME=erebrus-otel-collector-dev
+            export DEPLOY_ENVIRONMENT=staging
+            export GATEWAY_HOST="${GATEWAY_HOST_DEV:-dev.gateway.erebrus.io}"
 
             if [[ ! -f "$GATEWAY_DIR/.env" ]]; then
               echo "Missing $GATEWAY_DIR/.env — create from .env.example before first deploy"
               exit 1
             fi
 
+            cd "$GATEWAY_DIR"
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-            docker pull "$IMAGE"
-            docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
-            NET_ARGS=()
-            if docker network inspect netsepio_prod_network >/dev/null 2>&1; then
-              NET_ARGS=(--network netsepio_prod_network)
-            fi
-            docker run -d \
-              --name "$CONTAINER_NAME" \
-              --restart unless-stopped \
-              "${NET_ARGS[@]}" \
-              --env-file "$GATEWAY_DIR/.env" \
-              -p 8080:8080 \
-              "$IMAGE"
+            docker compose pull
+            docker compose up -d --remove-orphans
 
             for i in $(seq 1 30); do
               curl -fsS --max-time 2 http://127.0.0.1:8080/healthz && break
@@ -88,6 +99,23 @@ jobs:
     needs: build_push
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose manifests to prod server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AWS_REMOTE_SERVER_KEY }}
+        run: |
+          set -euo pipefail
+          REMOTE_DIR="${GATEWAY_DIR_PROD:-gateway-v2}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${{ secrets.AWS_SSH_PORT }}")
+          SSH_TARGET="${{ secrets.AWS_REMOTE_SERVER_USERNAME }}@${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}"
+          ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p ~/${REMOTE_DIR}"
+          scp "${SSH_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
+            "${SSH_TARGET}:~/${REMOTE_DIR}/"
+
       - name: Deploy to production (prod branch)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -98,28 +126,21 @@ jobs:
           script: |
             set -euo pipefail
             GATEWAY_DIR="${GATEWAY_DIR_PROD:-$HOME/gateway-v2}"
-            CONTAINER_NAME=erebrus-gateway
-            IMAGE=ghcr.io/netsepio/gateway:prod
+            export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:prod
+            export GATEWAY_CONTAINER_NAME=erebrus-gateway
+            export OTEL_CONTAINER_NAME=erebrus-otel-collector
+            export DEPLOY_ENVIRONMENT=production
+            export GATEWAY_HOST="${GATEWAY_HOST_PROD:-gateway.erebrus.io}"
 
             if [[ ! -f "$GATEWAY_DIR/.env" ]]; then
               echo "Missing $GATEWAY_DIR/.env — create from .env.example before first deploy"
               exit 1
             fi
 
+            cd "$GATEWAY_DIR"
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-            docker pull "$IMAGE"
-            docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
-            NET_ARGS=()
-            if docker network inspect netsepio_prod_network >/dev/null 2>&1; then
-              NET_ARGS=(--network netsepio_prod_network)
-            fi
-            docker run -d \
-              --name "$CONTAINER_NAME" \
-              --restart unless-stopped \
-              "${NET_ARGS[@]}" \
-              --env-file "$GATEWAY_DIR/.env" \
-              -p 8080:8080 \
-              "$IMAGE"
+            docker compose pull
+            docker compose up -d --remove-orphans
 
             for i in $(seq 1 30); do
               curl -fsS --max-time 2 http://127.0.0.1:8080/healthz && break
