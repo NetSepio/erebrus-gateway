@@ -135,6 +135,7 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/orgs/:id/usage", s.handleAdminOrgUsage)
 		admin.GET("/nodes/:id/metrics", s.handleAdminNodeMetrics)
 		admin.POST("/nodes/:id/command", s.handleAdminNodeCommand)
+		admin.POST("/nodes/:id/min_tier", s.handleAdminSetNodeMinTier)
 	}
 
 	return r

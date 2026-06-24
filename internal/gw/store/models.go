@@ -27,6 +27,7 @@ type Node struct {
 	OwnerUserID   string          `json:"owner_user_id,omitempty"`
 	OrgID         string          `json:"org_id,omitempty"`
 	AccessMode    string          `json:"access_mode"`
+	MinTier       int             `json:"min_tier"`
 	Name          string          `json:"name"`
 	Region        string          `json:"region"`
 	IP            string          `json:"ip,omitempty"` // never serialized publicly

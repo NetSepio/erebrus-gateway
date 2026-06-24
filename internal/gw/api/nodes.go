@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ type nodePublic struct {
 	Region       string          `json:"region"`
 	Status       string          `json:"status"`
 	AccessMode   string          `json:"access_mode"`
+	MinTier      int             `json:"min_tier"`
 	Protocols    []string        `json:"protocols"`
 	Capabilities json.RawMessage `json:"capabilities"`
 	Endpoints    json.RawMessage `json:"endpoints"`
@@ -33,7 +36,10 @@ type nodePublic struct {
 func (s *Server) handleListNodes(c *gin.Context) {
 	status := c.DefaultQuery("status", "online")
 	region := c.Query("region")
-	key := "nodes:disco:" + status + ":" + region
+	// Tier-gated discovery: higher tiers also see the premium pool. Tier is part
+	// of the cache key so a low tier never gets a high tier's cached list.
+	tier := s.callerTier(c)
+	key := "nodes:disco:" + status + ":" + region + ":t" + strconv.Itoa(tier)
 
 	var cached []nodePublic
 	if hit, _ := s.cache.GetJSON(c, key, &cached); hit {
@@ -41,7 +47,7 @@ func (s *Server) handleListNodes(c *gin.Context) {
 		return
 	}
 
-	nodes, err := s.store.ListDiscoverableNodes(c, status, region)
+	nodes, err := s.store.ListDiscoverableNodes(c, status, region, tier)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to list nodes")
 		return
@@ -50,8 +56,9 @@ func (s *Server) handleListNodes(c *gin.Context) {
 	for _, n := range nodes {
 		out = append(out, nodePublic{
 			NodeID: n.ID, Name: n.Name, DID: n.DID, Region: n.Region, Status: n.Status,
-			AccessMode: n.AccessMode, Protocols: n.Protocols, Capabilities: n.Capabilities,
-			Endpoints: n.Endpoints, Speedtest: n.Speedtest, LoadPct: loadPct(n.Load),
+			AccessMode: n.AccessMode, MinTier: n.MinTier, Protocols: n.Protocols,
+			Capabilities: n.Capabilities, Endpoints: n.Endpoints, Speedtest: n.Speedtest,
+			LoadPct: loadPct(n.Load),
 		})
 	}
 	_ = s.cache.SetJSON(c, key, out, 10*time.Second)
@@ -186,6 +193,28 @@ func (s *Server) handleAdminNodeCommand(c *gin.Context) {
 		return
 	}
 	ok(c, http.StatusAccepted, gin.H{"request_id": reqID})
+}
+
+type setMinTierReq struct {
+	MinTier int `json:"min_tier"`
+}
+
+// handleAdminSetNodeMinTier sets a node's premium-pool tier gate (admin only).
+func (s *Server) handleAdminSetNodeMinTier(c *gin.Context) {
+	var req setMinTierReq
+	if err := c.ShouldBindJSON(&req); err != nil || req.MinTier < 0 {
+		fail(c, http.StatusBadRequest, "min_tier must be >= 0")
+		return
+	}
+	if err := s.store.SetNodeMinTier(c, c.Param("id"), req.MinTier); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusNotFound, "node not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "failed to set min_tier")
+		return
+	}
+	ok(c, http.StatusOK, gin.H{"node_id": c.Param("id"), "min_tier": req.MinTier})
 }
 
 // loadPct derives a coarse 0-100 load indicator from a node's load JSON.

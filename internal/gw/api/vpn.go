@@ -54,6 +54,16 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 			return
 		}
 	}
+	// Tier-gated premium pool: a node may require a minimum tier to connect.
+	if c.GetString(ctxRole) != token.RoleAdmin {
+		if node, err := s.store.GetNode(c, req.NodeID); err == nil && node.MinTier > 0 {
+			if _, _, tier, _ := s.store.UserXP(c, uid); tier < node.MinTier {
+				fail(c, http.StatusForbidden, "node requires a higher tier")
+				return
+			}
+		}
+	}
+
 	// Plan client limit (skipped for admin without an active sub row).
 	if sub != nil {
 		if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {

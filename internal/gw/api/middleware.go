@@ -87,3 +87,27 @@ func bearer(c *gin.Context) string {
 }
 
 func userID(c *gin.Context) string { return c.GetString(ctxUserID) }
+
+// tierAdmin is an effectively-unbounded tier so admins see the whole fleet.
+const tierAdmin = 1 << 30
+
+// callerTier resolves the caller's XP tier from an OPTIONAL bearer token (0 when
+// absent or invalid). Used to tier-gate public discovery without requiring auth.
+func (s *Server) callerTier(c *gin.Context) int {
+	tok := bearer(c)
+	if tok == "" {
+		return 0
+	}
+	claims, err := s.tokens.Verify(tok)
+	if err != nil || claims.UserID == "" || claims.Role == token.RoleNode {
+		return 0
+	}
+	if claims.Role == token.RoleAdmin {
+		return tierAdmin
+	}
+	_, _, tier, err := s.store.UserXP(c, claims.UserID)
+	if err != nil {
+		return 0
+	}
+	return tier
+}
