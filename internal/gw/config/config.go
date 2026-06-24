@@ -52,6 +52,9 @@ type Config struct {
 	NFTGatePeriod   time.Duration `env:"NFT_GATE_PERIOD" envDefault:"720h"` // re-verify window (30d)
 	NFTGatePlanID   string        `env:"NFT_GATE_PLAN_ID" envDefault:"pro"`
 
+	// operator node metrics time-series retention (S4)
+	NodeMetricsRetention time.Duration `env:"NODE_METRICS_RETENTION" envDefault:"720h"` // 30d
+
 	// email (optional — links a verified email to a wallet account via Resend OTP)
 	ResendAPIKey string `env:"RESEND_API_KEY"`
 	ResendFrom   string `env:"RESEND_FROM" envDefault:"Erebrus <no-reply@erebrus.network>"`

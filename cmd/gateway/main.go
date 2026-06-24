@@ -99,7 +99,7 @@ func run(log *slog.Logger) error {
 	}
 
 	// Background maintenance: flip stale nodes offline, purge expired challenges.
-	go maintenance(ctx, st, log)
+	go maintenance(ctx, st, cfg.NodeMetricsRetention, log)
 
 	// HTTP server.
 	srv := &http.Server{
@@ -123,8 +123,9 @@ func run(log *slog.Logger) error {
 }
 
 // maintenance periodically marks unresponsive nodes offline (3 missed
-// heartbeats = 90s) and purges expired login challenges + email OTPs.
-func maintenance(ctx context.Context, st *store.Store, log *slog.Logger) {
+// heartbeats = 90s), purges expired login challenges + email OTPs, and prunes
+// node metrics past the retention window.
+func maintenance(ctx context.Context, st *store.Store, metricsRetention time.Duration, log *slog.Logger) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -138,6 +139,7 @@ func maintenance(ctx context.Context, st *store.Store, log *slog.Logger) {
 			}
 			_ = st.PurgeExpiredFlowIDs(mctx)
 			_ = st.PurgeExpiredEmailOTPs(mctx)
+			_ = st.PurgeOldNodeMetrics(mctx, metricsRetention)
 			cancel()
 		}
 	}

@@ -11,13 +11,15 @@ import (
 
 // NodeRegistration carries the fields a node submits when registering.
 type NodeRegistration struct {
-	PeerID     string
-	DID        string
-	Wallet     string
-	Name       string
-	Region     string
-	APIBaseURL string // gateway-reachable node API base
-	APIToken   string // bearer for gateway→node calls
+	PeerID      string
+	DID         string
+	Wallet      string
+	OwnerUserID string // resolved from the registering wallet
+	OrgID       string // optional; validated against org membership by the caller
+	Name        string
+	Region      string
+	APIBaseURL  string // gateway-reachable node API base
+	APIToken    string // bearer for gateway→node calls
 }
 
 // RegisterNode inserts (or updates) the node row keyed by peer_id and returns
@@ -25,18 +27,20 @@ type NodeRegistration struct {
 func (s *Store) RegisterNode(ctx context.Context, r NodeRegistration) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO nodes (peer_id, did, wallet_address, name, region, api_base_url, api_token)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), NULLIF($6,''), NULLIF($7,''))
+		`INSERT INTO nodes (peer_id, did, wallet_address, owner_user_id, org_id, name, region, api_base_url, api_token)
+		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,'')::uuid, NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''))
 		 ON CONFLICT (peer_id) DO UPDATE SET
 		   did = EXCLUDED.did,
 		   wallet_address = COALESCE(EXCLUDED.wallet_address, nodes.wallet_address),
+		   owner_user_id = COALESCE(EXCLUDED.owner_user_id, nodes.owner_user_id),
+		   org_id = COALESCE(EXCLUDED.org_id, nodes.org_id),
 		   name = COALESCE(EXCLUDED.name, nodes.name),
 		   region = COALESCE(EXCLUDED.region, nodes.region),
 		   api_base_url = COALESCE(EXCLUDED.api_base_url, nodes.api_base_url),
 		   api_token = COALESCE(EXCLUDED.api_token, nodes.api_token),
 		   updated_at = now()
 		 RETURNING id`,
-		r.PeerID, r.DID, r.Wallet, r.Name, r.Region, r.APIBaseURL, r.APIToken).Scan(&id)
+		r.PeerID, r.DID, r.Wallet, r.OwnerUserID, r.OrgID, r.Name, r.Region, r.APIBaseURL, r.APIToken).Scan(&id)
 	return id, err
 }
 
@@ -68,6 +72,7 @@ type HelloUpdate struct {
 	IPHash       string
 	Version      string
 	Region       string
+	AccessMode   string // public | shared | private (empty keeps the prior value)
 	Spec         []byte // json
 	Capabilities []byte // json
 	Endpoints    []byte // json
@@ -75,21 +80,22 @@ type HelloUpdate struct {
 }
 
 // ApplyHello records a node's hello: connection endpoints, spec, capabilities,
-// and marks it online.
+// access mode, and marks it online.
 func (s *Store) ApplyHello(ctx context.Context, h HelloUpdate) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET
 		   ip = NULLIF($2,''), ip_hash = NULLIF($3,''), version = NULLIF($4,''),
 		   region = COALESCE(NULLIF($5,''), region),
-		   spec = $6::jsonb, capabilities = $7::jsonb, endpoints = $8::jsonb,
-		   protocols = $9, status = 'online', last_heartbeat = now(), updated_at = now(),
+		   access_mode = COALESCE(NULLIF($6,''), access_mode),
+		   spec = $7::jsonb, capabilities = $8::jsonb, endpoints = $9::jsonb,
+		   protocols = $10, status = 'online', last_heartbeat = now(), updated_at = now(),
 		   api_base_url = CASE
 		     WHEN COALESCE(api_base_url,'') = '' AND NULLIF($2,'') IS NOT NULL
 		     THEN 'http://' || $2 || ':9080'
 		     ELSE api_base_url
 		   END
 		 WHERE peer_id = $1`,
-		h.PeerID, h.IP, h.IPHash, h.Version, h.Region,
+		h.PeerID, h.IP, h.IPHash, h.Version, h.Region, h.AccessMode,
 		string(h.Spec), string(h.Capabilities), string(h.Endpoints), pq.Array(h.Protocols))
 	return err
 }
@@ -126,14 +132,16 @@ func (s *Store) MarkStaleNodesOffline(ctx context.Context, within time.Duration)
 	return res.RowsAffected()
 }
 
-const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''), COALESCE(name,''),
-	COALESCE(region,''), COALESCE(ip,''), COALESCE(ip_hash,''), spec, capabilities,
-	endpoints, protocols, status, load, speedtest, rx_bytes, tx_bytes,
+const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''),
+	COALESCE(owner_user_id::text,''), COALESCE(org_id::text,''), COALESCE(access_mode,'public'),
+	COALESCE(name,''), COALESCE(region,''), COALESCE(ip,''), COALESCE(ip_hash,''),
+	spec, capabilities, endpoints, protocols, status, load, speedtest, rx_bytes, tx_bytes,
 	COALESCE(version,''), last_heartbeat, created_at`
 
 func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	var n Node
-	if err := sc.Scan(&n.ID, &n.PeerID, &n.DID, &n.WalletAddress, &n.Name, &n.Region,
+	if err := sc.Scan(&n.ID, &n.PeerID, &n.DID, &n.WalletAddress,
+		&n.OwnerUserID, &n.OrgID, &n.AccessMode, &n.Name, &n.Region,
 		&n.IP, &n.IPHash, &n.Spec, &n.Capabilities, &n.Endpoints, pq.Array(&n.Protocols),
 		&n.Status, &n.Load, &n.Speedtest, &n.RxBytes, &n.TxBytes, &n.Version,
 		&n.LastHeartbeat, &n.CreatedAt); err != nil {
@@ -157,6 +165,30 @@ func (s *Store) ListNodes(ctx context.Context, status, region string) ([]*Node, 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+nodeCols+` FROM nodes
 		 WHERE ($1 = '' OR status = $1) AND ($2 = '' OR region = $2)
+		 ORDER BY region, name`, status, region)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Node
+	for rows.Next() {
+		n, err := scanNode(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// ListDiscoverableNodes is ListNodes for the PUBLIC directory: it excludes
+// access_mode='private' nodes (they never appear in public discovery). Public +
+// shared nodes are returned.
+func (s *Store) ListDiscoverableNodes(ctx context.Context, status, region string) ([]*Node, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+nodeCols+` FROM nodes
+		 WHERE access_mode <> 'private'
+		   AND ($1 = '' OR status = $1) AND ($2 = '' OR region = $2)
 		 ORDER BY region, name`, status, region)
 	if err != nil {
 		return nil, err

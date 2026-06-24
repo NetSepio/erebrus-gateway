@@ -187,7 +187,8 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 	eps, _ := json.Marshal(h.Endpoints)
 	if err := c.hub.store.ApplyHello(ctx, store.HelloUpdate{
 		PeerID: c.peerID, IP: h.Spec.IP, IPHash: h.Identity.IPHash, Version: h.Version,
-		Region: h.Spec.Region, Spec: spec, Capabilities: caps, Endpoints: eps,
+		Region: h.Spec.Region, AccessMode: normalizeAccessMode(h.Capabilities.AccessMode),
+		Spec: spec, Capabilities: caps, Endpoints: eps,
 		Protocols: protocolsFromEndpoints(h.Endpoints),
 	}); err != nil {
 		c.hub.log.Warn("apply hello failed", "node_id", c.nodeID, "err", err)
@@ -214,6 +215,22 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 	if err := c.hub.store.ApplyHeartbeat(ctx, c.peerID, status, load, st,
 		hb.Load.RxBytes, hb.Load.TxBytes, hb.Versions["node"]); err != nil {
 		c.hub.log.Warn("apply heartbeat failed", "node_id", c.nodeID, "err", err)
+	}
+	// Time-series rollup for operator charts (per-minute bucket, last write wins).
+	if err := c.hub.store.RecordNodeMetrics(ctx, c.nodeID, time.Now(),
+		hb.Load.WGPeers, hb.Load.ProxySessions, hb.Load.RxBytes, hb.Load.TxBytes,
+		hb.Load.CPUPct, hb.Load.MemPct); err != nil {
+		c.hub.log.Warn("record node metrics failed", "node_id", c.nodeID, "err", err)
+	}
+}
+
+// normalizeAccessMode returns a valid access mode, or "" to keep the prior value.
+func normalizeAccessMode(m string) string {
+	switch m {
+	case "public", "shared", "private":
+		return m
+	default:
+		return ""
 	}
 }
 

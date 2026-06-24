@@ -24,6 +24,9 @@ type Node struct {
 	PeerID        string          `json:"peer_id"`
 	DID           string          `json:"did"`
 	WalletAddress string          `json:"wallet_address,omitempty"`
+	OwnerUserID   string          `json:"owner_user_id,omitempty"`
+	OrgID         string          `json:"org_id,omitempty"`
+	AccessMode    string          `json:"access_mode"`
 	Name          string          `json:"name"`
 	Region        string          `json:"region"`
 	IP            string          `json:"ip,omitempty"` // never serialized publicly
