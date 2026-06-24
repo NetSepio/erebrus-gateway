@@ -8,6 +8,7 @@ import (
 
 	"github.com/NetSepio/gateway/internal/gw/cache"
 	"github.com/NetSepio/gateway/internal/gw/config"
+	"github.com/NetSepio/gateway/internal/gw/mailer"
 	"github.com/NetSepio/gateway/internal/gw/nftgate"
 	"github.com/NetSepio/gateway/internal/gw/nodeclient"
 	"github.com/NetSepio/gateway/internal/gw/nodehub"
@@ -26,11 +27,12 @@ type Server struct {
 	cache  *cache.Cache
 	nodes  *nodeclient.Client
 	nft    nftgate.Checker
+	mailer *mailer.Mailer
 }
 
 // New builds the API server.
-func New(cfg *config.Config, st *store.Store, tm *token.Manager, hub *nodehub.Hub, c *cache.Cache, nft nftgate.Checker) *Server {
-	return &Server{cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(), nft: nft}
+func New(cfg *config.Config, st *store.Store, tm *token.Manager, hub *nodehub.Hub, c *cache.Cache, nft nftgate.Checker, ml *mailer.Mailer) *Server {
+	return &Server{cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(), nft: nft, mailer: ml}
 }
 
 // Router wires all routes.
@@ -59,6 +61,9 @@ func (s *Server) Router() *gin.Engine {
 		// deprecated v2.0 paths (existing clients)
 		auth.GET("/flowid", s.handleFlowID)
 		auth.POST("/authenticate", s.handleAuthenticate)
+		// optional email linking (authenticated wallet session; verified OTP)
+		auth.POST("/email", s.authUser(), s.handleEmailOTPStart)
+		auth.POST("/email/verify", s.authUser(), s.handleEmailOTPVerify)
 	}
 
 	// node discovery (public) + control plane

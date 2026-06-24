@@ -5,13 +5,15 @@ import (
 	"time"
 )
 
-// User is a gateway account, keyed by wallet (or email for social/email login).
+// User is a gateway account, keyed by wallet. An optional verified email may be
+// linked for perks/recovery (never required to use the VPN).
 type User struct {
 	ID            string    `json:"id"`
 	WalletAddress string    `json:"wallet_address,omitempty"`
 	Chain         string    `json:"chain,omitempty"`
 	Role          string    `json:"role"`
 	Email         string    `json:"email,omitempty"`
+	EmailVerified bool      `json:"email_verified"`
 	Name          string    `json:"name,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 }

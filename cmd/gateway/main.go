@@ -21,6 +21,7 @@ import (
 	"github.com/NetSepio/gateway/internal/gw/cache"
 	"github.com/NetSepio/gateway/internal/gw/config"
 	"github.com/NetSepio/gateway/internal/gw/identity"
+	"github.com/NetSepio/gateway/internal/gw/mailer"
 	"github.com/NetSepio/gateway/internal/gw/nftgate"
 	"github.com/NetSepio/gateway/internal/gw/nodehub"
 	"github.com/NetSepio/gateway/internal/gw/store"
@@ -89,13 +90,21 @@ func run(log *slog.Logger) error {
 		log.Info("NFT gating enabled", "chain", cfg.NFTGateChain, "contract", cfg.NFTGateContract)
 	}
 
+	// Email (Resend) — optional; only enables verified email linking when keyed.
+	ml := mailer.New(cfg.ResendAPIKey, cfg.ResendFrom)
+	if ml.Enabled() {
+		log.Info("email (Resend) enabled", "from", cfg.ResendFrom)
+	} else {
+		log.Info("email (Resend) disabled — RESEND_API_KEY unset; email linking unavailable")
+	}
+
 	// Background maintenance: flip stale nodes offline, purge expired challenges.
 	go maintenance(ctx, st, log)
 
 	// HTTP server.
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,
-		Handler:           api.New(cfg, st, tokens, hub, c, nft).Router(),
+		Handler:           api.New(cfg, st, tokens, hub, c, nft, ml).Router(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -114,7 +123,7 @@ func run(log *slog.Logger) error {
 }
 
 // maintenance periodically marks unresponsive nodes offline (3 missed
-// heartbeats = 90s) and purges expired login challenges.
+// heartbeats = 90s) and purges expired login challenges + email OTPs.
 func maintenance(ctx context.Context, st *store.Store, log *slog.Logger) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -128,6 +137,7 @@ func maintenance(ctx context.Context, st *store.Store, log *slog.Logger) {
 				log.Info("marked stale nodes offline", "count", n)
 			}
 			_ = st.PurgeExpiredFlowIDs(mctx)
+			_ = st.PurgeExpiredEmailOTPs(mctx)
 			cancel()
 		}
 	}

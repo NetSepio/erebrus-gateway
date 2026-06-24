@@ -25,8 +25,7 @@ type Config struct {
 	PasetoExpiration    time.Duration `env:"PASETO_EXPIRATION" envDefault:"24h"`
 	PasetoSignedBy      string        `env:"PASETO_SIGNED_BY" envDefault:"Erebrus"`
 	AuthEULA            string        `env:"AUTH_EULA" envDefault:"I accept the Erebrus Terms of Service https://erebrus.network/terms."`
-	MagicLinkExpiration time.Duration `env:"MAGIC_LINK_EXPIRATION" envDefault:"15m"`
-	GoogleAudience      string        `env:"GOOGLE_AUDIENCE"`
+	MagicLinkExpiration time.Duration `env:"MAGIC_LINK_EXPIRATION" envDefault:"15m"` // email OTP TTL
 	AdminWalletAddress  string        `env:"ADMIN_WALLET_ADDRESS"`
 
 	// database
@@ -50,8 +49,9 @@ type Config struct {
 	NFTGatePeriod   time.Duration `env:"NFT_GATE_PERIOD" envDefault:"720h"` // re-verify window (30d)
 	NFTGatePlanID   string        `env:"NFT_GATE_PLAN_ID" envDefault:"pro"`
 
-	// email
+	// email (optional — links a verified email to a wallet account via Resend OTP)
 	ResendAPIKey string `env:"RESEND_API_KEY"`
+	ResendFrom   string `env:"RESEND_FROM" envDefault:"Erebrus <no-reply@erebrus.network>"`
 
 	// p2p
 	P2PListenPort string `env:"P2P_LISTEN_PORT" envDefault:"9001"`
