@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/NetSepio/gateway/internal/gw/store"
 	"github.com/NetSepio/gateway/internal/gw/token"
@@ -133,5 +134,9 @@ func (s *Server) handleNFTRefresh(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to grant entitlement")
 		return
 	}
+	// XP driver: holding the NFT earns XP once per month (best-effort).
+	month := time.Now().UTC().Format("200601")
+	_, _ = s.store.AwardXPOnce(c, u.ID, "nft_held", s.cfg.XPNFTHeld,
+		map[string]any{"month": month}, "nft_held:"+u.ID+":"+month)
 	ok(c, http.StatusOK, sub)
 }

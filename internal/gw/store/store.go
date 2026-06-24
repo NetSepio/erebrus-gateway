@@ -20,7 +20,8 @@ var migrationsFS embed.FS
 
 // Store wraps the Postgres connection pool.
 type Store struct {
-	db *sql.DB
+	db             *sql.DB
+	tierThresholds []int64 // XP tier cutoffs (ascending); SetTierThresholds overrides
 }
 
 // Open connects to Postgres, verifies the connection, and applies migrations.

@@ -26,6 +26,25 @@ func TestEntitlementDefaults(t *testing.T) {
 	}
 }
 
+func TestXPDefaults(t *testing.T) {
+	unset(t, "XP_TIER_THRESHOLDS", "XP_REFERRER_POINTS", "XP_REFEREE_POINTS")
+	cfg := &Config{}
+	mustParse(t, cfg)
+
+	want := []int64{0, 100, 500, 2000, 10000}
+	if len(cfg.XPTierThresholds) != len(want) {
+		t.Fatalf("XPTierThresholds = %v, want %v", cfg.XPTierThresholds, want)
+	}
+	for i := range want {
+		if cfg.XPTierThresholds[i] != want[i] {
+			t.Fatalf("XPTierThresholds[%d] = %d, want %d", i, cfg.XPTierThresholds[i], want[i])
+		}
+	}
+	if cfg.XPReferrerPoints != 100 || cfg.XPRefereePoints != 25 {
+		t.Errorf("referral XP = %d/%d, want 100/25", cfg.XPReferrerPoints, cfg.XPRefereePoints)
+	}
+}
+
 func TestTrialPeriodOverride(t *testing.T) {
 	t.Setenv("TRIAL_PERIOD", "48h")
 	cfg := &Config{}
