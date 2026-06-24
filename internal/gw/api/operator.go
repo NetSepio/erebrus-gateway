@@ -17,6 +17,7 @@ type nodeOperatorView struct {
 	Region        string          `json:"region"`
 	Status        string          `json:"status"`
 	AccessMode    string          `json:"access_mode"`
+	MinTier       int             `json:"min_tier"`
 	OrgID         string          `json:"org_id,omitempty"`
 	Protocols     []string        `json:"protocols"`
 	LoadPct       float64         `json:"load_pct"`
@@ -38,7 +39,7 @@ func (s *Server) handleOperatorNodes(c *gin.Context) {
 	for _, n := range nodes {
 		out = append(out, nodeOperatorView{
 			NodeID: n.ID, Name: n.Name, Region: n.Region, Status: n.Status,
-			AccessMode: n.AccessMode, OrgID: n.OrgID, Protocols: n.Protocols,
+			AccessMode: n.AccessMode, MinTier: n.MinTier, OrgID: n.OrgID, Protocols: n.Protocols,
 			LoadPct: loadPct(n.Load), RxBytes: n.RxBytes, TxBytes: n.TxBytes,
 			Speedtest: n.Speedtest, LastHeartbeat: n.LastHeartbeat, CreatedAt: n.CreatedAt,
 		})

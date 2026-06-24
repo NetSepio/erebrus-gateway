@@ -112,6 +112,20 @@ func (s *Store) ApplyHeartbeat(ctx context.Context, peerID, status string, load,
 	return err
 }
 
+// SetNodeMinTier sets a node's premium-pool gate (admin). Returns ErrNotFound
+// when the node does not exist.
+func (s *Store) SetNodeMinTier(ctx context.Context, nodeID string, minTier int) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET min_tier = $2, updated_at = now() WHERE id = $1`, nodeID, minTier)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetNodeStatus forces a node's status (e.g. offline on disconnect/timeout).
 func (s *Store) SetNodeStatus(ctx context.Context, peerID, status string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -134,14 +148,14 @@ func (s *Store) MarkStaleNodesOffline(ctx context.Context, within time.Duration)
 
 const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''),
 	COALESCE(owner_user_id::text,''), COALESCE(org_id::text,''), COALESCE(access_mode,'public'),
-	COALESCE(name,''), COALESCE(region,''), COALESCE(ip,''), COALESCE(ip_hash,''),
+	COALESCE(min_tier,0), COALESCE(name,''), COALESCE(region,''), COALESCE(ip,''), COALESCE(ip_hash,''),
 	spec, capabilities, endpoints, protocols, status, load, speedtest, rx_bytes, tx_bytes,
 	COALESCE(version,''), last_heartbeat, created_at`
 
 func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	var n Node
 	if err := sc.Scan(&n.ID, &n.PeerID, &n.DID, &n.WalletAddress,
-		&n.OwnerUserID, &n.OrgID, &n.AccessMode, &n.Name, &n.Region,
+		&n.OwnerUserID, &n.OrgID, &n.AccessMode, &n.MinTier, &n.Name, &n.Region,
 		&n.IP, &n.IPHash, &n.Spec, &n.Capabilities, &n.Endpoints, pq.Array(&n.Protocols),
 		&n.Status, &n.Load, &n.Speedtest, &n.RxBytes, &n.TxBytes, &n.Version,
 		&n.LastHeartbeat, &n.CreatedAt); err != nil {
@@ -182,14 +196,15 @@ func (s *Store) ListNodes(ctx context.Context, status, region string) ([]*Node, 
 }
 
 // ListDiscoverableNodes is ListNodes for the PUBLIC directory: it excludes
-// access_mode='private' nodes (they never appear in public discovery). Public +
-// shared nodes are returned.
-func (s *Store) ListDiscoverableNodes(ctx context.Context, status, region string) ([]*Node, error) {
+// access_mode='private' nodes and tier-gated nodes above the caller's tier
+// (min_tier <= callerTier). Public + shared nodes in the caller's reach are
+// returned; an anonymous caller (tier 0) sees only the open pool.
+func (s *Store) ListDiscoverableNodes(ctx context.Context, status, region string, callerTier int) ([]*Node, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+nodeCols+` FROM nodes
-		 WHERE access_mode <> 'private'
+		 WHERE access_mode <> 'private' AND min_tier <= $3
 		   AND ($1 = '' OR status = $1) AND ($2 = '' OR region = $2)
-		 ORDER BY region, name`, status, region)
+		 ORDER BY region, name`, status, region, callerTier)
 	if err != nil {
 		return nil, err
 	}
