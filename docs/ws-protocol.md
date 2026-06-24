@@ -12,7 +12,7 @@ below and compare them field-for-field. Change this file first, then both repos.
 - Endpoint: `wss://<gateway>/api/v2/nodes/ws`
 - Auth: node-scoped PASETO bearer token in the `Authorization` header of the
   upgrade request. Tokens are issued by the HTTPS registration flow
-  (`POST /api/v2/nodes/register`, see `gateway-api.openapi.yaml`): the gateway
+  (`POST /api/v2/nodes/register`, see `docs/gateway-api.openapi.yaml`): the gateway
   returns a challenge, the node signs it with its wallet key (derived from its
   mnemonic), and the gateway responds with a PASETO carrying
   `{node_id, peer_id, role: "node"}`.

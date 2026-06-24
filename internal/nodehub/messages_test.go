@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Canonical hello frame from docs/v2/ws-protocol.md. If this stops parsing
+// Canonical hello frame from docs/ws-protocol.md. If this stops parsing
 // field-for-field, the contract has drifted.
 const canonicalHello = `{
   "type": "hello",
