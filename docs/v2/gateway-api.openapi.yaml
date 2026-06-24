@@ -193,47 +193,42 @@ paths:
   # ───────────────────────── subscriptions & payments ─────────────────────────
   /api/v2/subscriptions/plans:
     get: { summary: List plans (price in USDC), security: [], responses: { "200": { description: Plans } } }
+  # No money in v2.0 (locked): entitlement = trial OR NFT (OR rank-granted free
+  # days, future). The USDC /payments routes were removed; crypto_payments stays
+  # in the schema for a future paid tier.
   /api/v2/subscriptions:
-    get: { summary: My subscription + entitlement state, responses: { "200": { description: "status, source(crypto|nft|trial|admin), period end" } } }
-  /api/v2/subscriptions/trial:
-    post: { summary: Start one-time free trial, responses: { "201": { description: Trial active }, "409": { description: Already used } } }
-  /api/v2/payments:
-    post:
-      summary: Create a USDC payment request
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [plan_id, chain]
-              properties:
-                plan_id: { type: string }
-                chain: { type: string, enum: [solana, base] }
+    get:
+      summary: My subscription + entitlement state
       responses:
-        "201":
-          description: Pay this via Reown AppKit, then confirm
+        "200":
+          description: Entitlement snapshot
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  payment_id: { type: string }
-                  amount_usdc: { type: string, example: "9.99" }
-                  chain: { type: string }
-                  treasury_address: { type: string }
-                  reference: { type: string, description: "Solana: reference pubkey to include; Base: value to embed/expected exact amount" }
-                  expires_at: { type: integer, format: int64 }
-  /api/v2/payments/{id}/confirm:
+                  status: { type: string, enum: [active, expired, none] }
+                  entitled: { type: boolean }
+                  source: { type: string, enum: [trial, nft, admin, rank], description: "What grants the entitlement" }
+                  plan_id: { type: string }
+                  trial_consumed: { type: boolean, description: "Whether the user ever started their one trial" }
+                  current_period_end: { type: string, format: date-time, nullable: true }
+                  nft_gating: { type: boolean, description: "Whether NFT gating is configured on this gateway" }
+  /api/v2/subscriptions/trial:
+    post: { summary: "Start the one-time free trial (7 days, plan 'pro')", responses: { "201": { description: Trial active }, "409": { description: Already used } } }
+  /api/v2/subscriptions/nft/refresh:
     post:
-      summary: Submit tx hash for on-chain verification
-      requestBody:
-        content:
-          application/json:
-            schema: { type: object, required: [tx_hash], properties: { tx_hash: { type: string } } }
+      summary: Verify the gating NFT and grant/refresh a 30-day entitlement
+      description: >
+        Grants 30 days directly regardless of trial state (a mid-trial user is
+        upgraded, since the 30d NFT entitlement outlasts the 7d trial).
+        Refreshable while held; one per user.
       responses:
-        "200": { description: Confirmed — subscription activated }
-        "202": { description: Pending finality — background re-verifier will settle }
-        "409": { description: Tx already used / mismatch }
+        "200": { description: NFT entitlement granted/refreshed }
+        "400": { description: No wallet on account }
+        "403": { description: Wallet does not hold the required NFT }
+        "502": { description: NFT ownership check failed }
+        "503": { description: NFT gating not configured }
 
   # ───────────────────────── organizations ─────────────────────────
   /api/v2/orgs:

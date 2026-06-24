@@ -11,8 +11,8 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `22097cf` (S2 email) · `68fe987`
-(S2 apt/sui) · `0a5b46a` (decisions) · `7eb96f3` (S1).
+DB. Last commits (LOCAL, **not pushed**): `fbc2c84` (S3 entitlements) ·
+`ec8f2ca`/`809e233`/`22097cf`/`68fe987` (S2) · `0a5b46a` (decisions) · `7eb96f3` (S1).
 
 **Done**
 - ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
@@ -29,6 +29,15 @@ DB. Last commits (LOCAL, **not pushed**): `22097cf` (S2 email) · `68fe987`
   (Google/Apple) stub dropped — social logins resolve to a wallet via Reown/MWA,
   so the backend only ever verifies a wallet signature. Email is **never** a
   login method and **never** required for the VPN.
+- ✅ **S3 entitlements** — general trial **7 days** (now `TRIAL_PERIOD` config,
+  default 168h; was a hardcoded 14d const). NFT holders get **30 days directly**
+  (`NFT_GATE_PERIOD` 720h), upgrading any active trial (the 30d row outlasts the
+  7d trial → it becomes the active entitlement). `GET /subscriptions`
+  `trial_consumed` now always reflects `HasConsumedTrial` (ever-started), not the
+  current source. No new migration (subscriptions + one-trial/one-nft indexes
+  already exist; `source` is free text so future `rank` free-days fit). OpenAPI:
+  documented the real `/subscriptions/nft/refresh`, fixed the GET shape, removed
+  the unimplemented USDC `/payments` routes (no money, locked). Commit `fbc2c84`.
 
 **Repo map (everything lives in `internal/gw/`)**
 - `api/` — gin handlers: `auth, account, nodes, vpn, subscriptions, orgs, admin`
@@ -40,14 +49,16 @@ DB. Last commits (LOCAL, **not pushed**): `22097cf` (S2 email) · `68fe987`
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
 **Start the next PR here**
-- **S3 entitlements (NEXT):** change `trialPeriod` **14d → 7d** at
-  `internal/gw/api/server.go:132`; NFT-direct-30d in `handleNFTRefresh`
-  (`api/subscriptions.go`) + `store.StartTrial` (`store/subscriptions.go:90`).
-- **New migrations to add** (additive, idempotent, next free number is **0004** —
-  `0003_email_auth` is taken by S2): `0004_node_metrics`, `0005_social_xp`
-  (xp_events, xp_claims, social_accounts — **email/email_verified already done in
-  S2**), `0006_referrals_perks`, `0007_activity_log`. Schema in §7.
-- Recommended order: **S3 → S4** (operator dashboards, most visible) → S5–S8b.
+- **S4 operator layer (NEXT):** node ownership (`owner_user_id` resolved from the
+  registering wallet, optional `org_id`), `access_mode` (public/private) from the
+  WS hello, `node_metrics` time-series (per-node rollup from the heartbeat/
+  usage_report ingest) + `GET /operator/nodes` and `.../:id/metrics` charts.
+  Details in §4. **First new migration since S2/S3:** `0004_node_metrics`
+  (next free number — `0003_email_auth` taken).
+- **Remaining migrations** (additive, idempotent): `0005_social_xp` (xp_events,
+  xp_claims, social_accounts — **email/email_verified already done in S2**),
+  `0006_referrals_perks`, `0007_activity_log`. Schema in §7.
+- Recommended order: **S4** (operator dashboards, most visible) → S5–S8b.
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -116,7 +127,11 @@ Frontend uses **Reown AppKit** only; backend verifies signatures + issues PASETO
 
 ---
 
-## 3. Entitlements — trial + NFT + rank perks (PR S3)
+## 3. Entitlements — trial + NFT + rank perks (PR S3) ✅ DONE
+
+> Implemented in commit `fbc2c84`. Trial 7d (config `TRIAL_PERIOD`); NFT 30d
+> direct (upgrades trial); `trial_consumed` = ever-started. `source='rank'`
+> free-days remain forward-looking (granted in S5/S6); no new migration needed.
 
 - **General trial: 7 days**, one per user (`idx_subs_one_trial`). _Change the
   current 14d constant to 7d._
@@ -296,7 +311,7 @@ activity_log(id, user_id, action, target, ip, user_agent, device, app, meta json
 ```
 S1  streamline: delete v1, one binary, prune deps          ✅ DONE (7eb96f3)
 S2  auth: Reown/EVM+SOL only, Resend email (optional)      ✅ DONE (68fe987, 22097cf)
-S3  entitlements: 7d trial + 30d NFT-direct + rank source
+S3  entitlements: 7d trial + 30d NFT-direct + rank source  ✅ DONE (fbc2c84)
 S4  operator nodes: ownership, visibility, node_metrics + charts
 S5  referrals (qualify on referee trial start)
 S6  XP earn/claim, tiers, leaderboard
