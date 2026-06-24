@@ -30,6 +30,17 @@ func (s *Store) UpsertUserByWallet(ctx context.Context, wallet, chain, adminWall
 	return &u, nil
 }
 
+// UserIDByWallet resolves an existing wallet to its user id (does not create).
+func (s *Store) UserIDByWallet(ctx context.Context, wallet string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM users WHERE lower(wallet_address) = lower($1)`, wallet).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return id, err
+}
+
 // GetUser returns a user by id.
 func (s *Store) GetUser(ctx context.Context, id string) (*User, error) {
 	var u User
