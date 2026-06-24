@@ -179,6 +179,15 @@ paths:
         summary: Update profile,
         responses: { "200": { description: Updated } },
       }
+  /api/v2/account/activity:
+    get:
+      summary: My account activity (audit log) — newest first
+      description: "Security view: every meaningful action with IP + device, so you can spot anything you didn't do. Paginated by an opaque cursor (created_at)."
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "200": { description: "{ activity[{id, action, target, ip, user_agent, device, app, created_at}], next_cursor? }" }
 
   # ───────────────────────── nodes (discovery) ─────────────────────────
   /api/v2/nodes:
@@ -701,13 +710,14 @@ paths:
         },
     }
   /api/v2/admin/activity:
-    {
-      get:
-        {
-          summary: Activity/device analytics (usage patterns),
-          responses: { "200": { description: Aggregates } },
-        },
-    }
+    get:
+      summary: Fleet-wide activity / audit log (incident response) — newest first
+      description: Same shape as /account/activity plus the actor's truncated wallet. Cursor-paginated.
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "200": { description: "{ activity[{id, user_id, wallet, action, target, ip, device, app, created_at}], next_cursor? }" }
   /api/v2/admin/apps:
     {
       get:

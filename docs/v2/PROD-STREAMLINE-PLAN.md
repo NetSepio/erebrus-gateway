@@ -11,9 +11,12 @@ nodes). One repo, one binary, Postgres + Redis, Docker-first.
 
 **Branch:** `v2`. **Build:** `make build` / `make test` (no build tags; entry
 `cmd/gateway`). Postgres + Redis required at runtime; build/vet/test pass with no
-DB. Last commits (LOCAL, **not pushed**): `4543614`/`6c9e44d` (S8 harden) ·
+DB. **🎉 ALL PRs S1–S8b COMPLETE (local, not pushed).** Last commit `ea30fc9`
+(S8b activity log). Full series: `ea30fc9` (S8b) · `4543614`/`6c9e44d` (S8) ·
 `3b42d09`/`17aba75`/`96e73c4` (S7) · `643553f`/`4fb4aab` (S6) · `ec6cfaa` (S5) ·
 `c1b6690`/`3dea83a` (S4) · `238a911`/`fbc2c84` (S3) · S2 · `0a5b46a` · `7eb96f3` (S1).
+Migrations `0001`–`0008`. Next: run the per-PR `docs/v2/S*-QA.md` checklists
+against a live Postgres+Redis on the deploy host, then push `v2` → `main`.
 
 **Done**
 - ✅ **S1 streamline** — v1 stack deleted, single binary, deps 25→15
@@ -90,15 +93,13 @@ DB. Last commits (LOCAL, **not pushed**): `4543614`/`6c9e44d` (S8 harden) ·
   `nftgate` (Solana DAS + EVM ERC721), `nodehub` (WS control plane),
   `nodeclient` (gateway→node HTTP), `identity`, `cache` (Redis), `config`.
 
-**Start the next PR here**
-- **S8b activity/audit log (NEXT — FINAL PR):** `activity_log(id, user_id,
-  action, target, ip, user_agent, device, app, meta jsonb, created_at)` via a Gin
-  middleware on authenticated *mutating* routes (write an entry after success;
-  reference sensitive values by id, never dump). IP via `ClientIP` (trusted
-  proxies set in S8), device via `X-Erebrus-Client`, app inferred from the same
-  hint/UA. `GET /api/v2/account/activity?cursor=&limit=` (own, newest first) +
-  `GET /api/v2/admin/activity` (fleet-wide). Migration **`0008_activity_log`**.
-  Schema in §6.5/§7. After this the whole plan is complete.
+**Plan complete — what's left is QA + cutover**
+- Run each `docs/v2/S2-QA.md … S8b-QA.md` checklist against a live
+  Postgres + Redis (deploy host — this dev machine has neither). They cover the
+  DB-backed paths the unit tests can't (migrations apply 0001→0008, auth/email,
+  entitlements, operator metrics, referrals/XP/leaderboard/claim, social/perks/
+  tier gate, rate limits, activity log).
+- Then push `v2` → `main` (the user gates this).
 
 **Cross-repo context (for a fresh session)**
 - Node repo `erebrus` (branch v2): production-ready, **awaiting SSH to deploy**
@@ -310,7 +311,7 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
 
 ---
 
-## 6.5 Activity & audit log (PR S8b) — full user visibility
+## 6.5 Activity & audit log (PR S8b) ✅ DONE (commit `ea30fc9`, migration `0008_activity_log`) — full user visibility
 
 Every meaningful action a user takes in the webapp **or** mobile app is recorded
 and shown back to them in an **Activity** section — a security feature so users
@@ -363,7 +364,7 @@ S5  referrals (qualify on referee trial start)              ✅ DONE (ec6cfaa)
 S6  XP earn/claim, tiers, leaderboard                       ✅ DONE (4fb4aab, 643553f)
 S7  social verification (X/Telegram/email) + perks + tiered node pools  ✅ DONE (96e73c4, 17aba75, 3b42d09)
 S8  prod hardening (parallel with S4–S7)                    ✅ DONE (6c9e44d, 4543614)
-S8b activity & audit log (IP + device) — webapp Activity section
+S8b activity & audit log (IP + device) — webapp Activity section  ✅ DONE (ea30fc9)
 ```
 
 ---
