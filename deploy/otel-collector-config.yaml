@@ -1,0 +1,44 @@
+# Local scrape → OTLP push. Gateway /metrics is NOT exposed via Traefik.
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: erebrus-gateway
+          scrape_interval: 15s
+          scrape_timeout: 10s
+          metrics_path: /metrics
+          static_configs:
+            - targets: ["gateway:8080"]
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 512
+
+  resource:
+    attributes:
+      - key: service.name
+        value: gateway
+        action: upsert
+      - key: deployment.environment
+        value: ${env:DEPLOY_ENVIRONMENT}
+        action: upsert
+
+exporters:
+  otlphttp:
+    endpoint: https://otel.netsepio.com
+    compression: gzip
+    headers:
+      Authorization: "Bearer ${env:OTEL_AUTH_TOKEN}"
+    timeout: 30s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 60s
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors: [batch, resource]
+      exporters: [otlphttp]
