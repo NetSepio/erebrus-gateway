@@ -24,7 +24,7 @@ jobs:
           TAG=v2
           SHA_TAG="${IMAGE}:${GITHUB_SHA}"
           BRANCH_TAG="${IMAGE}:${TAG}"
-          docker build -f Dockerfile.v2 --build-arg version="${GITHUB_SHA}" -t "$SHA_TAG" -t "$BRANCH_TAG" .
+          docker build -f Dockerfile --build-arg version="${GITHUB_SHA}" -t "$SHA_TAG" -t "$BRANCH_TAG" .
           docker push "$SHA_TAG"
           docker push "$BRANCH_TAG"
 

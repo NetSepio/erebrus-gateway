@@ -1,11 +1,5 @@
-# v1 legacy entrypoint (main branch)
-run-v1:
-	go run cmd/main.go cmd/server.go
+# Erebrus gateway v2 control plane (cmd/gateway).
 
-build-v1:
-	GOOS=linux GOARCH=amd64 go build -o gateway cmd/main.go cmd/server.go
-
-# v2 control plane (v2 branch) — run before any erebrus node is up
 run:
 	go run ./cmd/gateway
 
@@ -15,4 +9,10 @@ build:
 test:
 	go test ./...
 
-.PHONY: run run-v1 build build-v1 test
+vet:
+	go vet ./...
+
+tidy:
+	go mod tidy
+
+.PHONY: run build test vet tidy

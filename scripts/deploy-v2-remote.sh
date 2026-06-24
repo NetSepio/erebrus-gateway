@@ -28,60 +28,191 @@ RESTART_NODE="${RESTART_NODE:-1}"
 log() { printf '[deploy-v2] %s\n' "$*"; }
 die() { printf '[deploy-v2] ERROR: %s\n' "$*" >&2; exit 1; }
 
+# Stop any container (running or created) bound to GATEWAY_PORT.
+stop_port_holders() {
+  local port="$1"
+  local ids=()
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && ids+=("$id")
+  done < <(docker ps -aq --filter "publish=${port}" 2>/dev/null || true)
+
+  if [[ ${#ids[@]} -eq 0 ]]; then
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && ids+=("$id")
+    done < <(docker ps -aq --format '{{.ID}} {{.Ports}}' 2>/dev/null | awk -v p=":${port}->" '$0 ~ p {print $1}')
+  fi
+
+  for id in "${ids[@]}"; do
+    local name
+    name=$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null | sed 's#^/##' || echo "$id")
+    log "Stopping container on :${port}: $name"
+    docker rm -f "$id" || true
+  done
+}
+
+# Prefer compose network from GATEWAY_DIR, else postgres container network.
+detect_docker_network() {
+  if docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
+    echo "$DOCKER_NETWORK"
+    return 0
+  fi
+  if [[ -f "$GATEWAY_DIR/docker-compose.yml" ]] || [[ -f "$GATEWAY_DIR/docker-compose.yaml" ]]; then
+    local net
+    net=$(cd "$GATEWAY_DIR" && docker compose config 2>/dev/null | awk '/^name:/ {print $2; exit}')
+    if [[ -n "$net" ]] && docker network inspect "${net}_default" >/dev/null 2>&1; then
+      echo "${net}_default"
+      return 0
+    fi
+  fi
+  local pg
+  pg=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE 'postgres|erebrus.*pg' | head -1 || true)
+  if [[ -n "$pg" ]]; then
+    docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$pg" 2>/dev/null | head -1
+    return 0
+  fi
+  return 1
+}
+
 if [[ ! -f "$GATEWAY_DIR/.env" ]]; then
   die "Missing $GATEWAY_DIR/.env — copy from .env.example and set MNEMONIC + DB_*"
 fi
 
-# Never deploy without a stable signer; ephemeral keys invalidate all tokens.
-if ! grep -qE '^MNEMONIC=.+' "$GATEWAY_DIR/.env" && ! grep -qE '^PASETO_PRIVATE_KEY=.+' "$GATEWAY_DIR/.env"; then
-  die ".env must set MNEMONIC or PASETO_PRIVATE_KEY before redeploy"
+# Normalize .env for docker: gateway reads MNEMONIC, some installs use GATEWAY_MNEMONIC.
+ENV_FILE="$(mktemp)"
+trap 'rm -f "$ENV_FILE"' EXIT
+cp "$GATEWAY_DIR/.env" "$ENV_FILE"
+
+has_signer() {
+  grep -qE '^MNEMONIC=.+' "$ENV_FILE" \
+    || grep -qE '^PASETO_PRIVATE_KEY=.+' "$ENV_FILE" \
+    || grep -qE '^GATEWAY_MNEMONIC=.+' "$ENV_FILE"
+}
+
+if ! has_signer; then
+  die ".env must set MNEMONIC, GATEWAY_MNEMONIC, or PASETO_PRIVATE_KEY before redeploy"
 fi
 
-if [[ -n "${GATEWAY_SRC:-}" ]]; then
-  [[ -d "$GATEWAY_SRC" ]] || die "GATEWAY_SRC not a directory: $GATEWAY_SRC"
-  [[ -f "$GATEWAY_SRC/Dockerfile.v2" ]] || die "Missing $GATEWAY_SRC/Dockerfile.v2"
-  log "Building $GATEWAY_IMAGE from $GATEWAY_SRC"
-  docker build -f "$GATEWAY_SRC/Dockerfile.v2" -t "$GATEWAY_IMAGE" "$GATEWAY_SRC" \
-    || die "docker build failed"
-else
-  log "Pulling $GATEWAY_IMAGE"
-  docker pull "$GATEWAY_IMAGE" || die "docker pull failed — set GATEWAY_SRC to build locally"
+if ! grep -qE '^MNEMONIC=.+' "$ENV_FILE" && grep -qE '^GATEWAY_MNEMONIC=.+' "$ENV_FILE"; then
+  grep '^GATEWAY_MNEMONIC=' "$ENV_FILE" | sed 's/^GATEWAY_MNEMONIC=/MNEMONIC=/' >> "$ENV_FILE"
+  log "Mapped GATEWAY_MNEMONIC → MNEMONIC for container"
 fi
 
-log "Stopping old container (if any)"
+compose_file_in_dir() {
+  local dir="$1"
+  for f in docker-compose.yml docker-compose.yaml docker-compose.yml; do
+    if [[ -f "$dir/$f" ]]; then
+      echo "$dir/$f"
+      return 0
+    fi
+  done
+  return 1
+}
+
+patch_env_for_compose_network() {
+  local f="$1"
+  if grep -qE '^DB_HOST=(localhost|127\.0\.0\.1)$' "$f"; then
+    sed -i.bak -E 's/^DB_HOST=(localhost|127\.0\.0\.1)$/DB_HOST=postgres/' "$f"
+    log "Patched DB_HOST=postgres for docker network"
+  fi
+  if grep -qE '^REDIS_HOST=localhost' "$f"; then
+    sed -i.bak -E 's/^REDIS_HOST=localhost(:6379)?$/REDIS_HOST=redis:6379/' "$f"
+    log "Patched REDIS_HOST=redis:6379 for docker network"
+  fi
+}
+
+wait_for_healthz() {
+  local log_target="${1:-$CONTAINER_NAME}"
+  for i in $(seq 1 45); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${GATEWAY_PORT}/healthz" >/dev/null 2>&1; then
+      log "Gateway healthy"
+      curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/healthz" || true
+      echo
+      return 0
+    fi
+    sleep 1
+  done
+  if [[ -n "$(compose_file_in_dir "$GATEWAY_DIR" 2>/dev/null || true)" ]]; then
+    (cd "$GATEWAY_DIR" && docker compose logs --tail 80 gateway) 2>/dev/null || true
+  else
+    docker logs --tail 80 "$log_target" 2>/dev/null || true
+  fi
+  die "Gateway did not become healthy within 45s"
+}
+
+log "Stopping standalone gateway containers on :$GATEWAY_PORT"
 docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+stop_port_holders "$GATEWAY_PORT"
 
-log "Starting gateway on :$GATEWAY_PORT (network: $DOCKER_NETWORK)"
-NET_ARGS=()
-if docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
-  NET_ARGS=(--network "$DOCKER_NETWORK")
+COMPOSE_FILE=""
+if COMPOSE_FILE="$(compose_file_in_dir "$GATEWAY_DIR")"; then
+  log "Compose deploy via $COMPOSE_FILE"
+  cd "$GATEWAY_DIR"
+  OVERRIDE="$GATEWAY_DIR/docker-compose.deploy-override.yml"
+  if [[ -n "${GATEWAY_SRC:-}" ]]; then
+    [[ -d "$GATEWAY_SRC" ]] || die "GATEWAY_SRC not a directory: $GATEWAY_SRC"
+    [[ -f "$GATEWAY_SRC/Dockerfile" ]] || die "Missing $GATEWAY_SRC/Dockerfile"
+    cat > "$OVERRIDE" <<EOF
+services:
+  gateway:
+    image: ${GATEWAY_IMAGE}
+    build:
+      context: ${GATEWAY_SRC}
+      dockerfile: Dockerfile
+EOF
+    COMPOSE_ARGS=(-f "$COMPOSE_FILE" -f "$OVERRIDE")
+  else
+    COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+  fi
+
+  log "Ensuring postgres + redis are running"
+  docker compose "${COMPOSE_ARGS[@]}" up -d postgres redis 2>/dev/null \
+    || docker compose "${COMPOSE_ARGS[@]}" up -d 2>/dev/null \
+    || true
+
+  log "Building + recreating gateway service"
+  docker compose "${COMPOSE_ARGS[@]}" build gateway \
+    || die "compose build gateway failed"
+  docker compose "${COMPOSE_ARGS[@]}" up -d --no-deps --force-recreate gateway \
+    || die "compose up gateway failed"
+  rm -f "$OVERRIDE"
 else
-  log "Docker network $DOCKER_NETWORK not found — starting without --network"
-fi
+  log "No compose file in $GATEWAY_DIR — standalone docker run"
+  if [[ -n "${GATEWAY_SRC:-}" ]]; then
+    [[ -d "$GATEWAY_SRC" ]] || die "GATEWAY_SRC not a directory: $GATEWAY_SRC"
+    [[ -f "$GATEWAY_SRC/Dockerfile" ]] || die "Missing $GATEWAY_SRC/Dockerfile"
+    log "Building $GATEWAY_IMAGE from $GATEWAY_SRC"
+    docker build -f "$GATEWAY_SRC/Dockerfile" -t "$GATEWAY_IMAGE" "$GATEWAY_SRC" \
+      || die "docker build failed"
+  else
+    log "Pulling $GATEWAY_IMAGE"
+    docker pull "$GATEWAY_IMAGE" || die "docker pull failed — set GATEWAY_SRC to build locally"
+  fi
 
-docker run -d \
-  --name "$CONTAINER_NAME" \
-  --restart unless-stopped \
-  "${NET_ARGS[@]}" \
-  --env-file "$GATEWAY_DIR/.env" \
-  -p "${GATEWAY_PORT}:8080" \
-  -p 9001:9001 \
-  "$GATEWAY_IMAGE"
+  RESOLVED_NETWORK=""
+  if RESOLVED_NETWORK="$(detect_docker_network 2>/dev/null)"; then
+    log "Using docker network: $RESOLVED_NETWORK"
+    patch_env_for_compose_network "$ENV_FILE"
+  else
+    log "No compose network detected — container uses host port mapping only"
+  fi
+
+  NET_ARGS=()
+  if [[ -n "$RESOLVED_NETWORK" ]]; then
+    NET_ARGS=(--network "$RESOLVED_NETWORK")
+  fi
+
+  docker run -d \
+    --name "$CONTAINER_NAME" \
+    --restart unless-stopped \
+    "${NET_ARGS[@]}" \
+    --env-file "$ENV_FILE" \
+    -p "${GATEWAY_PORT}:8080" \
+    -p 9001:9001 \
+    "$GATEWAY_IMAGE"
+fi
 
 log "Waiting for /healthz"
-for i in $(seq 1 30); do
-  if curl -fsS --max-time 2 "http://127.0.0.1:${GATEWAY_PORT}/healthz" >/dev/null 2>&1; then
-    log "Gateway healthy"
-    curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/healthz" || true
-    echo
-    break
-  fi
-  sleep 1
-  if [[ "$i" -eq 30 ]]; then
-    docker logs --tail 80 "$CONTAINER_NAME" || true
-    die "Gateway did not become healthy within 30s"
-  fi
-done
+wait_for_healthz
 
 log "Node directory (public)"
 curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/api/v2/nodes" | head -c 400 || true
