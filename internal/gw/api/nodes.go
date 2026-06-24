@@ -70,6 +70,7 @@ type nodeRegisterReq struct {
 	Region     string `json:"region"`
 	APIBaseURL string `json:"api_base_url"`
 	APIToken   string `json:"api_token"`
+	OrgID      string `json:"org_id"` // optional; operator attaches the node to an org
 }
 
 // handleNodeRegister is the two-step node registration (challenge → signed
@@ -113,8 +114,24 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	}
 	_ = s.store.DeleteFlowID(c, req.FlowID)
 
+	// Resolve the operator account from the registering wallet (owner_user_id).
+	owner, err := s.store.UpsertUserByWallet(c, flow.WalletAddress, flow.Chain, s.cfg.AdminWalletAddress)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to resolve node owner")
+		return
+	}
+	// Optional org attachment — only if the operator belongs to that org.
+	orgID := strings.TrimSpace(req.OrgID)
+	if orgID != "" {
+		if _, err := s.store.MemberRole(c, orgID, owner.ID); err != nil {
+			fail(c, http.StatusForbidden, "not a member of the requested org")
+			return
+		}
+	}
+
 	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
 		PeerID: req.PeerID, DID: req.DID, Wallet: flow.WalletAddress,
+		OwnerUserID: owner.ID, OrgID: orgID,
 		Name: req.Name, Region: req.Region, APIBaseURL: req.APIBaseURL, APIToken: req.APIToken,
 	})
 	if err != nil {
