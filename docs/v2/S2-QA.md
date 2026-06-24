@@ -23,12 +23,15 @@ migration embed presence + ordering.
 This machine has no Docker/Postgres, so the DB-dependent paths below are NOT yet
 exercised. Run these before the eventual push to `main`.
 
-Bring up deps + gateway (compose has Postgres+Redis):
+Bring up deps + gateway:
 
 ```
-docker compose up -d db redis
-make build && ./bin/erebrus-gateway          # applies migrations on boot
+docker compose up -d postgres redis
+make build && ./gateway                      # applies migrations on boot
 ```
+
+Auth is a single resource: `GET /api/v2/auth` (challenge) and `POST /api/v2/auth`
+(complete). `/auth/flowid` and `/auth/authenticate` are removed.
 
 1. **Migrations applied** — `0003_email_auth` recorded, schema present:
    ```sql

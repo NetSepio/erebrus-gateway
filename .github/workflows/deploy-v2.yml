@@ -64,7 +64,6 @@ jobs:
               "${NET_ARGS[@]}" \
               --env-file "$GATEWAY_DIR/.env" \
               -p 8080:8080 \
-              -p 9001:9001 \
               "$IMAGE"
 
             for i in $(seq 1 30); do

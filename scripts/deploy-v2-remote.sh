@@ -77,24 +77,12 @@ if [[ ! -f "$GATEWAY_DIR/.env" ]]; then
   die "Missing $GATEWAY_DIR/.env — copy from .env.example and set MNEMONIC + DB_*"
 fi
 
-# Normalize .env for docker: gateway reads MNEMONIC, some installs use GATEWAY_MNEMONIC.
 ENV_FILE="$(mktemp)"
 trap 'rm -f "$ENV_FILE"' EXIT
 cp "$GATEWAY_DIR/.env" "$ENV_FILE"
 
-has_signer() {
-  grep -qE '^MNEMONIC=.+' "$ENV_FILE" \
-    || grep -qE '^PASETO_PRIVATE_KEY=.+' "$ENV_FILE" \
-    || grep -qE '^GATEWAY_MNEMONIC=.+' "$ENV_FILE"
-}
-
-if ! has_signer; then
-  die ".env must set MNEMONIC, GATEWAY_MNEMONIC, or PASETO_PRIVATE_KEY before redeploy"
-fi
-
-if ! grep -qE '^MNEMONIC=.+' "$ENV_FILE" && grep -qE '^GATEWAY_MNEMONIC=.+' "$ENV_FILE"; then
-  grep '^GATEWAY_MNEMONIC=' "$ENV_FILE" | sed 's/^GATEWAY_MNEMONIC=/MNEMONIC=/' >> "$ENV_FILE"
-  log "Mapped GATEWAY_MNEMONIC → MNEMONIC for container"
+if ! grep -qE '^MNEMONIC=.+' "$ENV_FILE"; then
+  die ".env must set MNEMONIC before redeploy"
 fi
 
 compose_file_in_dir() {
@@ -207,7 +195,6 @@ else
     "${NET_ARGS[@]}" \
     --env-file "$ENV_FILE" \
     -p "${GATEWAY_PORT}:8080" \
-    -p 9001:9001 \
     "$GATEWAY_IMAGE"
 fi
 
