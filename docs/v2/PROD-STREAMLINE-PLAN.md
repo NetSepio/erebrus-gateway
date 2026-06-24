@@ -64,9 +64,11 @@ Frontend uses **Reown AppKit** only; backend verifies signatures + issues PASETO
 
 - **General trial: 7 days**, one per user (`idx_subs_one_trial`). _Change the
   current 14d constant to 7d._
-- **NFT holders: 30-day** entitlement, refreshable (`nftgate`, Solana Metaplex
-  Core via DAS today; ETH ERC-721 checker already present for later). One per
-  user (`idx_subs_one_nft`).
+- **NFT holders: 30-day, directly.** Proving the gating NFT grants a fresh 30-day
+  entitlement regardless of trial state — a new user goes straight to 30 days; a
+  user mid-7d-trial is upgraded to 30. Refreshable while held (`nftgate`, Solana
+  Metaplex Core via DAS today; ETH ERC-721 checker already present). One per user
+  (`idx_subs_one_nft`).
 - `GET /api/v2/subscriptions` returns `{status, source, entitled, trial_consumed,
   current_period_end}` (trial_consumed already added).
 - **No money in v2** (locked). Rank-based perks (below) can *grant* entitlement
@@ -107,8 +109,10 @@ The differentiator. "Prove your social layer → faster nodes + perks."
   optional `?ref=CODE` binds `referred_by_user_id` (immutable, self-referral
   blocked, one referrer per user).
 - `GET /api/v2/referrals/me` → `{code, referred_count, referred_by, recent[]}`.
-- Referrer reward on a referee's first **qualifying** action (e.g. starts trial
-  or verifies a social) → XP + optional free days (`source='rank'`).
+- **Qualifying action = the referee's first trial start** → referrer earns
+  **+100 XP** (referee +25). XP is *earned* immediately; rewards are *claimed*
+  separately (see §5b). `free_days` for top-N referrers each month is a
+  claimable perk.
 
 ### 5b. XP & ranking (PR S6) — DRIVERS LOCKED
 Four XP sources (all confirmed). `xp_events(user_id, kind, points, meta,
@@ -130,15 +134,26 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
 - **Operator↔user synergy:** uptime XP means a node operator's infra
   contribution raises their *own* rank → they get faster nodes as a user. One
   identity, both roles.
+- **Earn vs claim (auditable).** XP is *earned* into the append-only `xp_events`
+  ledger; **lifetime earned XP drives rank/tier and never decreases.** Rewards
+  (`free_days`, NFT eligibility, other perks) are *claimed* by the user at any
+  time, each recorded in `xp_claims(user_id, kind, xp_spent, reward, ip, device,
+  created_at)`. `users.xp_earned` vs `users.xp_claimed` are cached sums, so the
+  UI always shows **earned, claimed, and claimable**. Every claim is also an
+  activity-log entry (§6.5) with IP + device.
+- `POST /api/v2/rank/claim` `{reward_id}` → grants the reward, logs the claim.
 
 ### 5c. Leaderboard (PR S6)
 - `GET /api/v2/leaderboard?metric=referrals|xp&period=all|30d` (Redis-cached,
   paginated) → rank, handle/wallet (truncated), count/xp. Plus my own rank.
 
-### 5d. Social verification (PR S7)
-- Link X/Discord/GitHub via OAuth (or signed proof) → `social_accounts` table →
-  emits `social_verified` XP. Keep providers pluggable; start with one (X or
-  Discord). Privacy: store provider id + handle only.
+### 5d. Social verification (PR S7) — providers: X, Telegram, email
+- **X (Twitter)** and **Telegram** via OAuth / bot-proof, plus **email** (the
+  Resend OTP flow already in §2) → `social_accounts(user_id, provider,
+  provider_id, handle, verified_at)`, `UNIQUE(provider, provider_id)`. Each first
+  verification emits `social_verified` XP (email emits `email_verified`).
+- Providers are pluggable; ship X + Telegram + email now. Privacy: store the
+  provider id + handle only, never tokens.
 
 ### 5e. Perks → faster nodes — MECHANIC LOCKED: tier-gated premium pool
 - **Tier-gated node pool:** premium/high-throughput nodes carry `min_tier`
@@ -178,16 +193,44 @@ is derived. Starting weights are **tunable** (config, not hard-coded):
 
 ---
 
+## 6.5 Activity & audit log (PR S8b) — full user visibility
+
+Every meaningful action a user takes in the webapp **or** mobile app is recorded
+and shown back to them in an **Activity** section — a security feature so users
+can spot anything they didn't do and react.
+
+- **What's logged:** auth (login, email/social verify), VPN client
+  provision/delete, org + API-key create/revoke, subscription/trial/NFT changes,
+  XP claims, node ownership changes, profile edits. (Never traffic content — this
+  is account activity, not browsing.)
+- **Each entry:** `activity_log(id, user_id, action, target, ip, user_agent,
+  device, app[web|ios|android|desktop], meta jsonb, created_at)`. IP + device are
+  captured server-side from the request (`X-Forwarded-For` behind the proxy +
+  `User-Agent`; the apps also send an `X-Erebrus-Client` device hint).
+- **Capture:** a Gin middleware on authenticated mutating routes writes an entry
+  after success; sensitive values are referenced by id, never dumped.
+- **Endpoints:** `GET /api/v2/account/activity?cursor=&limit=` (the user's own,
+  paginated, newest first); admins get `GET /api/v2/admin/activity` fleet-wide
+  (already stubbed) for incident response.
+- **Anomaly hooks (later):** flag new-IP / new-country / new-device logins; the
+  schema supports it now, alerting can come after.
+
 ## 7. Schema additions (summary)
 
 ```
 ALTER nodes ADD owner_user_id uuid, org_id uuid NULL, access_mode text, min_tier int DEFAULT 0;
+  -- owner_user_id resolved from the registering wallet; org_id set by the operator
+  -- when starting the node (orgs are the existing API-key orgs, created via API).
 node_metrics(node_id, bucket timestamptz, wg_peers, proxy_sessions, rx_bytes, tx_bytes, cpu_pct, mem_pct)  PK(node_id, bucket)
-users ADD referral_code text UNIQUE, referred_by_user_id uuid NULL, xp bigint DEFAULT 0, tier int DEFAULT 0, email text, email_verified bool;
-xp_events(id, user_id, kind, points, meta jsonb, created_at)
-social_accounts(user_id, provider, provider_id, handle, verified_at)  UNIQUE(provider, provider_id)
-perks(id, name, type, min_tier, meta jsonb)
+users ADD referral_code text UNIQUE, referred_by_user_id uuid NULL,
+  xp_earned bigint DEFAULT 0, xp_claimed bigint DEFAULT 0, tier int DEFAULT 0,
+  email text, email_verified bool;
+xp_events(id, user_id, kind, points, meta jsonb, created_at)              -- earned ledger (lifetime)
+xp_claims(id, user_id, kind, xp_spent bigint, reward, ip, device, meta jsonb, created_at)  -- claim ledger
+social_accounts(user_id, provider['x'|'telegram'|'email'], provider_id, handle, verified_at)  UNIQUE(provider, provider_id)
+perks(id, name, type['nft'|'xp'|'free_days'|'node_pool'], min_tier, meta jsonb)
 user_perks(user_id, perk_id, granted_at, meta)
+activity_log(id, user_id, action, target, ip, user_agent, device, app, meta jsonb, created_at)  -- §6.5
 ```
 
 ---
@@ -195,14 +238,15 @@ user_perks(user_id, perk_id, granted_at, meta)
 ## 8. Sequencing (PRs, each: tests + migration notes + docs)
 
 ```
-S1  streamline: delete v1, one binary, prune deps          ← do first
+S1  streamline: delete v1, one binary, prune deps          ✅ DONE (7eb96f3)
 S2  auth: Reown/EVM+SOL only, Resend email (optional)
-S3  entitlements: 7d trial + 30d NFT + rank source
+S3  entitlements: 7d trial + 30d NFT-direct + rank source
 S4  operator nodes: ownership, visibility, node_metrics + charts
-S5  referrals
-S6  XP, tiers, leaderboard
-S7  social verification + perks + tiered node pools
+S5  referrals (qualify on referee trial start)
+S6  XP earn/claim, tiers, leaderboard
+S7  social verification (X/Telegram/email) + perks + tiered node pools
 S8  prod hardening (parallel with S4–S7)
+S8b activity & audit log (IP + device) — webapp Activity section
 ```
 
 ---
@@ -215,16 +259,17 @@ S8  prod hardening (parallel with S4–S7)
 - ✅ **XP drivers** = referrals + social verification + operator uptime + NFT
   held + email verified, with the weights/anti-gaming in §5b.
 
-**Still open — proposed defaults baked in; confirm or adjust:**
-1. **Trial vs NFT** — *default: coexist.* General **7d** trial AND NFT **30d**;
-   a user on a trial who proves an NFT upgrades to the 30d. (Alt: NFT replaces
-   trial for holders.)
-2. **Referral qualifying action** — *default:* referee's **first trial start OR
-   first social verification** triggers the referrer's +100. *Reward default:*
-   XP only at first; `free_days` for top-N monthly referrers as a perk.
-3. **Social providers** — *default:* start with **X (Twitter)** via signed-proof
-   or OAuth, then Discord. One provider id → one user.
-4. **Org nodes** — *default:* reuse the existing `orgs` (API-key orgs) as the
-   operator team; an org's nodes carry `org_id`. (Alt: a separate operator-team
-   entity.)
+**All resolved (2026-06-21):**
+1. ✅ **Trial vs NFT** — coexist; **NFT grants 30d directly** (new user → 30d;
+   trial user → upgraded to 30d).
+2. ✅ **Referral** — qualifies on the **referee's first trial start** → referrer
+   **+100 XP** (earned). XP is claimable anytime; every claim logged
+   (`xp_claims`, earned-vs-claimed). `free_days` for top-N monthly referrers.
+3. ✅ **Social providers** — **X, Telegram, email** only for now.
+4. ✅ **Org nodes** — reuse the existing `orgs`; the **operator sets `org_id`
+   when starting the node**. Orgs (id + details) and **API keys** are created
+   from the webapp/mobile via the org APIs, so operators can build their own apps
+   on Erebrus infra.
+5. ✅ **Activity log** — every webapp/mobile action logged with **IP + device**
+   and shown in the webapp **Activity** section for security visibility. (§6.5)
 ```
