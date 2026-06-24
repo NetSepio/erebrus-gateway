@@ -27,9 +27,9 @@ func (s *Server) handleFlowID(c *gin.Context) {
 		return
 	}
 	switch chain {
-	case wallet.ChainEVM, wallet.ChainSOL, wallet.ChainAPT, wallet.ChainSUI:
+	case wallet.ChainEVM, wallet.ChainSOL:
 	default:
-		fail(c, http.StatusBadRequest, "unsupported chain")
+		fail(c, http.StatusBadRequest, "unsupported chain (expected evm or sol)")
 		return
 	}
 	flowID := uuid.NewString()
