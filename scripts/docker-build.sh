@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the gateway image with an incrementing version and commit-hash tags.
 #
-# Version: 2.0.<commit-count>+<short-sha>  (injected via -ldflags)
+# Version: 2.0.<commit-count>  Tag: <short-sha>  (injected via -ldflags)
 # Tags:    ghcr.io/netsepio/gateway:<full-sha> and :<branch>
 #
 # Usage (local):
@@ -27,16 +27,18 @@ SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 SHORT_SHA="${SHORT_SHA:-$(git rev-parse --short HEAD)}"
 BRANCH="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
 COUNT="$(git rev-list --count HEAD)"
-VERSION="2.0.${COUNT}+${SHORT_SHA}"
+VERSION="2.0.${COUNT}"
+TAG="${SHORT_SHA}"
 
 SHA_TAG="${IMAGE}:${SHA}"
 BRANCH_TAG="${IMAGE}:${BRANCH}"
 
-echo "Building version=${VERSION}"
+echo "Building version=${VERSION} tag=${TAG}"
 echo "Tags: ${SHA_TAG}, ${BRANCH_TAG}"
 
 docker build -f Dockerfile \
   --build-arg "version=${VERSION}" \
+  --build-arg "tag=${TAG}" \
   -t "$SHA_TAG" \
   -t "$BRANCH_TAG" \
   .

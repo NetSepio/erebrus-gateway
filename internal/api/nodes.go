@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
 	"github.com/NetSepio/gateway/internal/wallet"
@@ -137,20 +138,24 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		}
 	}
 
+	env := s.cfg.Environment
 	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
 		PeerID: req.PeerID, DID: req.DID, Wallet: flow.WalletAddress,
 		OwnerUserID: owner.ID, OrgID: orgID,
 		Name: req.Name, Region: req.Region, APIBaseURL: req.APIBaseURL, APIToken: req.APIToken,
 	})
 	if err != nil {
+		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to register node")
 		return
 	}
 	nodeTok, err := s.tokens.IssueNode(nodeID, req.PeerID)
 	if err != nil {
+		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to issue node token")
 		return
 	}
+	metrics.NodeRegistrationsTotal.WithLabelValues("success", env).Inc()
 	ok(c, http.StatusOK, gin.H{"node_token": nodeTok, "node_id": nodeID})
 }
 

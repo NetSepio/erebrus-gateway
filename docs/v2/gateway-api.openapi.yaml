@@ -17,7 +17,7 @@ servers:
 paths:
   # ───────────────────────── ops (liveness / readiness / metrics) ─────────────────────────
   /healthz:
-    get: { summary: Liveness, security: [], responses: { "200": { description: "{ status, version }" } } }
+    get: { summary: Liveness, security: [], responses: { "200": { description: "ok" } } }
   /readyz:
     get:
       summary: Readiness (DB required, Redis optional)
@@ -25,8 +25,43 @@ paths:
       responses:
         "200": { description: "{ status: ready, db: up, redis: up|disabled }" }
         "503": { description: DB unreachable }
+  /version:
+    get:
+      summary: Build metadata
+      security: []
+      responses:
+        "200":
+          description: "{ product, service, environment, version, tag }"
   /metrics:
-    get: { summary: "Prometheus metrics (requests, WS nodes, DB pool). Firewall to internal scrapers in prod.", security: [], responses: { "200": { description: text exposition } } }
+    get: { summary: "Prometheus metrics (netsepio_erebrus_gateway_*). Firewall to internal scrapers in prod.", security: [], responses: { "200": { description: text exposition } } }
+  /telemetry/event:
+    post:
+      summary: Safe app telemetry events (Android/iOS/webapp)
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, event, status]
+              properties:
+                platform: { type: string, enum: [android, ios, webapp] }
+                event:
+                  type: string
+                  enum:
+                    - vpn_connect_attempt
+                    - vpn_connect_success
+                    - vpn_connect_failure
+                    - vpn_disconnect
+                    - region_selected
+                    - node_selected
+                    - drop_room_created
+                    - file_transfer_success
+                    - file_transfer_failure
+                status: { type: string, enum: [success, failed, attempted] }
+      responses:
+        "204": { description: Accepted }
+        "400": { description: Invalid payload }
 
   # ───────────────────────── auth ─────────────────────────
   /api/v2/auth:

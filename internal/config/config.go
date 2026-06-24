@@ -14,6 +14,7 @@ type Config struct {
 	// app
 	AppPort        string `env:"APP_PORT" envDefault:"8080"`
 	GinMode        string `env:"GIN_MODE" envDefault:"release"`
+	Environment    string `env:"ENVIRONMENT" envDefault:"dev"`
 	// Webapp origins: prod https://erebrus.io, dev https://dev.erebrus.io
 	AllowedOrigin  string `env:"ALLOWED_ORIGIN" envDefault:"https://erebrus.io,https://dev.erebrus.io,http://localhost:3000"`
 	TrustedProxies string `env:"TRUSTED_PROXIES"` // CSV of reverse-proxy IPs/CIDRs; empty = trust none

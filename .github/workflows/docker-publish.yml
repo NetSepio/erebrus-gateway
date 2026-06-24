@@ -1,6 +1,6 @@
 # Build and push a Docker image on every push to main (dev) or prod.
 #
-# Binary version: 2.0.<commit-count>+<short-sha>  (auto-increments per commit)
+# Binary version: 2.0.<commit-count>  tag: <short-sha>  (auto-increments per commit)
 # Image tags:     ghcr.io/netsepio/gateway:<full-sha>  (immutable)
 #                 ghcr.io/netsepio/gateway:<branch>    (main or prod — deploy this)
 #

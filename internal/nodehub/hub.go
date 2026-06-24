@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/gorilla/websocket"
 )
@@ -29,19 +30,27 @@ var upgrader = websocket.Upgrader{
 
 // Hub tracks live node connections and persists their control-plane reports.
 type Hub struct {
-	store *store.Store
-	log   *slog.Logger
+	store       *store.Store
+	log         *slog.Logger
+	environment string
 
-	mu    sync.RWMutex
-	conns map[string]*conn // keyed by nodeID
+	mu           sync.RWMutex
+	conns        map[string]*conn // keyed by nodeID
+	regionCounts map[string]int
 }
 
 // New constructs a Hub.
-func New(st *store.Store, log *slog.Logger) *Hub {
+func New(st *store.Store, log *slog.Logger, environment string) *Hub {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Hub{store: st, log: log, conns: map[string]*conn{}}
+	if environment == "" {
+		environment = "dev"
+	}
+	return &Hub{
+		store: st, log: log, environment: environment,
+		conns: map[string]*conn{}, regionCounts: map[string]int{},
+	}
 }
 
 // Online reports how many nodes are currently connected.
@@ -84,9 +93,11 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, nodeID, peerID strin
 
 	h.mu.Lock()
 	if old := h.conns[nodeID]; old != nil {
+		h.adjustRegionLocked(old.region, -1)
 		close(old.send) // replace a stale connection
 	}
 	h.conns[nodeID] = c
+	h.adjustRegionLocked("unknown", 1)
 	h.mu.Unlock()
 
 	h.log.Info("node connected", "node_id", nodeID, "peer_id", peerID)
@@ -95,6 +106,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, nodeID, peerID strin
 
 	h.mu.Lock()
 	if h.conns[nodeID] == c {
+		h.adjustRegionLocked(c.region, -1)
 		delete(h.conns, nodeID)
 	}
 	h.mu.Unlock()
@@ -105,9 +117,33 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, nodeID, peerID strin
 type conn struct {
 	nodeID string
 	peerID string
+	region string
 	ws     *websocket.Conn
 	send   chan []byte
 	hub    *Hub
+}
+
+func (h *Hub) adjustRegionLocked(region string, delta int) {
+	region = metrics.NormalizeRegion(region)
+	h.regionCounts[region] += delta
+	if h.regionCounts[region] <= 0 {
+		delete(h.regionCounts, region)
+		metrics.UpdateActiveNodeSessions(region, 0, h.environment)
+		return
+	}
+	metrics.UpdateActiveNodeSessions(region, h.regionCounts[region], h.environment)
+}
+
+func (c *conn) setRegion(region string) {
+	region = metrics.NormalizeRegion(region)
+	if region == c.region {
+		return
+	}
+	c.hub.mu.Lock()
+	defer c.hub.mu.Unlock()
+	c.hub.adjustRegionLocked(c.region, -1)
+	c.region = region
+	c.hub.adjustRegionLocked(c.region, 1)
 }
 
 func (c *conn) writePump() {
@@ -193,6 +229,7 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 	}); err != nil {
 		c.hub.log.Warn("apply hello failed", "node_id", c.nodeID, "err", err)
 	}
+	c.setRegion(h.Spec.Region)
 	if frame, err := wrap(TypeHelloAck, HelloAck{HeartbeatIntervalSec: heartbeatIntervalSec}); err == nil {
 		select {
 		case c.send <- frame:
@@ -215,7 +252,10 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 	if err := c.hub.store.ApplyHeartbeat(ctx, c.peerID, status, load, st,
 		hb.Load.RxBytes, hb.Load.TxBytes, hb.Versions["node"]); err != nil {
 		c.hub.log.Warn("apply heartbeat failed", "node_id", c.nodeID, "err", err)
+		metrics.NodeHeartbeatsTotal.WithLabelValues("failed", c.hub.environment).Inc()
+		return
 	}
+	metrics.NodeHeartbeatsTotal.WithLabelValues("success", c.hub.environment).Inc()
 	// Time-series rollup for operator charts (per-minute bucket, last write wins).
 	if err := c.hub.store.RecordNodeMetrics(ctx, c.nodeID, time.Now(),
 		hb.Load.WGPeers, hb.Load.ProxySessions, hb.Load.RxBytes, hb.Load.TxBytes,

@@ -5,8 +5,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ARG version=dev
+ARG tag=unknown
 RUN CGO_ENABLED=0 go build \
-    -ldflags "-X github.com/NetSepio/gateway/internal/version.Version=${version}" \
+    -ldflags "-X github.com/NetSepio/gateway/internal/version.Version=${version} -X github.com/NetSepio/gateway/internal/version.Tag=${tag}" \
     -o gateway ./cmd/gateway
 
 FROM debian:bookworm-slim
