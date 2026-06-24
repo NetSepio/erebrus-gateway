@@ -120,6 +120,9 @@ func (s *Server) handleEmailOTPVerify(c *gin.Context) {
 	// XP driver: verifying an email earns XP once (best-effort).
 	_, _ = s.store.AwardXPOnce(c, uid, "email_verified", s.cfg.XPEmailVerified,
 		map[string]any{}, "email_verified:"+uid)
+	// Record email as a linked social account too (no social_verified XP — email
+	// has its own email_verified driver).
+	_, _ = s.store.LinkSocialAccount(c, uid, "email", email, "")
 
 	u, _ := s.store.GetUser(c, uid)
 	ok(c, http.StatusOK, u)

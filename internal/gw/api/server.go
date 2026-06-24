@@ -10,6 +10,7 @@ import (
 	"github.com/NetSepio/gateway/internal/gw/nftgate"
 	"github.com/NetSepio/gateway/internal/gw/nodeclient"
 	"github.com/NetSepio/gateway/internal/gw/nodehub"
+	"github.com/NetSepio/gateway/internal/gw/socialverify"
 	"github.com/NetSepio/gateway/internal/gw/store"
 	"github.com/NetSepio/gateway/internal/gw/token"
 	"github.com/gin-contrib/cors"
@@ -18,19 +19,23 @@ import (
 
 // Server holds the gateway's API dependencies.
 type Server struct {
-	cfg    *config.Config
-	store  *store.Store
-	tokens *token.Manager
-	hub    *nodehub.Hub
-	cache  *cache.Cache
-	nodes  *nodeclient.Client
-	nft    nftgate.Checker
-	mailer *mailer.Mailer
+	cfg     *config.Config
+	store   *store.Store
+	tokens  *token.Manager
+	hub     *nodehub.Hub
+	cache   *cache.Cache
+	nodes   *nodeclient.Client
+	nft     nftgate.Checker
+	mailer  *mailer.Mailer
+	xverify *socialverify.XVerifier
 }
 
 // New builds the API server.
 func New(cfg *config.Config, st *store.Store, tm *token.Manager, hub *nodehub.Hub, c *cache.Cache, nft nftgate.Checker, ml *mailer.Mailer) *Server {
-	return &Server{cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(), nft: nft, mailer: ml}
+	return &Server{
+		cfg: cfg, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(),
+		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(cfg.XAPIBaseURL),
+	}
 }
 
 // Router wires all routes.
@@ -95,6 +100,11 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/rank/me", s.handleRankMe)
 		user.POST("/rank/claim", s.handleRankClaim)
 		user.GET("/leaderboard", s.handleLeaderboard)
+
+		// social verification (X / Telegram; email links via /auth/email)
+		user.GET("/social/accounts", s.handleSocialAccounts)
+		user.POST("/social/telegram", s.handleVerifyTelegram)
+		user.POST("/social/x", s.handleVerifyX)
 
 		// entitlement: trial + NFT gating only (no money in v2.0)
 		user.GET("/subscriptions", s.handleMySubscription)
