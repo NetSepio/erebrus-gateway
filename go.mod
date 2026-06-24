@@ -13,10 +13,9 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mr-tron/base58 v1.2.0
 	github.com/vk-rv/pvx v0.0.0-20210912195928-ac00bc32f6e7
-	golang.org/x/crypto v0.37.0
+	golang.org/x/crypto v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
 

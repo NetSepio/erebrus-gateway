@@ -67,7 +67,10 @@ func TestVerifySolanaRoundTrip(t *testing.T) {
 }
 
 func TestVerifyUnsupportedChain(t *testing.T) {
-	if _, err := Verify("doge", "m", "s", "p"); err != ErrUnsupportedChain {
-		t.Fatalf("want ErrUnsupportedChain, got %v", err)
+	// Aptos and Sui were dropped in S2; only evm + sol remain.
+	for _, chain := range []string{"doge", "apt", "sui", "aptos", ""} {
+		if _, err := Verify(chain, "m", "s", "p"); err != ErrUnsupportedChain {
+			t.Fatalf("chain %q: want ErrUnsupportedChain, got %v", chain, err)
+		}
 	}
 }
