@@ -12,6 +12,8 @@
 #   SKIP_COMMIT=1            # skip local git commit
 #   SKIP_RSYNC=1             # skip rsync (server already has latest tree)
 #   SKIP_NODE_RESTART=1      # don't restart /opt/erebrus on server
+#   GATEWAY_DIR=/root/gateway  # set if auto-detect fails (run discover script first)
+#   SKIP_COMMIT=1 SKIP_RSYNC=1  # re-run deploy only after rsync succeeded
 #
 # Paste the full terminal output back to the agent when done.
 
@@ -55,12 +57,12 @@ detect_ssh_user() {
   exit 1
 }
 
-step "1/5 — SSH check"
+step "1/6 — SSH check"
 [[ -f "$SSH_KEY" ]] || { echo "ERROR: SSH key not found: $SSH_KEY"; exit 1; }
 detect_ssh_user
 ssh_base "${SSH_USER}@${SERVER_HOST}" 'whoami && hostname && date -u'
 
-step "2/5 — Local git (optional commit)"
+step "2/6 — Local git (optional commit)"
 cd "$REPO_ROOT"
 git branch --show-current || true
 git status --short || true
@@ -85,7 +87,21 @@ else
   log "SKIP_COMMIT=1 — skipping commit"
 fi
 
-step "3/5 — rsync to server"
+step "3/6 — rsync discover script (always)"
+ssh_base "${SSH_USER}@${SERVER_HOST}" "mkdir -p ~/erebrus-gateway/scripts"
+scp -i "$SSH_KEY" -o BatchMode=yes \
+  "$REPO_ROOT/scripts/discover-gateway-env.sh" \
+  "$REPO_ROOT/scripts/deploy-v2-remote.sh" \
+  "${SSH_USER}@${SERVER_HOST}:~/erebrus-gateway/scripts/" 2>/dev/null || \
+  rsync -avz -e "ssh -i $SSH_KEY -o BatchMode=yes" \
+    "$REPO_ROOT/scripts/discover-gateway-env.sh" \
+    "$REPO_ROOT/scripts/deploy-v2-remote.sh" \
+    "${SSH_USER}@${SERVER_HOST}:~/erebrus-gateway/scripts/"
+
+step "3b/6 — discover gateway .env on server"
+ssh_base "${SSH_USER}@${SERVER_HOST}" 'bash ~/erebrus-gateway/scripts/discover-gateway-env.sh' || true
+
+step "4/6 — rsync full repo"
 REMOTE_REPO="~/erebrus-gateway"
 if [[ "${SKIP_RSYNC:-0}" != "1" ]]; then
   rsync -avz \
@@ -99,22 +115,22 @@ else
   log "SKIP_RSYNC=1 — skipping rsync"
 fi
 
-step "4/5 — Remote build + deploy + node restart"
+step "5/6 — Remote build + deploy + node restart"
 RESTART_NODE=1
 [[ "${SKIP_NODE_RESTART:-0}" == "1" ]] && RESTART_NODE=0
 
 ssh_base "${SSH_USER}@${SERVER_HOST}" bash -s <<REMOTE
 set -euo pipefail
-GATEWAY_DIR=""
-for d in "\$HOME/gateway-v2" "\$HOME/gateway" "/opt/gateway-v2"; do
-  if [[ -f "\$d/.env" ]]; then
-    GATEWAY_DIR="\$d"
-    break
-  fi
-done
-if [[ -z "\$GATEWAY_DIR" ]]; then
-  echo "ERROR: No gateway .env found in ~/gateway-v2, ~/gateway, or /opt/gateway-v2"
-  exit 1
+export GATEWAY_DIR="${GATEWAY_DIR:-}"
+if [[ -z "\${GATEWAY_DIR:-}" ]]; then
+  GATEWAY_DIR=\$(bash "\$HOME/erebrus-gateway/scripts/discover-gateway-env.sh") || {
+    echo ""
+    echo "HINT: discover only:"
+    echo "  ssh ${SSH_USER}@${SERVER_HOST} 'bash ~/erebrus-gateway/scripts/discover-gateway-env.sh'"
+    echo "Then:"
+    echo "  GATEWAY_DIR=/path/to/dir SKIP_COMMIT=1 SKIP_RSYNC=1 bash scripts/deploy-v2-from-mac.sh"
+    exit 1
+  }
 fi
 echo "Using GATEWAY_DIR=\$GATEWAY_DIR"
 export GATEWAY_DIR
@@ -124,7 +140,7 @@ export RESTART_NODE=${RESTART_NODE}
 bash "\$HOME/erebrus-gateway/scripts/deploy-v2-remote.sh"
 REMOTE
 
-step "5/5 — Public verification (from Mac)"
+step "6/6 — Public verification (from Mac)"
 echo "--- healthz ---"
 curl -sS --max-time 10 "http://${SERVER_HOST}:8080/healthz" || echo "healthz FAILED"
 echo
