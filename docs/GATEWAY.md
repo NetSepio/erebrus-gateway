@@ -60,7 +60,8 @@ deploy/               Production docker-compose + OTel collector config
   No payments in v2.
 - **Nodes:** Machine enrollment via org `enrollment_secret` (retrievable anytime);
   node signs a machine challenge (not human wallet auth). `access_mode` is
-  `public` | `private` (org members only for private). Gateway→node calls use
+  `public` | `private` (defaults to `public` for network health; org members
+  only for private). Gateway→node calls use
   short-lived gateway PASETO + per-node `node_key`.
 - **Orgs:** Any user creates a workspace (`kind`: team/company/individual/family);
   owner adds admins/members; `enrollment_secret` for node boot; API keys for
