@@ -211,7 +211,7 @@ On push:
 2. **deploy_*** — SCP `deploy/docker-compose.yml` + `otel-collector-config.yaml`,
    `docker compose pull && up -d`, wait for `/healthz`
 
-**CI tests:** `.github/workflows/ci.yml` — vet, build, test, gitleaks on `main`/`prod`/`v2`.
+**CI tests:** `.github/workflows/ci.yml` — vet, build, test, gitleaks on `main`/`prod`.
 
 First-time server: `cp .env.example ~/gateway/.env` and fill secrets.
 
