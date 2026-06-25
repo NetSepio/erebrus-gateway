@@ -61,10 +61,13 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${{ secrets.DEV_SSH_PORT }}")
+          PORT="${{ secrets.DEV_SSH_PORT }}"
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${PORT:-22}")
+          # scp uses -P (uppercase) for port; ssh uses -p (lowercase).
+          SCP_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -P "${PORT:-22}")
           SSH_TARGET="${{ secrets.DEV_REMOTE_SERVER_USERNAME }}@${{ secrets.DEV_REMOTE_SERVER_ADDRESS }}"
           ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p ~/${REMOTE_DIR}"
-          scp "${SSH_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
+          scp "${SCP_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
             "${SSH_TARGET}:~/${REMOTE_DIR}/"
 
       - name: Deploy to dev (main branch)
@@ -124,9 +127,11 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${SSH_PORT:-22}")
+          # scp uses -P (uppercase) for port; ssh uses -p (lowercase).
+          SCP_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -P "${SSH_PORT:-22}")
           SSH_TARGET="${SSH_USER}@${SSH_HOST}"
           ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p ~/${REMOTE_DIR}"
-          scp "${SSH_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
+          scp "${SCP_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
             "${SSH_TARGET}:~/${REMOTE_DIR}/"
 
       - name: Deploy to production (prod branch)
