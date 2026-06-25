@@ -1,0 +1,121 @@
+# Erebrus v2 local dev stack.
+#
+#   infra only:              docker compose -f docker-compose.yml up -d postgres redis
+#   gateway (no nodes yet):  docker compose -f docker-compose.yml up -d --build postgres redis gateway
+#   full stack (+ nodes):    docker compose -f docker-compose.yml --profile full up -d --build
+#
+# Layout assumption: erebrus-gateway/ and erebrus/ are sibling checkouts.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: erebrus
+      POSTGRES_PASSWORD: erebrus-dev
+      POSTGRES_DB: erebrus
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erebrus"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      APP_PORT: "8080"
+      GIN_MODE: debug
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USERNAME: erebrus
+      DB_PASSWORD: erebrus-dev
+      DB_NAME: erebrus
+      DB_SSLMODE: disable # local dev only — prod requires 'require'
+      REDIS_HOST: redis:6379
+      # PASETO signer derived from MNEMONIC at m/44'/501'/1'/0' (see internal/identity)
+      MNEMONIC: ${MNEMONIC:-legal winner thank year wave sausage worth useful legal winner thank yellow}
+      ALLOWED_ORIGIN: https://erebrus.io,https://dev.erebrus.io,http://localhost:3000
+    ports: ["8080:8080"]
+
+  node1:
+    profiles: [full]
+    build: ../erebrus
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    sysctls: { net.ipv4.ip_forward: 1 }
+    environment: &node-env
+      RUNTYPE: debug
+      SERVER: 0.0.0.0
+      HTTP_PORT: "9080"
+      REGION: DEV1
+      NODE_NAME: node1
+      # well-known BIP39 test vector — dev only, never fund or reuse
+      MNEMONIC: ${NODE1_MNEMONIC:-abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about}
+      GATEWAY_URL: http://gateway:8080
+      WG_CONF_DIR: /etc/wireguard
+      WG_INTERFACE_NAME: wg0
+      WG_ENDPOINT_HOST: node1
+      WG_ENDPOINT_PORT: "51820"
+      WG_IPv4_SUBNET: 10.10.0.1/16
+      WG_DNS: 1.1.1.1
+      VLESS_PORT: "8443"
+      HYSTERIA2_PORT: "4443"
+      REALITY_SERVER_NAMES: www.microsoft.com
+      STATE_DIR: /var/lib/erebrus
+      CHAIN_REGISTRATION: "off"
+      ENABLE_APP_HOSTING: "false"
+    volumes: [node1state:/var/lib/erebrus]
+    ports: ["9080:9080", "51820:51820/udp", "8443:8443", "4443:4443/udp"]
+
+  node2:
+    profiles: [full]
+    build: ../erebrus
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    sysctls: { net.ipv4.ip_forward: 1 }
+    environment:
+      <<: *node-env
+      REGION: DEV2
+      NODE_NAME: node2
+      # second fixed dev mnemonic — dev only, never fund or reuse
+      MNEMONIC: ${NODE2_MNEMONIC:-legal winner thank year wave sausage worth useful legal winner thank yellow}
+      WG_ENDPOINT_HOST: node2
+      WG_IPv4_SUBNET: 10.20.0.1/16
+    volumes: [node2state:/var/lib/erebrus]
+    ports: ["9081:9080", "51821:51820/udp", "8444:8443", "4444:4443/udp"]
+
+  # throwaway client container for e2e: wg-quick + sing-box + curl
+  testclient:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM alpine:3.20
+        RUN apk add --no-cache wireguard-tools curl iptables openresolv bind-tools
+        ARG SINGBOX_VERSION=1.11.4
+        RUN ARCH=$$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+            curl -fsSL "https://github.com/SagerNet/sing-box/releases/download/v$${SINGBOX_VERSION}/sing-box-$${SINGBOX_VERSION}-linux-$${ARCH}.tar.gz" \
+            | tar -xz -C /tmp && mv /tmp/sing-box-*/sing-box /usr/local/bin/
+        CMD ["sleep", "infinity"]
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+
+volumes:
+  pgdata:
+  node1state:
+  node2state:
