@@ -1,0 +1,65 @@
+# Production gateway stack: API (Traefik) + local OTel Collector (metrics outbound).
+#
+# Server layout (one-time):
+#   mkdir -p ~/gateway-v2 && cp .env.example ~/gateway-v2/.env  # fill secrets
+#   Traefik on external network netsepio_prod_network
+#
+# Deploy (manual or CI):
+#   cd ~/gateway-v2
+#   export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:prod
+#   docker compose pull && docker compose up -d
+#
+# /metrics is internal only (collector scrapes gateway:8080). Public Traefik router
+# excludes /metrics — API at https://gateway.erebrus.io
+
+name: erebrus-gateway
+
+services:
+  gateway:
+    image: ${GATEWAY_IMAGE:-ghcr.io/netsepio/gateway:prod}
+    container_name: ${GATEWAY_CONTAINER_NAME:-erebrus-gateway}
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8080"
+    # Local health checks / CI curl only — not reachable from the public internet.
+    ports:
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-8080}:8080"
+    networks:
+      - netsepio_prod_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz | grep -q ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=netsepio_prod_network
+      # Public API — /metrics intentionally excluded
+      - traefik.http.routers.erebrus-gateway.rule=Host(`${GATEWAY_HOST:-gateway.erebrus.io}`) && !Path(`/metrics`)
+      - traefik.http.routers.erebrus-gateway.entrypoints=websecure
+      - traefik.http.routers.erebrus-gateway.tls=true
+      - traefik.http.routers.erebrus-gateway.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+      - traefik.http.services.erebrus-gateway.loadbalancer.server.port=8080
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    container_name: ${OTEL_CONTAINER_NAME:-erebrus-otel-collector}
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      OTEL_AUTH_TOKEN: ${OTEL_AUTH_TOKEN}
+      DEPLOY_ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-production}
+    networks:
+      - netsepio_prod_network
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+networks:
+  netsepio_prod_network:
+    external: true

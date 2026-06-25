@@ -1,0 +1,768 @@
+openapi: 3.0.3
+info:
+  title: Erebrus Gateway API v2
+  version: 2.0.0
+  description: |
+    Public API of the Erebrus gateway (gateway.erebrus.io): auth, accounts,
+    node discovery, VPN client provisioning, entitlements, organizations, and
+    admin. Webapp: erebrus.io / dev.erebrus.io. FROZEN (v2.0): additive only.
+
+    Auth modes:
+      - User PASETO (wallet-signature or social login) — Authorization: Bearer
+      - Org API key — X-Api-Key header (org-scoped routes; metered)
+      - Node PASETO — node registration + WS upgrade only
+      - Admin = user PASETO with role=admin claim
+servers:
+  - url: https://gateway.erebrus.io
+paths:
+  # ───────────────────────── ops (liveness / readiness / metrics) ─────────────────────────
+  /healthz:
+    get: { summary: Liveness, security: [], responses: { "200": { description: "ok" } } }
+  /readyz:
+    get:
+      summary: Readiness (DB required, Redis optional)
+      security: []
+      responses:
+        "200": { description: "{ status: ready, db: up, redis: up|disabled }" }
+        "503": { description: DB unreachable }
+  /version:
+    get:
+      summary: Build metadata
+      security: []
+      responses:
+        "200":
+          description: "{ product, service, environment, version, tag }"
+  /metrics:
+    get: { summary: "Prometheus metrics (netsepio_erebrus_gateway_*). Firewall to internal scrapers in prod.", security: [], responses: { "200": { description: text exposition } } }
+  /telemetry/event:
+    post:
+      summary: Safe app telemetry events (Android/iOS/webapp)
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, event, status]
+              properties:
+                platform: { type: string, enum: [android, ios, webapp] }
+                event:
+                  type: string
+                  enum:
+                    - vpn_connect_attempt
+                    - vpn_connect_success
+                    - vpn_connect_failure
+                    - vpn_disconnect
+                    - region_selected
+                    - node_selected
+                    - drop_room_created
+                    - file_transfer_success
+                    - file_transfer_failure
+                status: { type: string, enum: [success, failed, attempted] }
+      responses:
+        "204": { description: Accepted }
+        "400": { description: Invalid payload }
+
+  # ───────────────────────── auth ─────────────────────────
+  /api/v2/auth:
+    get:
+      summary: Start a wallet-signature login (challenge)
+      security: []
+      parameters:
+        - {
+            name: wallet_address,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: chain,
+            in: query,
+            required: true,
+            schema: { type: string, enum: [evm, sol] },
+          }
+      responses:
+        "200":
+          description: Challenge to sign. The EULA text identifies **Erebrus** (never NetSepio).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flow_id: { type: string }
+                  message:
+                    {
+                      type: string,
+                      example: "I accept the Erebrus Terms of Service https://erebrus.io/terms. Challenge: <flow_id>",
+                    }
+    post:
+      summary: Complete wallet-signature login
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flow_id, signature]
+              properties:
+                flow_id: { type: string }
+                signature: { type: string }
+                public_key: { type: string, description: "Required for sol" }
+                ref:
+                  {
+                    type: string,
+                    description: "Optional referral code; binds referred_by once on first signup",
+                  }
+      responses:
+        "200": { description: "{ token (PASETO, 24h), user_id }" }
+        "401": { description: Bad signature / expired flow id }
+  # Email is OPTIONAL: it links a verified address to an already-authenticated
+  # wallet account (perks/ranking + recovery). It is never a login method and is
+  # never required to use the VPN. Disabled (503) unless RESEND_API_KEY is set.
+  /api/v2/auth/email:
+    post:
+      summary: Send a 6-digit OTP to link an email to the current account
+      description: Requires a wallet bearer token. Rate-limited (60s resend cooldown).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: "{ status: sent, expires_in: <seconds> }" }
+        "400": { description: Invalid email }
+        "409": { description: Email already linked to another account }
+        "429": { description: Resend cooldown — wait before requesting again }
+        "503": { description: Email not configured (no RESEND_API_KEY) }
+  /api/v2/auth/email/verify:
+    post:
+      summary: Verify the OTP and link the email (sets email_verified)
+      description: Requires a wallet bearer token. Max 5 attempts per code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, example: "123456" }
+      responses:
+        "200":
+          { description: Updated user profile (email + email_verified=true) }
+        "401": { description: Wrong/expired code }
+        "409": { description: Email already linked to another account }
+        "429": { description: Too many attempts — request a new code }
+
+  # ───────────────────────── account ─────────────────────────
+  /api/v2/account/profile:
+    get:
+      {
+        summary: Get profile,
+        responses:
+          {
+            "200":
+              {
+                description: "User profile incl. wallet, chain, role, linked socials",
+              },
+          },
+      }
+    patch:
+      {
+        summary: Update profile,
+        responses: { "200": { description: Updated } },
+      }
+  /api/v2/account/activity:
+    get:
+      summary: My account activity (audit log) — newest first
+      description: "Security view: every meaningful action with IP + device, so you can spot anything you didn't do. Paginated by an opaque cursor (created_at)."
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "200": { description: "{ activity[{id, action, target, ip, user_agent, device, app, created_at}], next_cursor? }" }
+
+  # ───────────────────────── nodes (discovery) ─────────────────────────
+  /api/v2/nodes:
+    get:
+      summary: List active nodes (cached in Redis, 10s TTL)
+      security: []
+      description: >
+        OPTIONAL bearer enables tier-gated discovery: a node's min_tier hides it
+        from callers below that tier; an anonymous caller (tier 0) sees only the
+        open pool, admins see all.
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - {
+            name: status,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum: [online, offline, draining],
+                default: online,
+              },
+          }
+      responses:
+        "200":
+          description: Public node directory — no raw IPs; access_mode='private' excluded; tier-gated by the caller
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NodePublic" }
+  /api/v2/nodes/register:
+    post:
+      summary: Node registration (challenge + signed response → node PASETO)
+      security: []
+      description: >
+        Two-step machine enrollment gated by org enrollment_secret (not human wallet auth).
+        Step 1: { enrollment_secret, peer_id } → { flow_id, message, gateway_public_key }.
+        Step 2: signed challenge + identity → { node_token, node_id, node_key, gateway_public_key }.
+        Node binds to the org resolved from enrollment_secret. access_mode is public | private.
+      responses:
+        "200": { description: "{ node_token, node_id, node_key, gateway_public_key }" }
+        "401": { description: invalid enrollment_secret or signature }
+  /api/v2/nodes/ws:
+    get:
+      summary: WebSocket upgrade for the node control plane
+      description: See ws-protocol.md (authoritative). Node PASETO required.
+      responses: { "101": { description: Switching protocols } }
+
+  # ───────────────────────── operator (node owner) ─────────────────────────
+  /api/v2/operator/nodes:
+    get:
+      summary: My org nodes
+      description: Nodes for orgs the caller belongs to. Org id shown only to owner/admin; others see org name/kind. Includes private nodes.
+      responses: { "200": { description: Operator node list } }
+  /api/v2/operator/nodes/{id}/metrics:
+    get:
+      summary: Time-series metrics for one of my nodes (charts)
+      description: Caller must operate the node (own it or share its org), else 403.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - {
+            name: range,
+            in: query,
+            schema:
+              {
+                type: string,
+                default: "24h",
+                description: "Go duration, clamped to 90 days",
+              },
+          }
+        - {
+            name: step,
+            in: query,
+            schema:
+              {
+                type: string,
+                default: "5m",
+                description: "Downsample bucket (min 1m)",
+              },
+          }
+      responses:
+        "200":
+          {
+            description: "{ node_id, range, step, points[] } — wg_peers, proxy_sessions, rx/tx_bytes, cpu/mem_pct per bucket",
+          }
+        "403": { description: Not your node }
+
+  # ───────────────────────── referrals (social) ─────────────────────────
+  /api/v2/referrals/me:
+    get:
+      summary: My referral code, who referred me, and recent referees
+      description: >
+        Code is short + shareable (allocated on first access). The qualifying
+        action is a referee's first trial start (referrer +100 XP, referee +25).
+      responses:
+        "200":
+          description: Referral summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string }
+                  referred_count: { type: integer }
+                  referred_by:
+                    {
+                      type: string,
+                      description: "Referrer wallet (truncated), if any",
+                    }
+                  recent:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        wallet:
+                          {
+                            type: string,
+                            description: "Referee wallet (truncated)",
+                          }
+                        qualified:
+                          {
+                            type: boolean,
+                            description: "Referee has started their trial",
+                          }
+                        joined_at: { type: string, format: date-time }
+
+  # ───────────────────────── rank / XP (social) ─────────────────────────
+  /api/v2/rank/me:
+    get:
+      summary: My XP standing (earned/claimed/claimable, tier, breakdown)
+      description: >
+        Lifetime earned XP drives tier (T0..T4 at 0/100/500/2000/10000, tunable)
+        and never decreases. Claimable = earned − claimed.
+      responses:
+        "200":
+          description: Rank snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  xp_earned: { type: integer }
+                  xp_claimed: { type: integer }
+                  xp_claimable: { type: integer }
+                  tier: { type: integer }
+                  tier_name: { type: string }
+                  next_tier_at: { type: integer, nullable: true }
+                  breakdown_by_kind:
+                    { type: object, additionalProperties: { type: integer } }
+  /api/v2/rank/claim:
+    post:
+      summary: Spend claimable XP on a reward
+      description: "v2.0 reward: free_days (XP_FREE_DAYS_COST → XP_FREE_DAYS_GRANT days, source='rank', stacked on the current period). Logged with IP + device."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                required: [reward],
+                properties: { reward: { type: string, enum: [free_days] } },
+              }
+      responses:
+        "200": { description: "{ reward, xp_spent, days, subscription }" }
+        "400": { description: Unknown reward }
+        "409": { description: Not enough claimable XP }
+  /api/v2/leaderboard:
+    get:
+      summary: Top users by XP or referrals (Redis-cached) + my rank
+      parameters:
+        - {
+            name: metric,
+            in: query,
+            schema: { type: string, enum: [xp, referrals], default: xp },
+          }
+        - {
+            name: period,
+            in: query,
+            schema: { type: string, enum: [all, 30d], default: all },
+          }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          {
+            description: "{ metric, period, entries[{rank, wallet, value}], my_rank, my_value }",
+          }
+
+  # ───────────────────────── social verification + perks ─────────────────────────
+  /api/v2/social/accounts:
+    get:
+      {
+        summary: My verified social accounts,
+        responses:
+          {
+            "200":
+              { description: "[{provider, provider_id, handle, verified_at}]" },
+          },
+      }
+  /api/v2/social/telegram:
+    post:
+      summary: Verify + link a Telegram account (Login Widget payload)
+      description: "Body = the widget's key=value fields incl. hash. HMAC-verified against TELEGRAM_BOT_TOKEN. First link awards social_verified XP."
+      responses:
+        "200": { description: "{ provider, handle, newly_linked }" }
+        "401": { description: Verification failed }
+        "409": { description: Linked to another account }
+        "503": { description: TELEGRAM_BOT_TOKEN not configured }
+  /api/v2/social/x:
+    post:
+      summary: Verify + link an X account (OAuth2 access token)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                required: [access_token],
+                properties: { access_token: { type: string } },
+              }
+      responses:
+        "200": { description: "{ provider, handle, newly_linked }" }
+        "401": { description: Verification failed }
+        "409": { description: Linked to another account }
+  /api/v2/perks:
+    get:
+      {
+        summary: Perk catalog,
+        tier-annotated (unlocked/granted),
+        responses:
+          {
+            "200":
+              {
+                description: "{ tier, perks[{id, name, type, min_tier, unlocked, granted}] }",
+              },
+          },
+      }
+  /api/v2/perks/me:
+    get:
+      {
+        summary: My granted perks,
+        responses:
+          { "200": { description: "[{perk_id, name, type, granted_at}]" } },
+      }
+
+  # ───────────────────────── vpn clients ─────────────────────────
+  /api/v2/vpn/clients:
+    get:
+      summary: List my VPN clients
+      responses: { "200": { description: Clients with node/region/status } }
+    post:
+      summary: Provision a VPN client on a node
+      description: |
+        Requires entitlement (active subscription/trial, or org API key).
+        Flow: pending row committed → PUT node /api/v2/peers/{uuid} (10s
+        timeout, 2 retries, idempotent) → active. Returns the full credential
+        bundle: WireGuard conf (with REPLACE_WITH_PRIVATE_KEY placeholder),
+        vless://, hysteria2://, and a complete sing-box profile with
+        "auto" (urltest: wg→vless→hy2) and "stealth" (vless→hy2) groups.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, node_id, wg_public_key]
+              properties:
+                name: { type: string }
+                node_id: { type: string }
+                wg_public_key: { type: string }
+                wg_preshared_key: { type: string }
+                idempotency_key: { type: string }
+      responses:
+        "201": { description: Credential bundle }
+        "402": { description: No active entitlement }
+        "409": { description: Node draining or client limit reached }
+        "502": { description: Node unreachable — no client created }
+  /api/v2/vpn/clients/{id}:
+    delete:
+      {
+        summary: Delete client (gateway + node),
+        responses: { "204": { description: Deleted } },
+      }
+  /api/v2/vpn/clients/{id}/config:
+    get:
+      summary: Re-fetch credential bundle (replaces v1 Walrus/PIN flow)
+      description: Authenticated proxy to node GET /api/v2/peers/{id}/credentials. Owner or admin only.
+      responses:
+        {
+          "200": { description: Credential bundle },
+          "404": { description: Not found },
+        }
+
+  # ───────────────────────── subscriptions (trial + NFT; no payments yet) ─────
+  /api/v2/subscriptions/plans:
+    get:
+      {
+        summary: List plans,
+        security: [],
+        responses: { "200": { description: Plans } },
+      }
+  /api/v2/subscriptions:
+    get:
+      summary: My subscription + entitlement state
+      responses:
+        "200":
+          description: Entitlement snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [active, expired, none] }
+                  entitled: { type: boolean }
+                  source:
+                    {
+                      type: string,
+                      enum: [trial, nft, admin, rank],
+                      description: "What grants the entitlement",
+                    }
+                  plan_id: { type: string }
+                  trial_consumed:
+                    {
+                      type: boolean,
+                      description: "Whether the user ever started their one trial",
+                    }
+                  current_period_end:
+                    { type: string, format: date-time, nullable: true }
+                  nft_gating:
+                    {
+                      type: boolean,
+                      description: "Whether NFT gating is configured on this gateway",
+                    }
+  /api/v2/subscriptions/trial:
+    post:
+      {
+        summary: "Start the one-time free trial (7 days, plan 'pro')",
+        responses:
+          {
+            "201": { description: Trial active },
+            "409": { description: Already used },
+          },
+      }
+  /api/v2/subscriptions/nft/refresh:
+    post:
+      summary: Verify the gating NFT and grant/refresh a 30-day entitlement
+      description: >
+        Grants 30 days directly regardless of trial state (a mid-trial user is
+        upgraded, since the 30d NFT entitlement outlasts the 7d trial).
+        Refreshable while held; one per user.
+      responses:
+        "200": { description: NFT entitlement granted/refreshed }
+        "400": { description: No wallet on account }
+        "403": { description: Wallet does not hold the required NFT }
+        "502": { description: NFT ownership check failed }
+        "503": { description: NFT gating not configured }
+
+  # ───────────────────────── organizations ─────────────────────────
+  /api/v2/orgs:
+    post:
+      {
+        summary: Create organization,
+        responses: { "201": { description: Org created, caller is owner } },
+      }
+  /api/v2/orgs/{id}/apikeys:
+    post:
+      {
+        summary: Issue API key (returned ONCE,
+        stored hashed),
+        responses: { "201": { description: "{ api_key }" } },
+      }
+    get:
+      {
+        summary: List keys (prefixes only),
+        responses: { "200": { description: Keys } },
+      }
+  /api/v2/orgs/{id}/apikeys/{keyId}:
+    delete:
+      { summary: Revoke key, responses: { "204": { description: Revoked } } }
+  /api/v2/orgs/{id}/usage:
+    get:
+      summary: Usage for a billing period
+      parameters:
+        [
+          {
+            name: period,
+            in: query,
+            schema: { type: string, example: "2026-06" },
+          },
+        ]
+      responses:
+        {
+          "200":
+            {
+              description: "clients, api_calls, bandwidth_bytes",
+            },
+        }
+  /api/v2/orgs/{id}/clients:
+    get:
+      {
+        summary: VPN clients provisioned under this org,
+        responses: { "200": { description: Clients } },
+      }
+  # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
+  /api/v2/apps:
+    get:
+      { summary: My hosted apps, responses: { "200": { description: Apps } } }
+    post:
+      summary: Register an app exposure
+      description: |
+        Requires an active VPN client on a node with app_hosting capability.
+        visibility=global requires explicit T&C acceptance (timestamp stored).
+        Subdomain unique per node domain. Gateway dispatches sync_apps to node.
+      responses:
+        {
+          "201": { description: App registered },
+          "409": { description: Subdomain taken / node lacks capability },
+        }
+  /api/v2/apps/{id}:
+    delete:
+      {
+        summary: Remove app exposure,
+        responses: { "204": { description: Removed } },
+      }
+
+  # ───────────────────────── admin ─────────────────────────
+  /api/v2/admin/stats:
+    get:
+      summary: Platform overview (admin)
+      responses:
+        "200":
+          description: |
+            nodes{online,offline,by_status}, users{total}, subscriptions{by_plan},
+            orgs{total}, traffic_30d{rx_bytes,tx_bytes}
+  /api/v2/admin/nodes:
+    {
+      get:
+        {
+          summary: All nodes incl. heartbeat snapshot (paginated/filterable),
+          responses: { "200": { description: Nodes } },
+        },
+    }
+  /api/v2/admin/nodes/{id}/metrics:
+    {
+      get:
+        {
+          summary: Time-series metrics for any node (range/step like operator),
+          responses:
+            { "200": { description: "{ node_id, range, step, points[] }" } },
+        },
+    }
+  /api/v2/admin/nodes/{id}/min_tier:
+    {
+      post:
+        {
+          summary: "Set a node's premium-pool tier gate",
+          responses:
+            {
+              "200": { description: "{ node_id, min_tier }" },
+              "404": { description: Node not found },
+            },
+        },
+    }
+  /api/v2/admin/perks:
+    {
+      post:
+        {
+          summary: "Create/update a catalog perk (type nft|xp|free_days|node_pool)",
+          responses: { "200": { description: Saved } },
+        },
+    }
+  /api/v2/admin/perks/{id}/grant:
+    {
+      post:
+        {
+          summary: "Grant a perk to a user (by user_id or wallet)",
+          responses:
+            {
+              "200": { description: Granted },
+              "404": { description: No user for wallet },
+            },
+        },
+    }
+  /api/v2/admin/users:
+    {
+      get:
+        {
+          summary: Users (paginated,
+          searchable),
+          responses: { "200": { description: Users } },
+        },
+    }
+  /api/v2/admin/subscriptions:
+    {
+      get:
+        {
+          summary: Subscriptions (paginated),
+          responses: { "200": { description: Subscriptions } },
+        },
+    }
+  /api/v2/admin/orgs:
+    {
+      get:
+        {
+          summary: Orgs + usage rollups,
+          responses: { "200": { description: Orgs } },
+        },
+    }
+  /api/v2/admin/activity:
+    get:
+      summary: Fleet-wide activity / audit log (incident response) — newest first
+      description: Same shape as /account/activity plus the actor's truncated wallet. Cursor-paginated.
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "200": { description: "{ activity[{id, user_id, wallet, action, target, ip, device, app, created_at}], next_cursor? }" }
+  /api/v2/admin/apps:
+    {
+      get:
+        {
+          summary: "All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin)",
+          responses: { "200": { description: Apps } },
+        },
+    }
+  /api/v2/admin/settings:
+    get:
+      summary: List platform_settings (XP, trials, rate limits, auth text, …)
+      responses:
+        "200": { description: "{ settings[{key, value, description}] }" }
+    patch:
+      summary: Update platform settings (hot-reloads rate limits, XP weights, PASETO TTL for new tokens)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [settings]
+              properties:
+                settings:
+                  type: object
+                  additionalProperties: { type: string }
+                  example: { trial_period: "168h", xp_referrer_points: "100" }
+      responses:
+        "200": { description: "{ status: updated }" }
+        "400": { description: Unknown key or invalid value }
+components:
+  schemas:
+    NodePublic:
+      type: object
+      properties:
+        node_id: { type: string }
+        name: { type: string }
+        did: { type: string }
+        region: { type: string }
+        status: { type: string }
+        access_mode:
+          {
+            type: string,
+            enum: [public, private],
+            description: "private nodes are not listed here",
+          }
+        min_tier:
+          { type: integer, description: "premium-pool tier gate (0 = open pool)" }
+        protocols: { type: array, items: { type: string } }
+        capabilities: { type: object }
+        speedtest:
+          {
+            type: object,
+            properties:
+              {
+                download_mbps: { type: number },
+                upload_mbps: { type: number },
+                latency_ms: { type: number },
+              },
+          }
+        load_pct:
+          { type: number, description: Coarse load indicator for picker UX }
