@@ -42,11 +42,11 @@ type Bundle struct {
 
 // UpsertPeer provisions (or updates) a peer on the node. Idempotent by id, so it
 // retries on transport errors up to 2 extra times.
-func (c *Client) UpsertPeer(ctx context.Context, baseURL, token, peerID string, req PeerRequest) (*Bundle, error) {
+func (c *Client) UpsertPeer(ctx context.Context, baseURL, gatewayToken, nodeKey, peerID string, req PeerRequest) (*Bundle, error) {
 	body, _ := json.Marshal(req)
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		raw, status, err := c.do(ctx, http.MethodPut, baseURL, "/api/v2/peers/"+peerID, token, body)
+		raw, status, err := c.do(ctx, http.MethodPut, baseURL, "/api/v2/peers/"+peerID, gatewayToken, nodeKey, body)
 		if err != nil {
 			lastErr = err
 			time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
@@ -69,8 +69,8 @@ func (c *Client) UpsertPeer(ctx context.Context, baseURL, token, peerID string, 
 }
 
 // Credentials re-fetches a peer's bundle.
-func (c *Client) Credentials(ctx context.Context, baseURL, token, peerID string) (json.RawMessage, error) {
-	raw, status, err := c.do(ctx, http.MethodGet, baseURL, "/api/v2/peers/"+peerID+"/credentials", token, nil)
+func (c *Client) Credentials(ctx context.Context, baseURL, gatewayToken, nodeKey, peerID string) (json.RawMessage, error) {
+	raw, status, err := c.do(ctx, http.MethodGet, baseURL, "/api/v2/peers/"+peerID+"/credentials", gatewayToken, nodeKey, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +84,8 @@ func (c *Client) Credentials(ctx context.Context, baseURL, token, peerID string)
 }
 
 // DeletePeer removes a peer on the node. Treats 404 as success (idempotent).
-func (c *Client) DeletePeer(ctx context.Context, baseURL, token, peerID string) error {
-	_, status, err := c.do(ctx, http.MethodDelete, baseURL, "/api/v2/peers/"+peerID, token, nil)
+func (c *Client) DeletePeer(ctx context.Context, baseURL, gatewayToken, nodeKey, peerID string) error {
+	_, status, err := c.do(ctx, http.MethodDelete, baseURL, "/api/v2/peers/"+peerID, gatewayToken, nodeKey, nil)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (c *Client) DeletePeer(ctx context.Context, baseURL, token, peerID string) 
 	return fmt.Errorf("node returned %d", status)
 }
 
-func (c *Client) do(ctx context.Context, method, baseURL, path, token string, body []byte) (json.RawMessage, int, error) {
+func (c *Client) do(ctx context.Context, method, baseURL, path, gatewayToken, nodeKey string, body []byte) (json.RawMessage, int, error) {
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -104,8 +104,11 @@ func (c *Client) do(ctx context.Context, method, baseURL, path, token string, bo
 	if err != nil {
 		return nil, 0, err
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if gatewayToken != "" {
+		req.Header.Set("Authorization", "Bearer "+gatewayToken)
+	}
+	if nodeKey != "" {
+		req.Header.Set("X-Erebrus-Node-Key", nodeKey)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

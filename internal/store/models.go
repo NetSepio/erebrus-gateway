@@ -5,6 +5,28 @@ import (
 	"time"
 )
 
+// Org kinds.
+const (
+	OrgKindTeam       = "team"
+	OrgKindCompany    = "company"
+	OrgKindIndividual = "individual"
+	OrgKindFamily     = "family"
+	OrgKindOther      = "other"
+)
+
+// Org member roles.
+const (
+	OrgRoleOwner  = "owner"
+	OrgRoleAdmin  = "admin"
+	OrgRoleMember = "member"
+)
+
+// Node access modes.
+const (
+	NodeAccessPublic  = "public"
+	NodeAccessPrivate = "private"
+)
+
 // User is a gateway account, keyed by wallet. An optional verified email may be
 // linked for perks/recovery (never required to use the VPN).
 type User struct {
@@ -24,7 +46,6 @@ type Node struct {
 	PeerID        string          `json:"peer_id"`
 	DID           string          `json:"did"`
 	WalletAddress string          `json:"wallet_address,omitempty"`
-	OwnerUserID   string          `json:"owner_user_id,omitempty"`
 	OrgID         string          `json:"org_id,omitempty"`
 	AccessMode    string          `json:"access_mode"`
 	MinTier       int             `json:"min_tier"`
@@ -64,13 +85,20 @@ type Subscription struct {
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
-// Org is a workspace owned by a user; members and API keys operate within it.
+// Org is a workspace; members and API keys operate within it.
 type Org struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	OwnerUserID string    `json:"owner_user_id"`
-	Role        string    `json:"role,omitempty"` // caller's role, when listed for a user
-	CreatedAt   time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Kind             string    `json:"kind"`
+	Verified         bool      `json:"verified"`
+	Slug             string    `json:"slug,omitempty"`
+	Description      string    `json:"description,omitempty"`
+	Website          string    `json:"website,omitempty"`
+	OwnerUserID      string    `json:"owner_user_id"`
+	EnrollmentSecret string    `json:"enrollment_secret,omitempty"` // owner/admin only
+	Role             string    `json:"role,omitempty"`              // caller's role, when listed for a user
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Member is a user's membership in an org.

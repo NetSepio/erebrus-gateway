@@ -14,9 +14,10 @@ import (
 
 // Roles.
 const (
-	RoleUser  = "user"
-	RoleAdmin = "admin"
-	RoleNode  = "node"
+	RoleUser        = "user"
+	RoleAdmin       = "admin"
+	RoleNode        = "node"
+	RoleGatewayCall = "gateway_call"
 )
 
 // Claims is the PASETO payload. Embeds pvx.RegisteredClaims (exp/iat/nbf) whose
@@ -28,6 +29,7 @@ type Claims struct {
 	Role     string `json:"role,omitempty"`
 	NodeID   string `json:"node_id,omitempty"`
 	PeerID   string `json:"peer_id,omitempty"`
+	Purpose  string `json:"purpose,omitempty"`
 	SignedBy string `json:"signed_by,omitempty"`
 	pvx.RegisteredClaims
 }
@@ -36,6 +38,7 @@ type Claims struct {
 type Manager struct {
 	sk       *pvx.AsymSecretKey
 	pk       *pvx.AsymPublicKey
+	pub      ed25519.PublicKey
 	pv4      *pvx.ProtoV4Public
 	signedBy string
 	ttl      time.Duration
@@ -59,6 +62,7 @@ func New(hexKey, signedBy string, ttl time.Duration) (*Manager, error) {
 	return &Manager{
 		sk:       pvx.NewAsymmetricSecretKey(priv, pvx.Version4),
 		pk:       pvx.NewAsymmetricPublicKey(pub, pvx.Version4),
+		pub:      pub,
 		pv4:      pvx.NewPV4Public(),
 		signedBy: signedBy,
 		ttl:      ttl,
@@ -70,17 +74,33 @@ func (m *Manager) IssueUser(userID, wallet, chain, role string) (string, error) 
 	if role == "" {
 		role = RoleUser
 	}
-	return m.issue(Claims{UserID: userID, Wallet: wallet, Chain: chain, Role: role})
+	return m.issue(Claims{UserID: userID, Wallet: wallet, Chain: chain, Role: role}, m.ttl)
 }
 
 // IssueNode mints a node token for the WS control plane.
 func (m *Manager) IssueNode(nodeID, peerID string) (string, error) {
-	return m.issue(Claims{NodeID: nodeID, PeerID: peerID, Role: RoleNode})
+	return m.issue(Claims{NodeID: nodeID, PeerID: peerID, Role: RoleNode}, m.ttl)
 }
 
-func (m *Manager) issue(c Claims) (string, error) {
+// IssueGatewayCall mints a short-lived token for gateway→node private API calls.
+func (m *Manager) IssueGatewayCall(nodeID, peerID, purpose string) (string, error) {
+	if purpose == "" {
+		purpose = "node_api"
+	}
+	return m.issue(Claims{NodeID: nodeID, PeerID: peerID, Role: RoleGatewayCall, Purpose: purpose}, 60*time.Second)
+}
+
+// PublicKeyHex returns the gateway Ed25519 public key as hex (nodes verify gateway calls).
+func (m *Manager) PublicKeyHex() string {
+	return hex.EncodeToString(m.pub)
+}
+
+func (m *Manager) issue(c Claims, ttl time.Duration) (string, error) {
 	now := time.Now()
-	exp := now.Add(m.ttl)
+	if ttl <= 0 {
+		ttl = m.ttl
+	}
+	exp := now.Add(ttl)
 	c.SignedBy = m.signedBy
 	c.RegisteredClaims = pvx.RegisteredClaims{
 		Issuer:     m.signedBy,
