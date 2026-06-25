@@ -47,7 +47,7 @@ type Config struct {
 	// optional integrations (secrets)
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN"`
 	ResendAPIKey     string `env:"RESEND_API_KEY"`
-	ResendFrom       string `env:"RESEND_FROM" envDefault:"Erebrus <no-reply@erebrus.io>"`
+	ResendFrom       string `env:"RESEND_FROM" envDefault:"Erebrus <no-reply@info.erebrus.io>"`
 }
 
 // Load reads .env (best-effort) then parses the environment.

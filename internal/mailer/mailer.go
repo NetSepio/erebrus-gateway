@@ -32,7 +32,7 @@ type Mailer struct {
 // New builds a Mailer. An empty apiKey yields a disabled mailer (Enabled()==false).
 func New(apiKey, from string) *Mailer {
 	if strings.TrimSpace(from) == "" {
-		from = "Erebrus <no-reply@erebrus.io>"
+		from = "Erebrus <no-reply@info.erebrus.io>"
 	}
 	return &Mailer{
 		apiKey:  strings.TrimSpace(apiKey),
