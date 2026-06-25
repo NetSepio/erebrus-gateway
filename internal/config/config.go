@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/caarlos0/env/v6"
 	"github.com/joho/godotenv"
@@ -35,7 +36,10 @@ type Config struct {
 	RedisHost     string `env:"REDIS_HOST" envDefault:"localhost:6379"`
 	RedisPassword string `env:"REDIS_PASSWORD"`
 
-	// NFT gating (deployment-specific; empty contract disables NFT gate)
+	// NFT gating — collection addresses live in nft_gate_contracts (DB); RPC here.
+	SolanaRPCURL  string `env:"SOLANA_RPC_URL" envDefault:"https://api.mainnet-beta.solana.com"`
+	EVMRPCURL     string `env:"EVM_RPC_URL"`
+	// Legacy single-contract env (dev fallback when DB has no rows).
 	NFTGateChain    string `env:"NFT_GATE_CHAIN" envDefault:"solana"`
 	NFTGateContract string `env:"NFT_GATE_CONTRACT"`
 	NFTGateRPCURL   string `env:"NFT_GATE_RPC_URL"`
@@ -69,4 +73,12 @@ func parseEnv(cfg *Config) error {
 func (c *Config) DSN() string {
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		c.DBHost, c.DBPort, c.DBUsername, c.DBPassword, c.DBName, c.DBSSLMode)
+}
+
+// ResolveSolanaRPC returns the Solana JSON-RPC URL for NFT gating (DAS-capable in prod).
+func (c *Config) ResolveSolanaRPC() string {
+	if strings.TrimSpace(c.SolanaRPCURL) != "" {
+		return strings.TrimSpace(c.SolanaRPCURL)
+	}
+	return strings.TrimSpace(c.NFTGateRPCURL)
 }

@@ -85,6 +85,45 @@ func TestSolanaCoreNotOwned(t *testing.T) {
 	}
 }
 
+func TestNewFromContractsAnyCollection(t *testing.T) {
+	const colA = "CoLLeCt1onAddreSs11111111111111111111111111"
+	const colB = "CoLLeCt2onAddreSs22222222222222222222222222"
+	const wallet = "WaLLeT1111111111111111111111111111111111111"
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Params map[string]any `json:"params"`
+		}
+		_ = json.Unmarshal(body, &req)
+		calls++
+		grp, _ := req.Params["grouping"].([]any)
+		col, _ := grp[1].(string)
+		if col == colA {
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"x","result":{"total":0,"items":[]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"x","result":{"total":1,"items":[{"id":"asset1"}]}}`))
+	}))
+	defer srv.Close()
+
+	c := NewFromContracts(srv.URL, "", []Contract{
+		{Chain: "solana", Address: colA},
+		{Chain: "solana", Address: colB},
+	})
+	owns, err := c.Owns(context.Background(), wallet)
+	if err != nil {
+		t.Fatalf("owns: %v", err)
+	}
+	if !owns {
+		t.Fatal("expected ownership via second collection")
+	}
+	if calls < 2 {
+		t.Fatalf("expected checks against both collections, calls=%d", calls)
+	}
+}
+
 func TestSolanaCoreRPCError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"x","error":{"code":-32000,"message":"bad request"}}`))
