@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main, prod, v2]
+    branches: [main, prod]
   pull_request:
 
 permissions:
