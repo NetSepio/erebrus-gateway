@@ -127,51 +127,59 @@ Migrations apply on boot. Default MNEMONIC in compose is **dev only**.
 
 ## Production deployment
 
+Prod is **two layers**: infra (manual, one-time) and gateway (CI on push to `prod`).
+CI never installs Docker, Postgres, Redis, or Traefik — bootstrap the host first.
+
 ### Server layout
 
 ```text
-~/gateway/                    # prod (~/gateway-dev for main branch)
-  .env                           # single .env.example (app + compose)
-  docker-compose.yml             # synced by CI from deploy/
+~/infra/                       # manual — Postgres, Redis, Traefik (your compose)
+  docker-compose.yml
+  traefik/acme.json            # Let's Encrypt store (chmod 600)
+
+~/gateway/                     # prod (~/gateway-dev for main branch)
+  .env                         # single .env.example (app + compose vars)
+  docker-compose.yml           # synced by CI from deploy/
   otel-collector-config.yaml
 ```
 
-Requires external Docker network **`netsepio_prod_network`** (Traefik, Postgres, Redis).
+All services share external Docker network **`erebrus_gateway_network`**.
 
-### Compose services
+### First-time bootstrap (manual — before merging to `prod`)
 
-1. **gateway** — `expose: 8080`, Traefik labels route public API only (`!Path(/metrics)`).
-   Host bind `127.0.0.1:8080` for local health checks.
-2. **otel-collector** (optional, `--profile telemetry`) — scrapes `gateway:8080/metrics`,
-   pushes OTLP to `https://otel.netsepio.com` when `OTEL_AUTH_TOKEN` is set.
+1. **Host** — Docker Engine + Compose plugin; deploy SSH key on server; DNS `gateway.erebrus.io` → IP; firewall **80/443** only.
+2. **Network** — `docker network create erebrus_gateway_network`
+3. **Infra** (`~/infra`, not deployed by CI) — Postgres (`postgres`), Redis (`redis`), Traefik **v3.6+** on `erebrus_gateway_network`; cert resolver `letsencrypt`; ACME email **support@netsepio.com**. `POSTGRES_PASSWORD` must match `DB_PASSWORD` in `~/gateway/.env`.
+4. **Gateway `.env`** — `DB_HOST=postgres`, `REDIS_HOST=redis:6379`, `DB_SSLMODE=disable`, `MNEMONIC`, `TRUSTED_PROXIES` (Traefik CIDR), DAS-capable `SOLANA_RPC_URL` for NFT refresh.
+5. **GitHub secrets** — `GHCR_*`, `PROD_REMOTE_SERVER_*`.
+6. **Smoke test** — `docker compose up -d` in `~/gateway`; `curl http://127.0.0.1:8080/readyz`; `curl https://gateway.erebrus.io/healthz`.
+7. **Merge `main` → `prod`** — CI deploys gateway image + compose to `~/gateway`.
 
-Manual deploy:
+### What CI deploys (gateway only)
+
+1. **gateway** — Traefik labels, `127.0.0.1:8080` for health checks; `!Path(/metrics)` on public router.
+2. **otel-collector** (optional) — `--profile telemetry` when `OTEL_AUTH_TOKEN` is set.
+
+CI does **not** overwrite `~/gateway/.env`.
 
 ```bash
 cd ~/gateway
-export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:prod
 docker compose pull && docker compose up -d
-curl http://127.0.0.1:8080/healthz    # ok
-curl https://gateway.erebrus.io/metrics   # 404 (blocked)
+curl http://127.0.0.1:8080/healthz
+curl https://gateway.erebrus.io/healthz
 ```
 
 ### Traefik
-
-Public router must **exclude** `/metrics`:
 
 ```yaml
 traefik.http.routers.gateway.rule=Host(`gateway.erebrus.io`) && !Path(`/metrics`)
 ```
 
-### Ops checklist
+### Ongoing ops
 
-- [ ] `MNEMONIC` + `DB_PASSWORD` set; `GIN_MODE=release`
-- [ ] `ENVIRONMENT=production`
-- [ ] `TRUSTED_PROXIES` = Traefik network CIDR
-- [ ] `/metrics` not on public Traefik router
-- [ ] `OTEL_AUTH_TOKEN` set when telemetry ingest is live
-- [ ] Postgres backups / PITR
-- [ ] Gateway → node API over HTTPS or private network
+- [ ] Postgres backups (private ops script + cron)
+- [ ] `OTEL_AUTH_TOKEN` when telemetry is live
+- [ ] New NFT collections: `INSERT INTO nft_gate_contracts ...` then restart gateway
 
 ---
 
@@ -216,7 +224,7 @@ On push:
 
 **CI tests:** `.github/workflows/ci.yml` — vet, build, test, gitleaks on `main`/`prod`.
 
-First-time server: `cp .env.example ~/gateway/.env` and fill secrets.
+First-time server: see **First-time bootstrap** above.
 
 ### GitHub Actions secrets (any VPS — not cloud-specific)
 
@@ -250,6 +258,8 @@ Applied automatically on startup (`internal/store/migrations/`):
 | 0008 | Activity log |
 | 0009 | Platform settings (DB-backed config) |
 | 0010 | Remove payments scaffolding |
+| 0011 | Org node model (`enrollment_secret`, `node_key`, drop `owner_user_id`, public/private `access_mode`) |
+| 0012 | `nft_gate_contracts` (Solana gating collections; IslandDAO + Erebrus Free Trial NFT) |
 
 ---
 
