@@ -73,7 +73,8 @@ deploy/               Production docker-compose + OTel collector config
 
 ## Configuration
 
-Copy [`.env.example`](../.env.example) to the server deploy directory.
+Copy [`.env.example`](../.env.example) to the server deploy directory (`~/gateway/.env`).
+The same file is used by the gateway container (`env_file`) and compose variable substitution.
 
 | Variable | Purpose |
 |----------|---------|
@@ -84,7 +85,8 @@ Copy [`.env.example`](../.env.example) to the server deploy directory.
 | `ALLOWED_ORIGIN` | CORS (erebrus.io, dev.erebrus.io) |
 | `TRUSTED_PROXIES` | Traefik Docker network CIDR for real ClientIP |
 | `ADMIN_WALLET_ADDRESS` | First admin on boot |
-| `OTEL_AUTH_TOKEN` | Collector → telemetry OTLP bearer |
+| `GATEWAY_IMAGE`, `GATEWAY_HOST`, … | Compose/Traefik only (ignored by gateway binary) |
+| `OTEL_AUTH_TOKEN` | Optional — starts otel-collector when set |
 
 Product tunables (XP weights, trial length, rate limits, PASETO TTL) live in
 **`platform_settings`** (DB, migration `0009`) — editable via
@@ -125,8 +127,8 @@ Migrations apply on boot. Default MNEMONIC in compose is **dev only**.
 ### Server layout
 
 ```text
-~/gateway-v2/                    # prod (~/gateway-dev for main branch)
-  .env                           # secrets + compose vars (see deploy/compose.env.example)
+~/gateway/                    # prod (~/gateway-dev for main branch)
+  .env                           # single .env.example (app + compose)
   docker-compose.yml             # synced by CI from deploy/
   otel-collector-config.yaml
 ```
@@ -137,13 +139,13 @@ Requires external Docker network **`netsepio_prod_network`** (Traefik, Postgres,
 
 1. **gateway** — `expose: 8080`, Traefik labels route public API only (`!Path(/metrics)`).
    Host bind `127.0.0.1:8080` for local health checks.
-2. **otel-collector** — scrapes `http://gateway:8080/metrics` every 15s, pushes OTLP to
-   `https://otel.netsepio.com`.
+2. **otel-collector** (optional, `--profile telemetry`) — scrapes `gateway:8080/metrics`,
+   pushes OTLP to `https://otel.netsepio.com` when `OTEL_AUTH_TOKEN` is set.
 
 Manual deploy:
 
 ```bash
-cd ~/gateway-v2
+cd ~/gateway
 export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:prod
 docker compose pull && docker compose up -d
 curl http://127.0.0.1:8080/healthz    # ok
@@ -201,7 +203,7 @@ Clients should send `X-Erebrus-Client: webapp|android|ios|node` for HTTP metrics
 | Branch | Image tag | Server dir | Environment |
 |--------|-----------|------------|-------------|
 | `main` | `:main` | `~/gateway-dev` | staging |
-| `prod` | `:prod` | `~/gateway-v2` | production |
+| `prod` | `:prod` | `~/gateway` | production |
 
 On push:
 
@@ -211,7 +213,7 @@ On push:
 
 **CI tests:** `.github/workflows/ci.yml` — vet, build, test, gitleaks on `main`/`prod`/`v2`.
 
-First-time server: create `~/gateway-v2/.env` from `.env.example` + `deploy/compose.env.example`.
+First-time server: `cp .env.example ~/gateway/.env` and fill secrets.
 
 ---
 

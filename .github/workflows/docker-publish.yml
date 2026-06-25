@@ -5,7 +5,8 @@
 #                 ghcr.io/netsepio/gateway:<branch>    (main or prod — deploy this)
 #
 # Deploy: copies deploy/docker-compose.yml + otel-collector-config.yaml to the
-# server, pulls the branch image, and runs gateway + otel-collector via compose.
+# server, pulls the branch image, and runs gateway via compose. OTel collector
+# starts only when OTEL_AUTH_TOKEN is set in the server .env (compose profile).
 
 name: Docker publish
 
@@ -89,7 +90,11 @@ jobs:
             cd "$GATEWAY_DIR"
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
             docker compose pull
-            docker compose up -d --remove-orphans
+            if grep -qE '^OTEL_AUTH_TOKEN=.+' .env 2>/dev/null; then
+              docker compose --profile telemetry up -d --remove-orphans
+            else
+              docker compose up -d --remove-orphans
+            fi
 
             for i in $(seq 1 30); do
               curl -fsS --max-time 2 http://127.0.0.1:8080/healthz && break
@@ -107,15 +112,18 @@ jobs:
 
       - name: Copy compose manifests to prod server
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.AWS_REMOTE_SERVER_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_REMOTE_SERVER_KEY }}
+          SSH_HOST: ${{ secrets.PROD_REMOTE_SERVER_ADDRESS }}
+          SSH_USER: ${{ secrets.PROD_REMOTE_SERVER_USERNAME }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
         run: |
           set -euo pipefail
-          REMOTE_DIR="${GATEWAY_DIR_PROD:-gateway-v2}"
+          REMOTE_DIR="${GATEWAY_DIR_PROD:-gateway}"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${{ secrets.AWS_SSH_PORT }}")
-          SSH_TARGET="${{ secrets.AWS_REMOTE_SERVER_USERNAME }}@${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}"
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${SSH_PORT:-22}")
+          SSH_TARGET="${SSH_USER}@${SSH_HOST}"
           ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p ~/${REMOTE_DIR}"
           scp "${SSH_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
             "${SSH_TARGET}:~/${REMOTE_DIR}/"
@@ -123,13 +131,13 @@ jobs:
       - name: Deploy to production (prod branch)
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.AWS_REMOTE_SERVER_ADDRESS }}
-          username: ${{ secrets.AWS_REMOTE_SERVER_USERNAME }}
-          key: ${{ secrets.AWS_REMOTE_SERVER_KEY }}
-          port: ${{ secrets.AWS_SSH_PORT }}
+          host: ${{ secrets.PROD_REMOTE_SERVER_ADDRESS }}
+          username: ${{ secrets.PROD_REMOTE_SERVER_USERNAME }}
+          key: ${{ secrets.PROD_REMOTE_SERVER_KEY }}
+          port: ${{ secrets.PROD_SSH_PORT }}
           script: |
             set -euo pipefail
-            GATEWAY_DIR="${GATEWAY_DIR_PROD:-$HOME/gateway-v2}"
+            GATEWAY_DIR="${GATEWAY_DIR_PROD:-$HOME/gateway}"
             export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:prod
             export GATEWAY_CONTAINER_NAME=erebrus-gateway
             export OTEL_CONTAINER_NAME=erebrus-otel-collector
@@ -144,7 +152,11 @@ jobs:
             cd "$GATEWAY_DIR"
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
             docker compose pull
-            docker compose up -d --remove-orphans
+            if grep -qE '^OTEL_AUTH_TOKEN=.+' .env 2>/dev/null; then
+              docker compose --profile telemetry up -d --remove-orphans
+            else
+              docker compose up -d --remove-orphans
+            fi
 
             for i in $(seq 1 30); do
               curl -fsS --max-time 2 http://127.0.0.1:8080/healthz && break
