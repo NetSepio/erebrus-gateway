@@ -36,6 +36,24 @@ func TestUserTokenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGatewayCallTokenRoundTrip(t *testing.T) {
+	m := newTestManager(t, time.Hour)
+	tok, err := m.IssueGatewayCall("node-1", "12D3KooW", "peer_upsert")
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	claims, err := m.Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if claims.Role != RoleGatewayCall || claims.NodeID != "node-1" || claims.Purpose != "peer_upsert" {
+		t.Fatalf("gateway call claims mismatch: %+v", claims)
+	}
+	if m.PublicKeyHex() == "" {
+		t.Fatal("expected public key hex")
+	}
+}
+
 func TestNodeTokenRoundTrip(t *testing.T) {
 	m := newTestManager(t, time.Hour)
 	tok, _ := m.IssueNode("node-1", "12D3KooW")

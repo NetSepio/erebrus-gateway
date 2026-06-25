@@ -76,6 +76,22 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 		}
 	}
 
+	if c.GetString(ctxRole) != token.RoleAdmin {
+		ok, err := s.store.UserCanProvisionNode(c, req.NodeID, uid)
+		if errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusNotFound, "node not found")
+			return
+		}
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "node access check failed")
+			return
+		}
+		if !ok {
+			fail(c, http.StatusForbidden, "private node — org membership required")
+			return
+		}
+	}
+
 	s.doProvision(c, uid, "", req.NodeID, req.Name, req.WGPublicKey, req.WGPresharedKey)
 }
 
@@ -90,7 +106,19 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 		metrics.VPNConfigsGeneratedTotal.WithLabelValues(client, region, status, env).Inc()
 	}
 
-	baseURL, nodeToken, status, err := s.store.NodeAPI(c, nodeID)
+	node, err := s.store.GetNode(c, nodeID)
+	if errors.Is(err, store.ErrNotFound) {
+		recordVPN("failed")
+		fail(c, http.StatusNotFound, "node not found")
+		return
+	}
+	if err != nil {
+		recordVPN("failed")
+		fail(c, http.StatusInternalServerError, "failed to resolve node")
+		return
+	}
+
+	baseURL, nodeKey, status, err := s.store.NodeAPI(c, nodeID)
 	if errors.Is(err, store.ErrNotFound) {
 		recordVPN("failed")
 		fail(c, http.StatusNotFound, "node not found")
@@ -119,8 +147,14 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 		fail(c, http.StatusInternalServerError, "failed to create client")
 		return
 	}
+	gwTok, err := s.tokens.IssueGatewayCall(nodeID, node.PeerID, "peer_upsert")
+	if err != nil {
+		recordVPN("failed")
+		fail(c, http.StatusInternalServerError, "failed to sign gateway call")
+		return
+	}
 	peerReq := nodeclient.PeerRequest{Name: name, WGPublicKey: wgPub, WGPresharedKey: wgPSK}
-	bundle, err := s.upsertPeerWithFallback(c, nodeID, baseURL, nodeToken, clientID, peerReq)
+	bundle, err := s.upsertPeerWithFallback(c, nodeID, baseURL, gwTok, nodeKey, clientID, peerReq)
 	if err != nil {
 		_ = s.store.DeleteClient(c, clientID) // roll back the pending row
 		recordVPN("failed")
@@ -142,8 +176,12 @@ func (s *Server) handleDeleteClient(c *gin.Context) {
 	if err != nil {
 		return // response already written
 	}
-	if baseURL, nodeToken, _, err := s.store.NodeAPI(c, cl.NodeID); err == nil && baseURL != "" {
-		_ = s.nodes.DeletePeer(c, baseURL, nodeToken, cl.ID) // best-effort
+	if node, err := s.store.GetNode(c, cl.NodeID); err == nil {
+		if baseURL, nodeKey, _, err := s.store.NodeAPI(c, cl.NodeID); err == nil && baseURL != "" {
+			if gwTok, err := s.tokens.IssueGatewayCall(cl.NodeID, node.PeerID, "peer_delete"); err == nil {
+				_ = s.nodes.DeletePeer(c, baseURL, gwTok, nodeKey, cl.ID) // best-effort
+			}
+		}
 	}
 	if err := s.store.DeleteClient(c, cl.ID); err != nil {
 		fail(c, http.StatusInternalServerError, "failed to delete client")
@@ -165,13 +203,25 @@ func (s *Server) handleClientConfig(c *gin.Context) {
 		metrics.VPNConfigsGeneratedTotal.WithLabelValues(client, region, status, env).Inc()
 	}
 
-	baseURL, nodeToken, _, err := s.store.NodeAPI(c, cl.NodeID)
+	node, err := s.store.GetNode(c, cl.NodeID)
+	if err != nil {
+		recordVPN("failed")
+		fail(c, http.StatusBadGateway, "node unreachable")
+		return
+	}
+	baseURL, nodeKey, _, err := s.store.NodeAPI(c, cl.NodeID)
 	if err != nil || baseURL == "" {
 		recordVPN("failed")
 		fail(c, http.StatusBadGateway, "node unreachable")
 		return
 	}
-	raw, err := s.nodes.Credentials(c, baseURL, nodeToken, cl.ID)
+	gwTok, err := s.tokens.IssueGatewayCall(cl.NodeID, node.PeerID, "peer_credentials")
+	if err != nil {
+		recordVPN("failed")
+		fail(c, http.StatusInternalServerError, "failed to sign gateway call")
+		return
+	}
+	raw, err := s.nodes.Credentials(c, baseURL, gwTok, nodeKey, cl.ID)
 	if err != nil {
 		recordVPN("failed")
 		fail(c, http.StatusNotFound, "credentials not available")
@@ -192,12 +242,12 @@ func vpnRegion(c *gin.Context, s *Server, nodeID string) string {
 // derived from the node's reported IP (covers missing/wrong registration URLs).
 func (s *Server) upsertPeerWithFallback(
 	c *gin.Context,
-	nodeID, baseURL, nodeToken, clientID string,
+	nodeID, baseURL, gatewayToken, nodeKey, clientID string,
 	req nodeclient.PeerRequest,
 ) (*nodeclient.Bundle, error) {
 	var lastErr error
 	for _, u := range nodeAPICandidates(c, s, nodeID, baseURL) {
-		bundle, err := s.nodes.UpsertPeer(c, u, nodeToken, clientID, req)
+		bundle, err := s.nodes.UpsertPeer(c, u, gatewayToken, nodeKey, clientID, req)
 		if err == nil {
 			return bundle, nil
 		}

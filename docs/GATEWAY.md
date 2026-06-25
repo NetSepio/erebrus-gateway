@@ -58,8 +58,13 @@ deploy/               Production docker-compose + OTel collector config
   Resend OTP — never a login method.
 - **Entitlements:** 7-day trial (once), NFT → 30 days direct, rank perks, admin bypass.
   No payments in v2.
-- **Nodes:** Operator registers with wallet; optional `org_id`; `access_mode`
-  public/shared/private; tier-gated premium pool via `min_tier`.
+- **Nodes:** Machine enrollment via org `enrollment_secret` (retrievable anytime);
+  node signs a machine challenge (not human wallet auth). `access_mode` is
+  `public` | `private` (org members only for private). Gateway→node calls use
+  short-lived gateway PASETO + per-node `node_key`.
+- **Orgs:** Any user creates a workspace (`kind`: team/company/individual/family);
+  owner adds admins/members; `enrollment_secret` for node boot; API keys for
+  programmatic VPN (one-time secret). Org `id` visible to owner/admin only.
 - **Social layer:** Referrals, XP/tiers, leaderboard, X/Telegram/email verify, perks.
 - **Activity log:** Authenticated mutations logged with IP + device for user visibility.
 
@@ -273,8 +278,8 @@ go build ./... && go vet ./... && go test ./...
 
 ### S4 — Operator layer
 
-- [ ] Migration `0004`; node has `owner_user_id`, `org_id`, `access_mode`
-- [ ] Registration sets owner from wallet; invalid `org_id` → 403
+- [ ] Migration `0011`; org `enrollment_secret`, node `org_id` + `node_key`
+- [ ] Registration gated by `enrollment_secret`; machine challenge (not `/auth`)
 - [ ] `access_mode=private` hidden from public `GET /nodes`, visible in operator view
 - [ ] Heartbeats populate `node_metrics`; operator/admin chart endpoints work
 

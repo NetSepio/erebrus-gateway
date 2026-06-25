@@ -135,13 +135,14 @@ func (s *Store) AwardOperatorUptimeXP(ctx context.Context, points int64) error {
 	day := time.Now().UTC().Format("20060102")
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT node_id, owner_user_id FROM (
-		   SELECT id AS node_id, owner_user_id,
-		          row_number() OVER (PARTITION BY owner_user_id ORDER BY last_heartbeat DESC) AS rn
-		   FROM nodes
-		   WHERE owner_user_id IS NOT NULL
-		     AND status = 'online'
-		     AND last_heartbeat IS NOT NULL
-		     AND last_heartbeat > now() - interval '1 hour'
+		   SELECT n.id AS node_id, o.owner_user_id,
+		          row_number() OVER (PARTITION BY o.owner_user_id ORDER BY n.last_heartbeat DESC) AS rn
+		   FROM nodes n
+		   JOIN orgs o ON o.id = n.org_id
+		   WHERE n.org_id IS NOT NULL
+		     AND n.status = 'online'
+		     AND n.last_heartbeat IS NOT NULL
+		     AND n.last_heartbeat > now() - interval '1 hour'
 		 ) ranked
 		 WHERE rn <= 5`)
 	if err != nil {

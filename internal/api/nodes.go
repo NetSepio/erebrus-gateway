@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NetSepio/gateway/internal/metrics"
+	"github.com/NetSepio/gateway/internal/secrets"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
 	"github.com/NetSepio/gateway/internal/wallet"
@@ -31,14 +32,13 @@ type nodePublic struct {
 	Endpoints    json.RawMessage `json:"endpoints"`
 	Speedtest    json.RawMessage `json:"speedtest"`
 	LoadPct      float64         `json:"load_pct"`
+	Org          *orgSummary     `json:"org,omitempty"`
 }
 
 // handleListNodes is the public node directory (Redis-cached, 10s TTL).
 func (s *Server) handleListNodes(c *gin.Context) {
 	status := c.DefaultQuery("status", "online")
 	region := c.Query("region")
-	// Tier-gated discovery: higher tiers also see the premium pool. Tier is part
-	// of the cache key so a low tier never gets a high tier's cached list.
 	tier := s.callerTier(c)
 	key := "nodes:disco:" + status + ":" + region + ":t" + strconv.Itoa(tier)
 
@@ -60,6 +60,7 @@ func (s *Server) handleListNodes(c *gin.Context) {
 			AccessMode: n.AccessMode, MinTier: n.MinTier, Protocols: n.Protocols,
 			Capabilities: n.Capabilities, Endpoints: n.Endpoints, Speedtest: n.Speedtest,
 			LoadPct: loadPct(n.Load),
+			Org:     s.orgSummaryFor(c, n.OrgID, "", false),
 		})
 	}
 	_ = s.cache.SetJSON(c, key, out, 10*time.Second)
@@ -67,48 +68,73 @@ func (s *Server) handleListNodes(c *gin.Context) {
 }
 
 type nodeRegisterReq struct {
-	WalletAddress string `json:"wallet_address"`
-	Chain         string `json:"chain"`
+	EnrollmentSecret string `json:"enrollment_secret"`
+	PeerID           string `json:"peer_id"`
 	// step 2
 	FlowID     string `json:"flow_id"`
 	Signature  string `json:"signature"`
 	PublicKey  string `json:"public_key"`
-	PeerID     string `json:"peer_id"`
+	WalletAddress string `json:"wallet_address"`
+	Chain      string `json:"chain"`
 	DID        string `json:"did"`
 	Name       string `json:"name"`
 	Region     string `json:"region"`
 	APIBaseURL string `json:"api_base_url"`
-	APIToken   string `json:"api_token"`
-	OrgID      string `json:"org_id"` // optional; operator attaches the node to an org
+	NodeKey    string `json:"node_key"`
+	AccessMode string `json:"access_mode"` // public | private
 }
 
-// handleNodeRegister is the two-step node registration (challenge → signed
-// response → node PASETO). Step is inferred from the presence of a signature.
+func (s *Server) nodeChallengeMessage(flowID string) string {
+	return "Erebrus Node Enrollment Challenge: " + flowID
+}
+
+// handleNodeRegister is the two-step node enrollment (challenge → machine-signed
+// response → node PASETO). Gated by org enrollment_secret, not human wallet auth.
 func (s *Server) handleNodeRegister(c *gin.Context) {
 	var req nodeRegisterReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-
-	// Step 1: issue a challenge.
-	if req.Signature == "" {
-		if req.WalletAddress == "" || req.Chain == "" {
-			fail(c, http.StatusBadRequest, "wallet_address and chain required")
-			return
-		}
-		flowID := uuid.NewString()
-		if err := s.store.CreateFlowID(c, flowID, req.WalletAddress, req.Chain, flowIDTTL); err != nil {
-			fail(c, http.StatusInternalServerError, "failed to create challenge")
-			return
-		}
-		ok(c, http.StatusOK, gin.H{"flow_id": flowID, "message": s.challengeMessage(flowID)})
+	secret := strings.TrimSpace(req.EnrollmentSecret)
+	if secret == "" {
+		fail(c, http.StatusBadRequest, "enrollment_secret required")
+		return
+	}
+	orgID, err := s.store.LookupOrgByEnrollmentSecret(c, secret)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusUnauthorized, "invalid enrollment secret")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "enrollment lookup failed")
 		return
 	}
 
-	// Step 2: verify and register.
-	if req.PeerID == "" || req.DID == "" {
-		fail(c, http.StatusBadRequest, "peer_id and did required")
+	// Step 1: issue a machine challenge.
+	if req.Signature == "" {
+		peerID := strings.TrimSpace(req.PeerID)
+		if peerID == "" {
+			fail(c, http.StatusBadRequest, "peer_id required")
+			return
+		}
+		flowID := uuid.NewString()
+		// flow.Chain stores org_id; flow.WalletAddress stores peer_id for step-2 binding.
+		if err := s.store.CreateFlowID(c, flowID, peerID, orgID, flowIDTTL); err != nil {
+			fail(c, http.StatusInternalServerError, "failed to create challenge")
+			return
+		}
+		ok(c, http.StatusOK, gin.H{
+			"flow_id":            flowID,
+			"message":            s.nodeChallengeMessage(flowID),
+			"gateway_public_key": s.tokens.PublicKeyHex(),
+		})
+		return
+	}
+
+	// Step 2: verify machine signature and register.
+	if req.PeerID == "" || req.DID == "" || req.WalletAddress == "" || req.Chain == "" {
+		fail(c, http.StatusBadRequest, "peer_id, did, wallet_address and chain required")
 		return
 	}
 	flow, err := s.store.GetFlowID(c, req.FlowID)
@@ -116,33 +142,39 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "flow id not found or expired")
 		return
 	}
-	recovered, err := wallet.Verify(flow.Chain, s.challengeMessage(flow.FlowID), req.Signature, req.PublicKey)
-	if err != nil || !strings.EqualFold(strings.TrimSpace(recovered), strings.TrimSpace(flow.WalletAddress)) {
-		fail(c, http.StatusUnauthorized, "signature does not match wallet")
+	if flow.Chain != orgID {
+		fail(c, http.StatusUnauthorized, "enrollment flow org mismatch")
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(flow.WalletAddress), strings.TrimSpace(req.PeerID)) {
+		fail(c, http.StatusUnauthorized, "peer_id does not match challenge")
+		return
+	}
+	recovered, err := wallet.Verify(req.Chain, s.nodeChallengeMessage(flow.FlowID), req.Signature, req.PublicKey)
+	if err != nil || !strings.EqualFold(strings.TrimSpace(recovered), strings.TrimSpace(req.WalletAddress)) {
+		fail(c, http.StatusUnauthorized, "signature does not match node wallet")
 		return
 	}
 	_ = s.store.DeleteFlowID(c, req.FlowID)
 
-	// Resolve the operator account from the registering wallet (owner_user_id).
-	owner, err := s.store.UpsertUserByWallet(c, flow.WalletAddress, flow.Chain, s.cfg.AdminWalletAddress)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to resolve node owner")
-		return
-	}
-	// Optional org attachment — only if the operator belongs to that org.
-	orgID := strings.TrimSpace(req.OrgID)
-	if orgID != "" {
-		if _, err := s.store.MemberRole(c, orgID, owner.ID); err != nil {
-			fail(c, http.StatusForbidden, "not a member of the requested org")
+	nodeKey := strings.TrimSpace(req.NodeKey)
+	if nodeKey == "" {
+		nodeKey, err = secrets.NewNodeKey()
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "failed to mint node key")
 			return
 		}
+	}
+	access := req.AccessMode
+	if access != store.NodeAccessPrivate {
+		access = store.NodeAccessPublic
 	}
 
 	env := s.cfg.Environment
 	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
-		PeerID: req.PeerID, DID: req.DID, Wallet: flow.WalletAddress,
-		OwnerUserID: owner.ID, OrgID: orgID,
-		Name: req.Name, Region: req.Region, APIBaseURL: req.APIBaseURL, APIToken: req.APIToken,
+		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress,
+		OrgID: orgID, Name: req.Name, Region: req.Region,
+		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
 	})
 	if err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
@@ -156,7 +188,12 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		return
 	}
 	metrics.NodeRegistrationsTotal.WithLabelValues("success", env).Inc()
-	ok(c, http.StatusOK, gin.H{"node_token": nodeTok, "node_id": nodeID})
+	ok(c, http.StatusOK, gin.H{
+		"node_token":         nodeTok,
+		"node_id":            nodeID,
+		"node_key":           nodeKey,
+		"gateway_public_key": s.tokens.PublicKeyHex(),
+	})
 }
 
 // handleNodeWS upgrades the node control-plane WebSocket. Node PASETO required

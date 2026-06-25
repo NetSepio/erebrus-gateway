@@ -221,14 +221,13 @@ paths:
       summary: Node registration (challenge + signed response → node PASETO)
       security: []
       description: >
-        Two-step like user auth; node signs with its mnemonic-derived wallet key.
-        Records identity{peer_id, did, ip_hash}, spec, capabilities. owner_user_id
-        is resolved from the registering wallet; an optional org_id attaches the
-        node to an org the operator belongs to (else 403).
+        Two-step machine enrollment gated by org enrollment_secret (not human wallet auth).
+        Step 1: { enrollment_secret, peer_id } → { flow_id, message, gateway_public_key }.
+        Step 2: signed challenge + identity → { node_token, node_id, node_key, gateway_public_key }.
+        Node binds to the org resolved from enrollment_secret. access_mode is public | private.
       responses:
-        "200": { description: "{ node_token (PASETO, role=node), node_id }" }
-        "403":
-          { description: org_id given but caller is not a member of that org }
+        "200": { description: "{ node_token, node_id, node_key, gateway_public_key }" }
+        "401": { description: invalid enrollment_secret or signature }
   /api/v2/nodes/ws:
     get:
       summary: WebSocket upgrade for the node control plane
@@ -238,8 +237,8 @@ paths:
   # ───────────────────────── operator (node owner) ─────────────────────────
   /api/v2/operator/nodes:
     get:
-      summary: My nodes (owned directly + via org)
-      description: Full operator detail incl. private nodes, access_mode, org_id, live load + bandwidth.
+      summary: My org nodes
+      description: Nodes for orgs the caller belongs to. Org id shown only to owner/admin; others see org name/kind. Includes private nodes.
       responses: { "200": { description: Operator node list } }
   /api/v2/operator/nodes/{id}/metrics:
     get:
@@ -748,7 +747,7 @@ components:
         access_mode:
           {
             type: string,
-            enum: [public, shared],
+            enum: [public, private],
             description: "private nodes are not listed here",
           }
         min_tier:

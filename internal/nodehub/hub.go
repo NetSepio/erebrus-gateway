@@ -267,7 +267,7 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 // normalizeAccessMode returns a valid access mode, or "" to keep the prior value.
 func normalizeAccessMode(m string) string {
 	switch m {
-	case "public", "shared", "private":
+	case "public", "private":
 		return m
 	default:
 		return ""

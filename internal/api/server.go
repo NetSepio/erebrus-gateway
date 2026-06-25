@@ -107,6 +107,7 @@ func (s *Server) Router() *gin.Engine {
 
 		// operator: my nodes (owned + via org) + per-node metric charts
 		user.GET("/operator/nodes", s.handleOperatorNodes)
+		user.PATCH("/operator/nodes/:id", s.handlePatchOperatorNode)
 		user.GET("/operator/nodes/:id/metrics", s.handleOperatorNodeMetrics)
 
 		// referrals (social layer): my code, who referred me, recent referees
@@ -135,8 +136,13 @@ func (s *Server) Router() *gin.Engine {
 		user.POST("/orgs", s.handleCreateOrg)
 		user.GET("/orgs", s.handleListOrgs)
 		user.GET("/orgs/:id", s.handleGetOrg)
+		user.PATCH("/orgs/:id", s.handlePatchOrg)
 		user.GET("/orgs/:id/members", s.handleListMembers)
 		user.POST("/orgs/:id/members", s.handleAddMember)
+		user.PATCH("/orgs/:id/members/:userId", s.handlePatchMember)
+		user.DELETE("/orgs/:id/members/:userId", s.handleRemoveMember)
+		user.POST("/orgs/:id/transfer-ownership", s.handleTransferOwnership)
+		user.GET("/orgs/:id/nodes", s.handleOrgNodes)
 		user.GET("/orgs/:id/apikeys", s.handleListAPIKeys)
 		user.POST("/orgs/:id/apikeys", s.handleCreateAPIKey)
 		user.DELETE("/orgs/:id/apikeys/:keyId", s.handleRevokeAPIKey)
@@ -163,6 +169,7 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/users", s.handleAdminUsers)
 		admin.GET("/subscriptions", s.handleAdminSubscriptions)
 		admin.GET("/orgs", s.handleAdminOrgs)
+		admin.PATCH("/orgs/:id", s.handleAdminPatchOrg)
 		admin.GET("/orgs/:id/usage", s.handleAdminOrgUsage)
 		admin.GET("/nodes/:id/metrics", s.handleAdminNodeMetrics)
 		admin.POST("/nodes/:id/command", s.handleAdminNodeCommand)
