@@ -34,8 +34,9 @@ make test && make build
 ## Production deploy
 
 Server directory (`~/gateway`) holds `.env` + compose files from [`deploy/`](deploy/).
-CI (`docker-publish.yml` on `main`/`prod`) builds the image, syncs compose manifests,
-and runs `docker compose up`. See [docs/GATEWAY.md § Production deployment](docs/GATEWAY.md#production-deployment).
+CI (`docker-publish.yml` on `main`/`prod`) builds the image, pushes to GHCR, SSHs to your
+VPS (dev or prod), syncs compose manifests, and runs `docker compose up`. Secrets are
+provider-agnostic (`DEV_*` / `PROD_*` / `GHCR_*`) — see [docs/GATEWAY.md § CI/CD](docs/GATEWAY.md#cicd).
 
 ## License
 

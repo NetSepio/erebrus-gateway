@@ -215,6 +215,20 @@ On push:
 
 First-time server: `cp .env.example ~/gateway/.env` and fill secrets.
 
+### GitHub Actions secrets (any VPS — not cloud-specific)
+
+| Secret | Job | Purpose |
+|--------|-----|---------|
+| `GHCR_TOKEN` | build + deploy | PAT with `read:packages` + `write:packages` for `ghcr.io/netsepio/gateway` |
+| `GHCR_USERNAME` | build + deploy | GitHub user that owns the token |
+| `DEV_REMOTE_SERVER_ADDRESS` | `main` deploy | Dev host IP or hostname |
+| `DEV_REMOTE_SERVER_USERNAME` | `main` deploy | SSH user (e.g. `root`) |
+| `DEV_SSH_PORT` | `main` deploy | SSH port (usually `22`) |
+| `DEV_REMOTE_SERVER_KEY` | `main` deploy | Deploy-only SSH private key |
+| `PROD_REMOTE_SERVER_*` | `prod` deploy | Same four fields for production host |
+
+Legacy secret names `AWS_*` are not used — rename them to `DEV_*` in repo Settings → Secrets.
+
 ---
 
 ## Database migrations
