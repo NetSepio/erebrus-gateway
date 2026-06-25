@@ -33,7 +33,7 @@ make test && make build
 
 ## Production deploy
 
-Server directory (`~/gateway-v2`) holds `.env` + compose files from [`deploy/`](deploy/).
+Server directory (`~/gateway`) holds `.env` + compose files from [`deploy/`](deploy/).
 CI (`docker-publish.yml` on `main`/`prod`) builds the image, syncs compose manifests,
 and runs `docker compose up`. See [docs/GATEWAY.md § Production deployment](docs/GATEWAY.md#production-deployment).
 

@@ -1,13 +1,15 @@
-# Production gateway stack: API (Traefik) + local OTel Collector (metrics outbound).
+# Production gateway stack: API (Traefik) + optional OTel Collector (metrics outbound).
 #
 # Server layout (one-time):
-#   mkdir -p ~/gateway-v2 && cp .env.example ~/gateway-v2/.env  # fill secrets
+#   mkdir -p ~/gateway && cp .env.example ~/gateway/.env
 #   Traefik on external network netsepio_prod_network
 #
 # Deploy (manual or CI):
-#   cd ~/gateway-v2
+#   cd ~/gateway
 #   export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:prod
 #   docker compose pull && docker compose up -d
+# Telemetry (when otel.netsepio.com is live):
+#   docker compose --profile telemetry up -d
 #
 # /metrics is internal only (collector scrapes gateway:8080). Public Traefik router
 # excludes /metrics — API at https://gateway.erebrus.io
@@ -45,6 +47,7 @@ services:
       - traefik.http.services.erebrus-gateway.loadbalancer.server.port=8080
 
   otel-collector:
+    profiles: [telemetry]
     image: otel/opentelemetry-collector-contrib:0.128.0
     container_name: ${OTEL_CONTAINER_NAME:-erebrus-otel-collector}
     restart: unless-stopped
