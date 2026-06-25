@@ -85,8 +85,11 @@ The same file is used by the gateway container (`env_file`) and compose variable
 | `ALLOWED_ORIGIN` | CORS (erebrus.io, dev.erebrus.io) |
 | `TRUSTED_PROXIES` | Traefik Docker network CIDR for real ClientIP |
 | `ADMIN_WALLET_ADDRESS` | First admin on boot |
+| `SOLANA_RPC_URL` | Solana JSON-RPC for NFT gating (DAS-capable in prod) |
 | `GATEWAY_IMAGE`, `GATEWAY_HOST`, … | Compose/Traefik only (ignored by gateway binary) |
 | `OTEL_AUTH_TOKEN` | Optional — starts otel-collector when set |
+
+Gating collections are in **`nft_gate_contracts`** (migration `0012`): IslandDAO + Erebrus Free Trial NFT on Solana; more chains/addresses can be inserted later.
 
 Product tunables (XP weights, trial length, rate limits, PASETO TTL) live in
 **`platform_settings`** (DB, migration `0009`) — editable via
@@ -290,7 +293,7 @@ go build ./... && go vet ./... && go test ./...
 
 - [ ] Trial ≈ 7d (`trial_period` in platform_settings); second trial → 409
 - [ ] No trial → provision **402**; with trial → succeeds
-- [ ] NFT refresh → 30d `source:nft` (when `NFT_GATE_CONTRACT` set)
+- [ ] NFT refresh → 30d `source:nft` (when `nft_gate_contracts` + `SOLANA_RPC_URL` set)
 - [ ] Admin bypass works; `/payments*` → 404
 
 ### S4 — Operator layer

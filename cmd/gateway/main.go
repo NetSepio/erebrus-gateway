@@ -89,10 +89,21 @@ func run(log *slog.Logger) error {
 	// Node control-plane hub.
 	hub := nodehub.New(st, log, cfg.Environment)
 
-	// NFT entitlement gate (disabled unless a collection + RPC are configured).
-	nft := nftgate.New(cfg.NFTGateChain, cfg.NFTGateRPCURL, cfg.NFTGateContract)
+	// NFT entitlement gate — contracts from DB; Solana RPC from env.
+	nftContracts, err := st.ListNFTGateContracts(ctx)
+	if err != nil {
+		return fmt.Errorf("nft gate contracts: %w", err)
+	}
+	var nftChecks []nftgate.Contract
+	for _, c := range nftContracts {
+		nftChecks = append(nftChecks, nftgate.Contract{Chain: c.Chain, Address: c.Address})
+	}
+	nft := nftgate.NewFromContracts(cfg.ResolveSolanaRPC(), cfg.EVMRPCURL, nftChecks)
+	if !nft.Enabled() && cfg.NFTGateContract != "" {
+		nft = nftgate.New(cfg.NFTGateChain, cfg.ResolveSolanaRPC(), cfg.NFTGateContract)
+	}
 	if nft.Enabled() {
-		log.Info("NFT gating enabled", "chain", cfg.NFTGateChain, "contract", cfg.NFTGateContract)
+		log.Info("NFT gating enabled", "contracts", len(nftChecks), "solana_rpc", cfg.ResolveSolanaRPC() != "")
 	}
 
 	// Email (Resend) — optional; only enables verified email linking when keyed.

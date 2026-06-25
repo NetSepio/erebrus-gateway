@@ -12,6 +12,9 @@ func TestEnvEssentialsDefaults(t *testing.T) {
 	if cfg.AppPort != "8080" {
 		t.Errorf("AppPort = %q, want 8080", cfg.AppPort)
 	}
+	if cfg.SolanaRPCURL != "https://api.mainnet-beta.solana.com" {
+		t.Errorf("SolanaRPCURL = %q, want mainnet default", cfg.SolanaRPCURL)
+	}
 	if cfg.NFTGateChain != "solana" {
 		t.Errorf("NFTGateChain = %q, want solana", cfg.NFTGateChain)
 	}
