@@ -13,7 +13,7 @@ type orgSummary struct {
 	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Kind        string `json:"kind,omitempty"`
-	Verified    bool   `json:"verified,omitempty"`
+	Verified    bool   `json:"verified"` // always emit; false is meaningful for dashboards
 	Slug        string `json:"slug,omitempty"`
 	Description string `json:"description,omitempty"`
 	Website     string `json:"website,omitempty"`
@@ -42,9 +42,9 @@ func orgResponse(org *store.Org, privileged bool) gin.H {
 		return gin.H{}
 	}
 	out := gin.H{
-		"name":     org.Name,
-		"kind":     org.Kind,
-		"verified": org.Verified,
+		"name":       org.Name,
+		"kind":       org.Kind,
+		"verified":   org.Verified,
 		"created_at": org.CreatedAt,
 		"updated_at": org.UpdatedAt,
 	}

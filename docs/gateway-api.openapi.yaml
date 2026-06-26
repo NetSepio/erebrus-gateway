@@ -768,3 +768,25 @@ components:
           }
         load_pct:
           { type: number, description: Coarse load indicator for picker UX }
+        peer_id: { type: string, description: libp2p peer id }
+        wallet_address: { type: string, description: Node operator on-chain wallet }
+        ip_hash: { type: string, description: Hashed node IP (not raw address) }
+        version: { type: string, description: Node software version }
+        rx_bytes: { type: integer }
+        tx_bytes: { type: integer }
+        last_heartbeat:
+          {
+            type: string,
+            format: date-time,
+            description: Last node WS heartbeat; use for liveness UI (not speedtest.measured_at),
+          }
+        created_at: { type: string, format: date-time }
+        org:
+          type: object
+          properties:
+            name: { type: string }
+            kind: { type: string }
+            verified: { type: boolean, description: Always present when org is set }
+            slug: { type: string }
+            description: { type: string }
+            website: { type: string }

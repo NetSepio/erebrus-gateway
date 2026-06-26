@@ -17,23 +17,43 @@ import (
 	"github.com/google/uuid"
 )
 
-// nodePublic is the discovery projection: no raw IP, only what a client needs
-// to choose and connect to a node.
+// nodePublic is the public discovery projection for pickers and dashboards.
+// Excludes raw IP, org_id, enrollment secrets, and full spec blobs.
 type nodePublic struct {
-	NodeID       string          `json:"node_id"`
-	Name         string          `json:"name"`
-	DID          string          `json:"did"`
-	Region       string          `json:"region"`
-	Zone         string          `json:"zone,omitempty"`
-	Status       string          `json:"status"`
-	AccessMode   string          `json:"access_mode"`
-	MinTier      int             `json:"min_tier"`
-	Protocols    []string        `json:"protocols"`
-	Capabilities json.RawMessage `json:"capabilities"`
-	Endpoints    json.RawMessage `json:"endpoints"`
-	Speedtest    json.RawMessage `json:"speedtest"`
-	LoadPct      float64         `json:"load_pct"`
-	Org          *orgSummary     `json:"org,omitempty"`
+	NodeID        string          `json:"node_id"`
+	Name          string          `json:"name"`
+	DID           string          `json:"did"`
+	PeerID        string          `json:"peer_id,omitempty"`
+	WalletAddress string          `json:"wallet_address,omitempty"`
+	Region        string          `json:"region"`
+	Zone          string          `json:"zone,omitempty"`
+	Status        string          `json:"status"`
+	AccessMode    string          `json:"access_mode"`
+	MinTier       int             `json:"min_tier"`
+	Protocols     []string        `json:"protocols"`
+	Capabilities  json.RawMessage `json:"capabilities"`
+	Endpoints     json.RawMessage `json:"endpoints"`
+	Speedtest     json.RawMessage `json:"speedtest"`
+	LoadPct       float64         `json:"load_pct"`
+	IPHash        string          `json:"ip_hash,omitempty"`
+	Version       string          `json:"version,omitempty"`
+	RxBytes       int64           `json:"rx_bytes,omitempty"`
+	TxBytes       int64           `json:"tx_bytes,omitempty"`
+	LastHeartbeat *time.Time      `json:"last_heartbeat,omitempty"`
+	CreatedAt     time.Time       `json:"created_at,omitempty"`
+	Org           *orgSummary     `json:"org,omitempty"`
+}
+
+func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
+	return nodePublic{
+		NodeID: n.ID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress,
+		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, MinTier: n.MinTier,
+		Protocols: n.Protocols, Capabilities: n.Capabilities,
+		Endpoints: enrichEndpointsForDiscovery(n.Endpoints, n.IP), Speedtest: n.Speedtest,
+		LoadPct: loadPct(n.Load), IPHash: n.IPHash, Version: n.Version,
+		RxBytes: n.RxBytes, TxBytes: n.TxBytes, LastHeartbeat: n.LastHeartbeat, CreatedAt: n.CreatedAt,
+		Org: org,
+	}
 }
 
 // handleListNodes is the public node directory (Redis-cached, 10s TTL).
@@ -57,15 +77,7 @@ func (s *Server) handleListNodes(c *gin.Context) {
 	}
 	out := make([]nodePublic, 0, len(nodes))
 	for _, n := range nodes {
-		out = append(out, nodePublic{
-			NodeID: n.ID, Name: n.Name, DID: n.DID, Region: n.Region, Zone: n.Zone, Status: n.Status,
-			AccessMode: n.AccessMode, MinTier: n.MinTier, Protocols: n.Protocols,
-			Capabilities: n.Capabilities,
-			Endpoints:    enrichEndpointsForDiscovery(n.Endpoints, n.IP),
-			Speedtest:    n.Speedtest,
-			LoadPct:      loadPct(n.Load),
-			Org:          s.orgSummaryFor(c, n.OrgID, "", false),
-		})
+		out = append(out, nodePublicFrom(n, s.orgSummaryFor(c, n.OrgID, "", false)))
 	}
 	_ = s.cache.SetJSON(c, key, out, 10*time.Second)
 	ok(c, http.StatusOK, out)
