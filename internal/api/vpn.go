@@ -66,8 +66,12 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 		}
 	}
 
+	// Reconnect idempotency: same device (WG pubkey) on the same node reuses the
+	// existing gateway client row instead of minting a new peer id on the node.
+	existing, _ := s.store.FindClientByUserNodeWGKey(c, uid, req.NodeID, req.WGPublicKey)
+
 	// Plan client limit (skipped for admin without an active sub row).
-	if sub != nil {
+	if sub != nil && existing == nil {
 		if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {
 			if n, _ := s.store.CountActiveClientsByUser(c, uid); n >= plan.MaxClients {
 				fail(c, http.StatusConflict, "client limit reached for your plan")
@@ -140,12 +144,20 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 		return
 	}
 
-	// Commit a pending client row; its id is the peer id used on the node.
-	clientID, err := s.store.CreateClient(c, uid, org, nodeID, name, wgPub)
-	if err != nil {
-		recordVPN("failed")
-		fail(c, http.StatusInternalServerError, "failed to create client")
-		return
+	// Reuse an existing client row for the same device, or commit a new pending row.
+	// Its id is the peer id used on the node.
+	var clientID string
+	if existing, err := s.store.FindClientByUserNodeWGKey(c, uid, nodeID, wgPub); err == nil && existing != nil {
+		clientID = existing.ID
+		_ = s.store.DeletePendingClientsByUserNodeWGKey(c, uid, nodeID, wgPub, clientID)
+	} else {
+		var err error
+		clientID, err = s.store.CreateClient(c, uid, org, nodeID, name, wgPub)
+		if err != nil {
+			recordVPN("failed")
+			fail(c, http.StatusInternalServerError, "failed to create client")
+			return
+		}
 	}
 	gwTok, err := s.tokens.IssueGatewayCall(nodeID, node.PeerID, "peer_upsert")
 	if err != nil {

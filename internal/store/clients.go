@@ -7,6 +7,31 @@ import (
 	"time"
 )
 
+// FindClientByUserNodeWGKey returns the newest non-deleting client for a user on
+// a node with the same WireGuard public key (reconnect idempotency).
+func (s *Store) FindClientByUserNodeWGKey(ctx context.Context, userID, nodeID, wgPub string) (*Client, error) {
+	c, err := scanClient(s.db.QueryRowContext(ctx,
+		`SELECT `+clientCols+` FROM vpn_clients
+		 WHERE user_id = $1 AND node_id = $2 AND wg_public_key = $3 AND status <> 'deleting'
+		 ORDER BY created_at DESC LIMIT 1`,
+		userID, nodeID, wgPub))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return c, err
+}
+
+// DeletePendingClientsByUserNodeWGKey removes stale pending rows for the same
+// device identity so reconnects do not accumulate ghost clients.
+func (s *Store) DeletePendingClientsByUserNodeWGKey(ctx context.Context, userID, nodeID, wgPub, keepID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM vpn_clients
+		 WHERE user_id = $1 AND node_id = $2 AND wg_public_key = $3
+		   AND status = 'pending' AND id <> $4`,
+		userID, nodeID, wgPub, keepID)
+	return err
+}
+
 // CreateClient inserts a pending VPN client and returns its generated id.
 func (s *Store) CreateClient(ctx context.Context, userID, orgID, nodeID, name, wgPub string) (string, error) {
 	var id string
