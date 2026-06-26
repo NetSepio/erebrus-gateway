@@ -1,12 +1,13 @@
-# Build and push a Docker image on every push to main (dev) or prod.
+# Build and push a Docker image on every push to main or prod.
 #
 # Binary version: 2.0.<commit-count>  tag: <short-sha>  (auto-increments per commit)
 # Image tags:     ghcr.io/netsepio/gateway:<full-sha>  (immutable)
-#                 ghcr.io/netsepio/gateway:<branch>    (main or prod — deploy this)
+#                 ghcr.io/netsepio/gateway:<branch>    (main or prod)
 #
-# Deploy: copies deploy/docker-compose.yml + otel-collector-config.yaml to the
-# server, pulls the branch image, and runs gateway via compose. OTel collector
-# starts only when OTEL_AUTH_TOKEN is set in the server .env (compose profile).
+# Auto-deploy runs on prod only. main builds/pushes :main to GHCR (no dev server yet).
+# Prod deploy copies deploy/docker-compose.yml + otel-collector-config.yaml, pulls
+# :prod, and runs gateway via compose. OTel collector starts when OTEL_AUTH_TOKEN
+# is set in the server .env (compose profile).
 
 name: Docker publish
 
@@ -42,68 +43,6 @@ jobs:
         run: |
           chmod +x scripts/docker-build.sh
           ./scripts/docker-build.sh --push
-
-  deploy_dev:
-    if: github.ref == 'refs/heads/main'
-    needs: build_push
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Copy compose manifests to dev server
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.DEV_REMOTE_SERVER_KEY }}
-        run: |
-          set -euo pipefail
-          REMOTE_DIR="${GATEWAY_DIR_DEV:-gateway-dev}"
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          PORT="${{ secrets.DEV_SSH_PORT }}"
-          SSH_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -p "${PORT:-22}")
-          # scp uses -P (uppercase) for port; ssh uses -p (lowercase).
-          SCP_OPTS=(-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -P "${PORT:-22}")
-          SSH_TARGET="${{ secrets.DEV_REMOTE_SERVER_USERNAME }}@${{ secrets.DEV_REMOTE_SERVER_ADDRESS }}"
-          ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p ~/${REMOTE_DIR}"
-          scp "${SCP_OPTS[@]}" deploy/docker-compose.yml deploy/otel-collector-config.yaml \
-            "${SSH_TARGET}:~/${REMOTE_DIR}/"
-
-      - name: Deploy to dev (main branch)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEV_REMOTE_SERVER_ADDRESS }}
-          username: ${{ secrets.DEV_REMOTE_SERVER_USERNAME }}
-          key: ${{ secrets.DEV_REMOTE_SERVER_KEY }}
-          port: ${{ secrets.DEV_SSH_PORT }}
-          script: |
-            set -euo pipefail
-            GATEWAY_DIR="${GATEWAY_DIR_DEV:-$HOME/gateway-dev}"
-            export GATEWAY_IMAGE=ghcr.io/netsepio/gateway:main
-            export GATEWAY_CONTAINER_NAME=erebrus-gateway-dev
-            export OTEL_CONTAINER_NAME=erebrus-otel-collector-dev
-            export DEPLOY_ENVIRONMENT=staging
-            export GATEWAY_HOST="${GATEWAY_HOST_DEV:-dev.gateway.erebrus.io}"
-
-            if [[ ! -f "$GATEWAY_DIR/.env" ]]; then
-              echo "Missing $GATEWAY_DIR/.env — create from .env.example before first deploy"
-              exit 1
-            fi
-
-            cd "$GATEWAY_DIR"
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-            docker compose pull
-            if grep -qE '^OTEL_AUTH_TOKEN=.+' .env 2>/dev/null; then
-              docker compose --profile telemetry up -d --remove-orphans
-            else
-              docker compose up -d --remove-orphans
-            fi
-
-            for i in $(seq 1 30); do
-              curl -fsS --max-time 2 http://127.0.0.1:8080/healthz && break
-              sleep 1
-            done
 
   deploy_prod:
     if: github.ref == 'refs/heads/prod'
