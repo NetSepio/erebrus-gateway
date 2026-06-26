@@ -58,9 +58,11 @@ func (s *Server) handleListNodes(c *gin.Context) {
 		out = append(out, nodePublic{
 			NodeID: n.ID, Name: n.Name, DID: n.DID, Region: n.Region, Status: n.Status,
 			AccessMode: n.AccessMode, MinTier: n.MinTier, Protocols: n.Protocols,
-			Capabilities: n.Capabilities, Endpoints: n.Endpoints, Speedtest: n.Speedtest,
-			LoadPct: loadPct(n.Load),
-			Org:     s.orgSummaryFor(c, n.OrgID, "", false),
+			Capabilities: n.Capabilities,
+			Endpoints:    enrichEndpointsForDiscovery(n.Endpoints, n.IP),
+			Speedtest:    n.Speedtest,
+			LoadPct:      loadPct(n.Load),
+			Org:          s.orgSummaryFor(c, n.OrgID, "", false),
 		})
 	}
 	_ = s.cache.SetJSON(c, key, out, 10*time.Second)
@@ -71,17 +73,17 @@ type nodeRegisterReq struct {
 	EnrollmentSecret string `json:"enrollment_secret"`
 	PeerID           string `json:"peer_id"`
 	// step 2
-	FlowID     string `json:"flow_id"`
-	Signature  string `json:"signature"`
-	PublicKey  string `json:"public_key"`
+	FlowID        string `json:"flow_id"`
+	Signature     string `json:"signature"`
+	PublicKey     string `json:"public_key"`
 	WalletAddress string `json:"wallet_address"`
-	Chain      string `json:"chain"`
-	DID        string `json:"did"`
-	Name       string `json:"name"`
-	Region     string `json:"region"`
-	APIBaseURL string `json:"api_base_url"`
-	NodeKey    string `json:"node_key"`
-	AccessMode string `json:"access_mode"` // public | private
+	Chain         string `json:"chain"`
+	DID           string `json:"did"`
+	Name          string `json:"name"`
+	Region        string `json:"region"`
+	APIBaseURL    string `json:"api_base_url"`
+	NodeKey       string `json:"node_key"`
+	AccessMode    string `json:"access_mode"` // public | private
 }
 
 func (s *Server) nodeChallengeMessage(flowID string) string {
@@ -257,6 +259,39 @@ func (s *Server) handleAdminSetNodeMinTier(c *gin.Context) {
 		return
 	}
 	ok(c, http.StatusOK, gin.H{"node_id": c.Param("id"), "min_tier": req.MinTier})
+}
+
+// enrichEndpointsForDiscovery adds the dial host under wireguard.host so clients
+// can measure phone→node RTT without exposing a separate top-level IP field.
+func enrichEndpointsForDiscovery(raw json.RawMessage, ip string) json.RawMessage {
+	host := strings.TrimSpace(ip)
+	if host == "" {
+		return raw
+	}
+	if len(raw) == 0 {
+		out, err := json.Marshal(map[string]any{"wireguard": map[string]any{"host": host}})
+		if err != nil {
+			return raw
+		}
+		return out
+	}
+	var eps map[string]any
+	if err := json.Unmarshal(raw, &eps); err != nil {
+		return raw
+	}
+	wg, ok := eps["wireguard"].(map[string]any)
+	if !ok {
+		wg = map[string]any{}
+	}
+	if existing, _ := wg["host"].(string); strings.TrimSpace(existing) == "" {
+		wg["host"] = host
+		eps["wireguard"] = wg
+	}
+	out, err := json.Marshal(eps)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // loadPct derives a coarse 0-100 load indicator from a node's load JSON.

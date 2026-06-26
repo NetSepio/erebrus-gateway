@@ -65,6 +65,7 @@ type Endpoints struct {
 }
 
 type WireGuardEndpoint struct {
+	Host      string `json:"host,omitempty"`
 	Port      int    `json:"port"`
 	PublicKey string `json:"public_key"`
 }
