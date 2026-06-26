@@ -64,8 +64,9 @@ type Node struct {
 	RxBytes       int64           `json:"rx_bytes"`
 	TxBytes       int64           `json:"tx_bytes"`
 	Version       string          `json:"version"`
-	LastHeartbeat *time.Time      `json:"last_heartbeat,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
+	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
+	LastPeerHandshake *time.Time `json:"last_peer_handshake,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 // Plan is a subscription tier.

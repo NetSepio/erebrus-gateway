@@ -145,6 +145,17 @@ func (s *Store) AddUsage(ctx context.Context, clientID string, rxDelta, txDelta,
 		clientID, rxDelta, txDelta); err != nil {
 		return err
 	}
+	if lastHandshake > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE nodes n SET
+			   last_peer_handshake = GREATEST(COALESCE(n.last_peer_handshake, '-infinity'::timestamptz), $2),
+			   updated_at = now()
+			 FROM vpn_clients c
+			 WHERE c.id = $1 AND c.node_id = n.id`,
+			clientID, time.Unix(lastHandshake, 0).UTC()); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 

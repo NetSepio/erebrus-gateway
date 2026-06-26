@@ -39,9 +39,10 @@ type nodePublic struct {
 	Version       string          `json:"version,omitempty"`
 	RxBytes       int64           `json:"rx_bytes,omitempty"`
 	TxBytes       int64           `json:"tx_bytes,omitempty"`
-	LastHeartbeat *time.Time      `json:"last_heartbeat,omitempty"`
-	CreatedAt     time.Time       `json:"created_at,omitempty"`
-	Org           *orgSummary     `json:"org,omitempty"`
+	LastHeartbeat     *time.Time  `json:"last_heartbeat,omitempty"`
+	LastPeerHandshake *time.Time  `json:"last_peer_handshake,omitempty"`
+	CreatedAt         time.Time   `json:"created_at,omitempty"`
+	Org               *orgSummary `json:"org,omitempty"`
 }
 
 func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
@@ -51,7 +52,8 @@ func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
 		Protocols: n.Protocols, Capabilities: n.Capabilities,
 		Endpoints: enrichEndpointsForDiscovery(n.Endpoints, n.IP), Speedtest: n.Speedtest,
 		LoadPct: loadPct(n.Load), IPHash: n.IPHash, Version: n.Version,
-		RxBytes: n.RxBytes, TxBytes: n.TxBytes, LastHeartbeat: n.LastHeartbeat, CreatedAt: n.CreatedAt,
+		RxBytes: n.RxBytes, TxBytes: n.TxBytes,
+		LastHeartbeat: n.LastHeartbeat, LastPeerHandshake: n.LastPeerHandshake, CreatedAt: n.CreatedAt,
 		Org: org,
 	}
 }
