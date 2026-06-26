@@ -198,6 +198,7 @@ paths:
         open pool, admins see all.
       parameters:
         - { name: region, in: query, schema: { type: string } }
+        - { name: zone, in: query, schema: { type: string, description: "Optional sub-region (e.g. east, west) within region" } }
         - {
             name: status,
             in: query,
@@ -743,6 +744,7 @@ components:
         name: { type: string }
         did: { type: string }
         region: { type: string }
+        zone: { type: string, description: "Optional sub-region within region (e.g. east, west)" }
         status: { type: string }
         access_mode:
           {

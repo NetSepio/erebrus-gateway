@@ -47,6 +47,7 @@ type Spec struct {
 	CPU    string `json:"cpu"`
 	MemMB  int    `json:"mem_mb"`
 	Region string `json:"region"`
+	Zone   string `json:"zone,omitempty"`
 	IP     string `json:"ip"`
 }
 

@@ -223,7 +223,7 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 	eps, _ := json.Marshal(h.Endpoints)
 	if err := c.hub.store.ApplyHello(ctx, store.HelloUpdate{
 		PeerID: c.peerID, IP: h.Spec.IP, IPHash: h.Identity.IPHash, Version: h.Version,
-		Region: h.Spec.Region, AccessMode: normalizeAccessMode(h.Capabilities.AccessMode),
+		Region: h.Spec.Region, Zone: h.Spec.Zone, AccessMode: normalizeAccessMode(h.Capabilities.AccessMode),
 		Spec: spec, Capabilities: caps, Endpoints: eps,
 		Protocols: protocolsFromEndpoints(h.Endpoints),
 	}); err != nil {

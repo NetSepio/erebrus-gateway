@@ -51,6 +51,7 @@ type Node struct {
 	MinTier       int             `json:"min_tier"`
 	Name          string          `json:"name"`
 	Region        string          `json:"region"`
+	Zone          string          `json:"zone,omitempty"`
 	IP            string          `json:"ip,omitempty"` // never serialized publicly
 	IPHash        string          `json:"ip_hash,omitempty"`
 	Spec          json.RawMessage `json:"spec"`

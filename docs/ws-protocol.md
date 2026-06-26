@@ -46,6 +46,7 @@ below and compare them field-for-field. Change this file first, then both repos.
       "cpu": "4 vCPU",
       "mem_mb": 8192,
       "region": "SG",
+      "zone": "",
       "ip": "203.0.113.10"
     },
     "capabilities": {

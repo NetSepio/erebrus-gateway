@@ -24,6 +24,7 @@ type nodePublic struct {
 	Name         string          `json:"name"`
 	DID          string          `json:"did"`
 	Region       string          `json:"region"`
+	Zone         string          `json:"zone,omitempty"`
 	Status       string          `json:"status"`
 	AccessMode   string          `json:"access_mode"`
 	MinTier      int             `json:"min_tier"`
@@ -39,8 +40,9 @@ type nodePublic struct {
 func (s *Server) handleListNodes(c *gin.Context) {
 	status := c.DefaultQuery("status", "online")
 	region := c.Query("region")
+	zone := c.Query("zone")
 	tier := s.callerTier(c)
-	key := "nodes:disco:" + status + ":" + region + ":t" + strconv.Itoa(tier)
+	key := "nodes:disco:" + status + ":" + region + ":" + zone + ":t" + strconv.Itoa(tier)
 
 	var cached []nodePublic
 	if hit, _ := s.cache.GetJSON(c, key, &cached); hit {
@@ -48,7 +50,7 @@ func (s *Server) handleListNodes(c *gin.Context) {
 		return
 	}
 
-	nodes, err := s.store.ListDiscoverableNodes(c, status, region, tier)
+	nodes, err := s.store.ListDiscoverableNodes(c, status, region, zone, tier)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to list nodes")
 		return
@@ -56,7 +58,7 @@ func (s *Server) handleListNodes(c *gin.Context) {
 	out := make([]nodePublic, 0, len(nodes))
 	for _, n := range nodes {
 		out = append(out, nodePublic{
-			NodeID: n.ID, Name: n.Name, DID: n.DID, Region: n.Region, Status: n.Status,
+			NodeID: n.ID, Name: n.Name, DID: n.DID, Region: n.Region, Zone: n.Zone, Status: n.Status,
 			AccessMode: n.AccessMode, MinTier: n.MinTier, Protocols: n.Protocols,
 			Capabilities: n.Capabilities,
 			Endpoints:    enrichEndpointsForDiscovery(n.Endpoints, n.IP),
@@ -81,6 +83,7 @@ type nodeRegisterReq struct {
 	DID           string `json:"did"`
 	Name          string `json:"name"`
 	Region        string `json:"region"`
+	Zone          string `json:"zone"`
 	APIBaseURL    string `json:"api_base_url"`
 	NodeKey       string `json:"node_key"`
 	AccessMode    string `json:"access_mode"` // public | private
@@ -175,7 +178,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	env := s.cfg.Environment
 	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
 		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress,
-		OrgID: orgID, Name: req.Name, Region: req.Region,
+		OrgID: orgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
 	})
 	if err != nil {
@@ -211,7 +214,7 @@ func (s *Server) handleNodeWS(c *gin.Context) {
 
 // handleAdminNodes lists all nodes with full detail (admin).
 func (s *Server) handleAdminNodes(c *gin.Context) {
-	nodes, err := s.store.ListNodes(c, c.Query("status"), c.Query("region"))
+	nodes, err := s.store.ListNodes(c, c.Query("status"), c.Query("region"), c.Query("zone"))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to list nodes")
 		return
