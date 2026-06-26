@@ -68,9 +68,36 @@ func TestVerifySolanaRoundTrip(t *testing.T) {
 
 func TestVerifyUnsupportedChain(t *testing.T) {
 	// Aptos and Sui were dropped in S2; only evm + sol remain.
-	for _, chain := range []string{"doge", "apt", "sui", "aptos", ""} {
+	for _, chain := range []string{"doge", "apt", "sui", "aptos"} {
 		if _, err := Verify(chain, "m", "s", "p"); err != ErrUnsupportedChain {
 			t.Fatalf("chain %q: want ErrUnsupportedChain, got %v", chain, err)
+		}
+	}
+}
+
+func TestParseNodeChain(t *testing.T) {
+	cases := []struct {
+		in       string
+		want     string
+		verify   string
+		wantFail bool
+	}{
+		{"SOLANA", NodeChainSolana, ChainSOL, false},
+		{"sol", NodeChainSolana, ChainSOL, false},
+		{"ETHEREUM", NodeChainEthereum, ChainEVM, false},
+		{"evm", NodeChainEthereum, ChainEVM, false},
+		{"doge", "", "", true},
+	}
+	for _, tc := range cases {
+		got, vk, err := ParseNodeChain(tc.in)
+		if tc.wantFail {
+			if err != ErrUnsupportedChain {
+				t.Fatalf("%q: want ErrUnsupportedChain, got %v", tc.in, err)
+			}
+			continue
+		}
+		if err != nil || got != tc.want || vk != tc.verify {
+			t.Fatalf("%q: got (%q,%q,%v), want (%q,%q)", tc.in, got, vk, err, tc.want, tc.verify)
 		}
 	}
 }

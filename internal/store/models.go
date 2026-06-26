@@ -46,6 +46,7 @@ type Node struct {
 	PeerID        string          `json:"peer_id"`
 	DID           string          `json:"did"`
 	WalletAddress string          `json:"wallet_address,omitempty"`
+	Chain         string          `json:"chain,omitempty"` // SOLANA | ETHEREUM (set at enrollment)
 	OrgID         string          `json:"org_id,omitempty"`
 	AccessMode    string          `json:"access_mode"`
 	MinTier       int             `json:"min_tier"`

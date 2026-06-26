@@ -20,20 +20,51 @@ import (
 	"github.com/mr-tron/base58"
 )
 
-// Chains.
+// Chains (login + signature verify).
 const (
 	ChainEVM = "evm"
 	ChainSOL = "sol"
 )
 
+// Canonical node enrollment chains stored on nodes.chain.
+const (
+	NodeChainSolana   = "SOLANA"
+	NodeChainEthereum = "ETHEREUM"
+)
+
 // ErrUnsupportedChain is returned for unknown chain identifiers.
 var ErrUnsupportedChain = errors.New("unsupported chain")
 
+// ParseNodeChain normalizes a node registration chain to a stored label
+// (SOLANA | ETHEREUM) and the internal verify key (sol | evm).
+func ParseNodeChain(chain string) (canonical, verifyKey string, err error) {
+	switch strings.ToUpper(strings.TrimSpace(chain)) {
+	case "", "SOL", "SOLANA":
+		return NodeChainSolana, ChainSOL, nil
+	case "EVM", "ETH", "ETHEREUM":
+		return NodeChainEthereum, ChainEVM, nil
+	default:
+		return "", "", ErrUnsupportedChain
+	}
+}
+
 // Verify dispatches to the per-chain verifier and returns the recovered address.
 // publicKey is required for sol (the EVM address is recovered from the signature
-// itself).
+// itself). Accepts sol/evm and SOLANA/ETHEREUM aliases.
 func Verify(chain, message, signature, publicKey string) (string, error) {
-	switch chain {
+	_, verifyKey, err := ParseNodeChain(chain)
+	if err != nil {
+		// User login still uses short codes only.
+		switch chain {
+		case ChainEVM:
+			verifyKey = ChainEVM
+		case ChainSOL:
+			verifyKey = ChainSOL
+		default:
+			return "", ErrUnsupportedChain
+		}
+	}
+	switch verifyKey {
 	case ChainEVM:
 		return VerifyEVM(message, signature)
 	case ChainSOL:

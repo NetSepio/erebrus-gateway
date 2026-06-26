@@ -25,6 +25,7 @@ type nodePublic struct {
 	DID           string          `json:"did"`
 	PeerID        string          `json:"peer_id,omitempty"`
 	WalletAddress string          `json:"wallet_address,omitempty"`
+	Chain         string          `json:"chain,omitempty"`
 	Region        string          `json:"region"`
 	Zone          string          `json:"zone,omitempty"`
 	Status        string          `json:"status"`
@@ -47,7 +48,7 @@ type nodePublic struct {
 
 func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
 	return nodePublic{
-		NodeID: n.ID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress,
+		NodeID: n.ID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, MinTier: n.MinTier,
 		Protocols: n.Protocols, Capabilities: n.Capabilities,
 		Endpoints: enrichEndpointsForDiscovery(n.Endpoints, n.IP), Speedtest: n.Speedtest,
@@ -169,7 +170,12 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "peer_id does not match challenge")
 		return
 	}
-	recovered, err := wallet.Verify(req.Chain, s.nodeChallengeMessage(flow.FlowID), req.Signature, req.PublicKey)
+	nodeChain, verifyChain, err := wallet.ParseNodeChain(req.Chain)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "unsupported chain (expected SOLANA or ETHEREUM)")
+		return
+	}
+	recovered, err := wallet.Verify(verifyChain, s.nodeChallengeMessage(flow.FlowID), req.Signature, req.PublicKey)
 	if err != nil || !strings.EqualFold(strings.TrimSpace(recovered), strings.TrimSpace(req.WalletAddress)) {
 		fail(c, http.StatusUnauthorized, "signature does not match node wallet")
 		return
@@ -191,7 +197,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 
 	env := s.cfg.Environment
 	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
-		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress,
+		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
 		OrgID: orgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
 	})

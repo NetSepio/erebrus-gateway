@@ -769,7 +769,11 @@ components:
         load_pct:
           { type: number, description: Coarse load indicator for picker UX }
         peer_id: { type: string, description: libp2p peer id }
-        wallet_address: { type: string, description: Node operator on-chain wallet }
+        wallet_address: { type: string, description: Node operator wallet at enrollment }
+        chain:
+          type: string
+          enum: [SOLANA, ETHEREUM]
+          description: Wallet chain set at node enrollment (not inferred from address format)
         ip_hash: { type: string, description: Hashed node IP (not raw address) }
         version: { type: string, description: Node software version }
         rx_bytes: { type: integer }

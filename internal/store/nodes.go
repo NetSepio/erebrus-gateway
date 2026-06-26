@@ -14,6 +14,7 @@ type NodeRegistration struct {
 	PeerID     string
 	DID        string
 	Wallet     string
+	Chain      string
 	OrgID      string
 	Name       string
 	Region     string
@@ -32,11 +33,12 @@ func (s *Store) RegisterNode(ctx context.Context, r NodeRegistration) (string, e
 	}
 	var id string
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO nodes (peer_id, did, wallet_address, org_id, name, region, zone, api_base_url, node_key, access_mode)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,'')::uuid, NULLIF($5,''), NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), $10)
+		`INSERT INTO nodes (peer_id, did, wallet_address, chain, org_id, name, region, zone, api_base_url, node_key, access_mode)
+		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11)
 		 ON CONFLICT (peer_id) DO UPDATE SET
 		   did = EXCLUDED.did,
 		   wallet_address = COALESCE(NULLIF(EXCLUDED.wallet_address,''), nodes.wallet_address),
+		   chain = COALESCE(NULLIF(EXCLUDED.chain,''), nodes.chain),
 		   org_id = EXCLUDED.org_id,
 		   name = COALESCE(NULLIF(EXCLUDED.name,''), nodes.name),
 		   region = COALESCE(NULLIF(EXCLUDED.region,''), nodes.region),
@@ -46,7 +48,7 @@ func (s *Store) RegisterNode(ctx context.Context, r NodeRegistration) (string, e
 		   access_mode = EXCLUDED.access_mode,
 		   updated_at = now()
 		 RETURNING id`,
-		r.PeerID, r.DID, r.Wallet, r.OrgID, r.Name, r.Region, r.Zone, r.APIBaseURL, r.NodeKey, access).Scan(&id)
+		r.PeerID, r.DID, r.Wallet, r.Chain, r.OrgID, r.Name, r.Region, r.Zone, r.APIBaseURL, r.NodeKey, access).Scan(&id)
 	return id, err
 }
 
@@ -187,7 +189,7 @@ func (s *Store) MarkStaleNodesOffline(ctx context.Context, within time.Duration)
 	return res.RowsAffected()
 }
 
-const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''),
+const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''), COALESCE(chain,''),
 	COALESCE(org_id::text,''), COALESCE(access_mode,'public'),
 	COALESCE(min_tier,0), COALESCE(name,''), COALESCE(region,''), COALESCE(zone,''), COALESCE(ip,''), COALESCE(ip_hash,''),
 	spec, capabilities, endpoints, protocols, status, load, speedtest, rx_bytes, tx_bytes,
@@ -195,7 +197,7 @@ const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''),
 
 func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	var n Node
-	if err := sc.Scan(&n.ID, &n.PeerID, &n.DID, &n.WalletAddress,
+	if err := sc.Scan(&n.ID, &n.PeerID, &n.DID, &n.WalletAddress, &n.Chain,
 		&n.OrgID, &n.AccessMode, &n.MinTier, &n.Name, &n.Region, &n.Zone,
 		&n.IP, &n.IPHash, &n.Spec, &n.Capabilities, &n.Endpoints, pq.Array(&n.Protocols),
 		&n.Status, &n.Load, &n.Speedtest, &n.RxBytes, &n.TxBytes, &n.Version,

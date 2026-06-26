@@ -17,6 +17,7 @@ type nodeOperatorView struct {
 	PeerID        string          `json:"peer_id"`
 	DID           string          `json:"did"`
 	WalletAddress string          `json:"wallet_address,omitempty"`
+	Chain         string          `json:"chain,omitempty"`
 	Name          string          `json:"name"`
 	Region        string          `json:"region"`
 	Zone          string          `json:"zone,omitempty"`
@@ -37,7 +38,7 @@ type nodeOperatorView struct {
 func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole string) nodeOperatorView {
 	privileged := store.IsOrgPrivileged(callerRole)
 	return nodeOperatorView{
-		NodeID: n.ID, PeerID: n.PeerID, DID: n.DID, WalletAddress: n.WalletAddress,
+		NodeID: n.ID, PeerID: n.PeerID, DID: n.DID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Name: n.Name, Region: n.Region, Zone: n.Zone, Status: n.Status,
 		AccessMode: n.AccessMode, MinTier: n.MinTier, Spec: n.Spec,
 		Org: s.orgSummaryFor(c, n.OrgID, callerRole, privileged),
