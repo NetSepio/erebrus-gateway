@@ -29,6 +29,19 @@ func TestPlanEntitlementTemplates(t *testing.T) {
 	}
 }
 
+func TestSeatTierAllowedForPlan(t *testing.T) {
+	t.Parallel()
+	if !SeatTierAllowedForPlan(OrgPlanPro, SeatTierPro) {
+		t.Fatal("pro seat should be allowed on pro plan")
+	}
+	if SeatTierAllowedForPlan(OrgPlanStarter, SeatTierPro) {
+		t.Fatal("pro seat should not be allowed on starter plan")
+	}
+	if !SeatTierAllowedForPlan(OrgPlanBasic, SeatTierFree) {
+		t.Fatal("free seat should always be allowed")
+	}
+}
+
 func TestNormalizeOrgPlan(t *testing.T) {
 	t.Parallel()
 	if _, err := normalizeOrgPlan("invalid"); err == nil {

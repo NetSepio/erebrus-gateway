@@ -64,6 +64,56 @@ func normalizeSeatTier(tier string) (string, error) {
 	}
 }
 
+func seatTierRank(tier string) int {
+	switch tier {
+	case SeatTierFree:
+		return 0
+	case SeatTierStarter:
+		return 1
+	case SeatTierPro:
+		return 2
+	case SeatTierBusiness:
+		return 3
+	case SeatTierEnterprise:
+		return 4
+	default:
+		return -1
+	}
+}
+
+func maxSeatTierForPlan(plan string) string {
+	switch plan {
+	case OrgPlanStarter:
+		return SeatTierStarter
+	case OrgPlanPro:
+		return SeatTierPro
+	case OrgPlanBusiness:
+		return SeatTierBusiness
+	case OrgPlanEnterprise:
+		return SeatTierEnterprise
+	default:
+		return SeatTierFree
+	}
+}
+
+// SeatTierAllowedForPlan reports whether a seat tier is valid for an org plan.
+func SeatTierAllowedForPlan(plan, seatTier string) bool {
+	if seatTier == SeatTierFree {
+		return true
+	}
+	return seatTierRank(seatTier) > 0 && seatTierRank(seatTier) <= seatTierRank(maxSeatTierForPlan(plan))
+}
+
+// CountShieldInstancesUsed returns active Shield services across the org.
+func (s *Store) CountShieldInstancesUsed(ctx context.Context, orgID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM org_node_services
+		 WHERE org_id=$1 AND service_type=$2 AND service_status <> $3`,
+		orgID, ServiceTypeCommunityFirewall, ServiceStatusDisabled).Scan(&n)
+	return n, err
+}
+
 const entitlementCols = `id, org_id, plan, paid_seats_included, managed_vpn_nodes_included,
 	shield_instances_included, sentinel_licenses_included,
 	COALESCE(public_node_access_tier,''), api_quota_monthly, COALESCE(bandwidth_policy,''),

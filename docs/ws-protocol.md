@@ -13,11 +13,16 @@ below and compare them field-for-field. Change this file first, then both repos.
 - Auth: node-scoped PASETO bearer token in the `Authorization` header of the
   upgrade request. Tokens are issued by the HTTPS registration flow
   (`POST /api/v2/nodes/register`, see `docs/gateway-api.openapi.yaml`): gated by
-  the org `enrollment_secret` (`EREBRUS_ORG_ENROLLMENT_SECRET` on the node).
+  a scoped org **registration token** (`registration_token` in JSON; legacy alias
+  `enrollment_secret`). On the node, set `EREBRUS_NODE_REGISTRATION_TOKEN` (replaces
+  `EREBRUS_ORG_ENROLLMENT_SECRET`). Tokens are minted via
+  `POST /api/v2/orgs/{org_id}/node-registration-tokens`.
   The gateway returns a machine challenge; the node signs it with its
   mnemonic-derived wallet key (not the human EULA auth flow). The gateway
   responds with `{ node_token (PASETO role=node), node_id, node_key,
   gateway_public_key }`.
+- Optional REST heartbeat: `POST /api/v2/nodes/{node_id}/heartbeat` with the same
+  node PASETO (updates runtime `nodes` row and `org_nodes.last_seen_at` when linked).
 - Encoding: one JSON object per WebSocket text frame. Every frame has the
   envelope `{"type": "<message-type>", "data": {...}}`.
 - Direction: the node dials the gateway. The node reconnects with exponential

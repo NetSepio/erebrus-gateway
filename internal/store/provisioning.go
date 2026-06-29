@@ -145,6 +145,15 @@ func (s *Store) attachShieldService(ctx context.Context, orgID, nodeID string) e
 }
 
 func (s *Store) attachSentinelService(ctx context.Context, orgID, nodeID string) error {
+	services, err := s.ListOrgNodeServices(ctx, orgID, nodeID)
+	if err != nil {
+		return err
+	}
+	for _, svc := range services {
+		if svc.ServiceType == ServiceTypeErebrusFirewall && svc.ServiceStatus != ServiceStatusDisabled {
+			return nil
+		}
+	}
 	lic, err := s.AttachSentinelLicense(ctx, orgID, nodeID)
 	if err != nil {
 		return fmt.Errorf("attach sentinel license: %w", err)

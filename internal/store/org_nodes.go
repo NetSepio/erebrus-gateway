@@ -400,6 +400,13 @@ func (s *Store) ValidateServiceEntitlement(ctx context.Context, orgID, nodeID, s
 		if ent.ShieldInstancesIncluded <= 0 {
 			return fmt.Errorf("plan does not include Shield instances")
 		}
+		used, err := s.CountShieldInstancesUsed(ctx, orgID)
+		if err != nil {
+			return err
+		}
+		if used >= ent.ShieldInstancesIncluded {
+			return fmt.Errorf("no Shield instances remaining")
+		}
 	case ServiceTypeErebrusFirewall:
 		avail, err := s.CountAvailableSentinelLicenses(ctx, orgID)
 		if err != nil {

@@ -222,13 +222,14 @@ paths:
       summary: Node registration (challenge + signed response → node PASETO)
       security: []
       description: >
-        Two-step machine enrollment gated by org enrollment_secret (not human wallet auth).
-        Step 1: { enrollment_secret, peer_id } → { flow_id, message, gateway_public_key }.
+        Two-step machine enrollment gated by org registration_token (not human wallet auth).
+        Legacy alias: enrollment_secret. Mint tokens via POST /orgs/{id}/node-registration-tokens.
+        Step 1: { registration_token, peer_id } → { flow_id, message, gateway_public_key }.
         Step 2: signed challenge + identity → { node_token, node_id, node_key, gateway_public_key }.
-        Node binds to the org resolved from enrollment_secret. access_mode is public | private.
+        Node binds to the org resolved from the token. access_mode is public | private.
       responses:
         "200": { description: "{ node_token, node_id, node_key, gateway_public_key }" }
-        "401": { description: invalid enrollment_secret or signature }
+        "401": { description: invalid registration_token or signature }
   /api/v2/nodes/ws:
     get:
       summary: WebSocket upgrade for the node control plane
@@ -239,7 +240,7 @@ paths:
   /api/v2/operator/nodes:
     get:
       summary: My org nodes
-      description: Nodes for orgs the caller belongs to. Org id shown only to owner/admin; others see org name/kind. Includes private nodes.
+      description: Runtime VPN nodes for orgs the caller belongs to (nodes table). Org id shown only to owner/admin. Includes private nodes. For org control-plane nodes use GET /orgs/{id}/nodes.
       responses: { "200": { description: Operator node list } }
   /api/v2/operator/nodes/{id}/metrics:
     get:
@@ -840,8 +841,10 @@ components:
           type: object
           properties:
             name: { type: string }
-            kind: { type: string }
-            verified: { type: boolean, description: Always present when org is set }
             slug: { type: string }
+            plan: { type: string, enum: [basic, starter, pro, business, enterprise] }
+            verification_status: { type: string, enum: [unverified, verified, rejected] }
+            public_profile_enabled: { type: boolean }
+            display_name: { type: string }
             description: { type: string }
-            website: { type: string }
+            website_url: { type: string }

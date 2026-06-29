@@ -160,6 +160,13 @@ func (s *Store) AssignSeat(ctx context.Context, orgID, userID, seatTier string) 
 	if seatTier == SeatTierFree {
 		return fmt.Errorf("use RevokeSeat to remove a paid seat")
 	}
+	org, err := s.GetOrg(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	if !SeatTierAllowedForPlan(org.Plan, seatTier) {
+		return fmt.Errorf("seat tier %s is not included in plan %s", seatTier, org.Plan)
+	}
 	ent, err := s.GetOrgEntitlements(ctx, orgID)
 	if err != nil {
 		return err
@@ -461,13 +468,13 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 	return tx.Commit()
 }
 
-// ListMembers returns an org's active members.
+// ListMembers returns an org's active and invited members.
 func (s *Store) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT m.id, m.user_id, COALESCE(u.wallet_address,''), m.role, m.seat_tier, m.status,
 		        m.created_at, m.updated_at
 		 FROM org_members m JOIN users u ON u.id = m.user_id
-		 WHERE m.org_id = $1 AND m.status = 'active' ORDER BY m.created_at`, orgID)
+		 WHERE m.org_id = $1 AND m.status IN ('active', 'invited') ORDER BY m.created_at`, orgID)
 	if err != nil {
 		return nil, err
 	}
