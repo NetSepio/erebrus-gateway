@@ -87,7 +87,8 @@ func (s *Server) handleListNodes(c *gin.Context) {
 }
 
 type nodeRegisterReq struct {
-	EnrollmentSecret string `json:"enrollment_secret"`
+	EnrollmentSecret  string `json:"enrollment_secret"`
+	RegistrationToken string `json:"registration_token"`
 	PeerID           string `json:"peer_id"`
 	// step 2
 	FlowID        string `json:"flow_id"`
@@ -116,16 +117,23 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	secret := strings.TrimSpace(req.EnrollmentSecret)
-	if secret == "" {
-		fail(c, http.StatusBadRequest, "enrollment_secret or node_registration_token required")
+	token := strings.TrimSpace(req.RegistrationToken)
+	if token == "" {
+		token = strings.TrimSpace(req.EnrollmentSecret) // legacy alias
+	}
+	if token == "" {
+		fail(c, http.StatusBadRequest, "registration_token required")
 		return
 	}
-	// Node registration tokens replace org enrollment secrets (Stage 2).
-	fail(c, http.StatusNotImplemented, "node registration tokens not yet enabled; use org registration token API when available")
-	return
-
-	var resolvedOrgID string // populated by registration token lookup in Stage 2.
+	resolvedOrgID, regTokenID, _, err := s.store.LookupNodeRegistrationToken(c, token, store.TokenScopeNodeRegistration)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusUnauthorized, "invalid registration token")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "token lookup failed")
+		return
+	}
 
 	// Step 1: issue a machine challenge.
 	if req.Signature == "" {
@@ -192,7 +200,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	}
 
 	env := s.cfg.Environment
-	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
+	nodeID, err := s.store.RegisterOrgNodeFromRuntime(c, resolvedOrgID, regTokenID, store.NodeRegistration{
 		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
 		OrgID: resolvedOrgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
