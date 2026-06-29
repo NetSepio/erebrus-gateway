@@ -304,6 +304,91 @@ func IsOrgPrivileged(role string) bool {
 	return role == OrgRoleOwner || role == OrgRoleAdmin
 }
 
+// InviteMember adds a member invitation (active membership with optional seat).
+func (s *Store) InviteMember(ctx context.Context, orgID, userID, role, seatTier string) (*Member, error) {
+	role = normalizeOrgRole(role)
+	seatTier, err := normalizeSeatTier(seatTier)
+	if err != nil {
+		seatTier = SeatTierFree
+	}
+	var m Member
+	err = s.db.QueryRowContext(ctx,
+		`INSERT INTO org_members (org_id, user_id, role, seat_tier, status)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (org_id, user_id) DO UPDATE SET
+			role = EXCLUDED.role, seat_tier = EXCLUDED.seat_tier,
+			status = CASE WHEN org_members.status = 'removed' THEN EXCLUDED.status ELSE org_members.status END,
+			updated_at = now()
+		 RETURNING id, user_id, role, seat_tier, status, created_at, updated_at`,
+		orgID, userID, role, seatTier, MemberStatusInvited).
+		Scan(&m.ID, &m.UserID, &m.Role, &m.SeatTier, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// GetMemberByID returns a member by membership id.
+func (s *Store) GetMemberByID(ctx context.Context, orgID, memberID string) (*Member, error) {
+	var m Member
+	err := s.db.QueryRowContext(ctx,
+		`SELECT m.id, m.user_id, COALESCE(u.wallet_address,''), m.role, m.seat_tier, m.status,
+		        m.created_at, m.updated_at
+		 FROM org_members m JOIN users u ON u.id = m.user_id
+		 WHERE m.org_id=$1 AND m.id=$2`, orgID, memberID).
+		Scan(&m.ID, &m.UserID, &m.WalletAddress, &m.Role, &m.SeatTier, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &m, err
+}
+
+// PatchMember updates a member's role or seat tier by membership id.
+func (s *Store) PatchMember(ctx context.Context, orgID, memberID, role, seatTier string) (*Member, error) {
+	cur, err := s.GetMemberByID(ctx, orgID, memberID)
+	if err != nil {
+		return nil, err
+	}
+	if cur.Role == OrgRoleOwner {
+		return nil, fmt.Errorf("cannot change owner role here")
+	}
+	if role != "" {
+		cur.Role = normalizeOrgRole(role)
+	}
+	if seatTier != "" {
+		cur.SeatTier, err = normalizeSeatTier(seatTier)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s.scanMemberRow(s.db.QueryRowContext(ctx,
+		`UPDATE org_members SET role=$3, seat_tier=$4, updated_at=now()
+		 WHERE org_id=$1 AND id=$2 AND role <> 'owner'
+		 RETURNING id, user_id, role, seat_tier, status, created_at, updated_at`,
+		orgID, memberID, cur.Role, cur.SeatTier))
+}
+
+func (s *Store) scanMemberRow(sc interface{ Scan(...any) error }) (*Member, error) {
+	var m Member
+	err := sc.Scan(&m.ID, &m.UserID, &m.Role, &m.SeatTier, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+	return &m, err
+}
+
+// RemoveMemberByID removes a member by membership id.
+func (s *Store) RemoveMemberByID(ctx context.Context, orgID, memberID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE org_members SET status=$3, updated_at=now()
+		 WHERE org_id=$1 AND id=$2 AND role <> 'owner' AND status='active'`,
+		orgID, memberID, MemberStatusRemoved)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // AddMember adds or updates a member's role.
 func (s *Store) AddMember(ctx context.Context, orgID, userID, role string) error {
 	role = normalizeOrgRole(role)

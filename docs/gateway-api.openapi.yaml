@@ -591,6 +591,51 @@ paths:
         summary: VPN clients provisioned under this org,
         responses: { "200": { description: Clients } },
       }
+  /api/v2/public/orgs/{slug}:
+    get:
+      summary: Public org profile (requires public_profile_enabled)
+      security: []
+      responses:
+        "200": { description: Public org projection }
+        "404": { description: Not found or profile disabled }
+  /api/v2/orgs/{id}/entitlements:
+    get:
+      summary: Org plan entitlements
+      responses: { "200": { description: Entitlement limits } }
+  /api/v2/orgs/{id}/profile/public:
+    get:
+      summary: Org public profile (member)
+      responses: { "200": { description: Public profile fields } }
+    patch:
+      summary: Update public profile fields (owner/admin)
+      responses: { "200": { description: Updated } }
+  /api/v2/orgs/{id}/members/invite:
+    post:
+      summary: Invite member by wallet
+      responses: { "201": { description: Member invited } }
+  /api/v2/orgs/{id}/seats:
+    get:
+      summary: Seat allocation summary
+      responses: { "200": { description: "{ members, paid_seats_used, paid_seats_included }" } }
+  /api/v2/orgs/{id}/nodes:
+    get:
+      summary: Org control-plane nodes
+      responses: { "200": { description: Org nodes } }
+  /api/v2/orgs/{id}/nodes/{nodeId}/firewall:
+    get:
+      summary: Abstract firewall service (Shield or Sentinel)
+      responses: { "200": { description: Firewall service } }
+  /api/v2/orgs/{id}/nodes/{nodeId}/firewall/rules:
+    get:
+      summary: Sentinel firewall rules
+      responses: { "200": { description: Rules } }
+    post:
+      summary: Create Sentinel firewall rule
+      responses: { "201": { description: Rule created } }
+  /api/v2/nodes/{nodeId}/heartbeat:
+    post:
+      summary: Node REST heartbeat (node PASETO)
+      responses: { "204": { description: Recorded } }
   # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
   /api/v2/apps:
     get:

@@ -136,6 +136,39 @@ func (s *Server) handleListMembers(c *gin.Context) {
 	ok(c, http.StatusOK, members)
 }
 
+func (s *Server) handleInviteMember(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	var req struct {
+		WalletAddress string `json:"wallet_address"`
+		Chain         string `json:"chain"`
+		Role          string `json:"role"`
+		SeatTier      string `json:"seat_tier"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.WalletAddress == "" {
+		fail(c, http.StatusBadRequest, "wallet_address is required")
+		return
+	}
+	role := normalizeMemberRole(req.Role)
+	if role == store.OrgRoleOwner {
+		fail(c, http.StatusBadRequest, "use transfer-ownership to change owner")
+		return
+	}
+	u, err := s.store.UpsertUserByWallet(c, req.WalletAddress, req.Chain, "")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to resolve user")
+		return
+	}
+	member, err := s.store.InviteMember(c, c.Param("id"), u.ID, role, req.SeatTier)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to invite member")
+		return
+	}
+	member.WalletAddress = u.WalletAddress
+	ok(c, http.StatusCreated, member)
+}
+
 func (s *Server) handleAddMember(c *gin.Context) {
 	if _, ok := s.orgPrivileged(c); !ok {
 		return
@@ -171,19 +204,33 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Role string `json:"role"`
+		Role     string `json:"role"`
+		SeatTier string `json:"seat_tier"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.Role == "" {
-		fail(c, http.StatusBadRequest, "role is required")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	role := normalizeMemberRole(req.Role)
-	if role == store.OrgRoleOwner {
+	if req.Role == "" && req.SeatTier == "" {
+		fail(c, http.StatusBadRequest, "role or seat_tier is required")
+		return
+	}
+	if req.Role == store.OrgRoleOwner {
 		fail(c, http.StatusBadRequest, "use transfer-ownership to change owner")
 		return
 	}
-	targetID := c.Param("userId")
-	curRole, err := s.store.MemberRole(c, c.Param("id"), targetID)
+	orgID := c.Param("id")
+	memberKey := c.Param("memberId")
+	if member, err := s.store.PatchMember(c, orgID, memberKey, req.Role, req.SeatTier); err == nil {
+		ok(c, http.StatusOK, member)
+		return
+	}
+	if req.SeatTier != "" {
+		fail(c, http.StatusBadRequest, "seat_tier updates require member id")
+		return
+	}
+	role := normalizeMemberRole(req.Role)
+	curRole, err := s.store.MemberRole(c, orgID, memberKey)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "member not found")
 		return
@@ -196,18 +243,24 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		fail(c, http.StatusForbidden, "cannot change owner role here")
 		return
 	}
-	if err := s.store.AddMember(c, c.Param("id"), targetID, role); err != nil {
+	if err := s.store.AddMember(c, orgID, memberKey, role); err != nil {
 		fail(c, http.StatusInternalServerError, "failed to update member")
 		return
 	}
-	ok(c, http.StatusOK, gin.H{"user_id": targetID, "role": role})
+	ok(c, http.StatusOK, gin.H{"user_id": memberKey, "role": role})
 }
 
 func (s *Server) handleRemoveMember(c *gin.Context) {
 	if _, ok := s.orgPrivileged(c); !ok {
 		return
 	}
-	if err := s.store.RemoveMember(c, c.Param("id"), c.Param("userId")); errors.Is(err, store.ErrNotFound) {
+	orgID := c.Param("id")
+	memberKey := c.Param("memberId")
+	if err := s.store.RemoveMemberByID(c, orgID, memberKey); err == nil {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	if err := s.store.RemoveMember(c, orgID, memberKey); errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "member not found")
 		return
 	} else if err != nil {

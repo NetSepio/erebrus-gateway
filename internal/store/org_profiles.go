@@ -99,6 +99,54 @@ func (s *Store) SetOrgPublicProfileEnabled(ctx context.Context, orgID string, en
 	return nil
 }
 
+// PublicOrgProfile is the public-facing org projection.
+type PublicOrgProfile struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	Description string `json:"description,omitempty"`
+	LogoURL     string `json:"logo_url,omitempty"`
+	WebsiteURL  string `json:"website_url,omitempty"`
+	PublicEmail string `json:"public_email,omitempty"`
+	Country     string `json:"country,omitempty"`
+}
+
+// GetPublicOrgBySlug returns a public org profile when enabled.
+func (s *Store) GetPublicOrgBySlug(ctx context.Context, slug string) (*PublicOrgProfile, error) {
+	var p PublicOrgProfile
+	err := s.db.QueryRowContext(ctx,
+		`SELECT o.slug, o.name,
+		        COALESCE(p.display_name,''), COALESCE(p.description,''),
+		        COALESCE(p.logo_url,''), COALESCE(p.website_url,''),
+		        COALESCE(p.public_email,''), COALESCE(p.country,'')
+		 FROM orgs o JOIN org_profiles p ON p.org_id = o.id
+		 WHERE o.slug=$1 AND o.public_profile_enabled = true`, strings.TrimSpace(slug)).
+		Scan(&p.Slug, &p.Name, &p.DisplayName, &p.Description, &p.LogoURL, &p.WebsiteURL, &p.PublicEmail, &p.Country)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return &p, err
+}
+
+// UpdatePublicOrgProfileInput carries public-profile fields.
+type UpdatePublicOrgProfileInput struct {
+	DisplayName *string
+	Description *string
+	LogoURL     *string
+	WebsiteURL  *string
+	PublicEmail *string
+	Country     *string
+}
+
+// UpdatePublicOrgProfile patches only public-facing profile fields.
+func (s *Store) UpdatePublicOrgProfile(ctx context.Context, orgID string, in UpdatePublicOrgProfileInput) (*OrgProfile, error) {
+	full := UpdateOrgProfileInput{
+		DisplayName: in.DisplayName, Description: in.Description, LogoURL: in.LogoURL,
+		WebsiteURL: in.WebsiteURL, PublicEmail: in.PublicEmail, Country: in.Country,
+	}
+	return s.UpdateOrgProfile(ctx, orgID, full)
+}
+
 func applyStrPtr(dst *string, src *string) {
 	if src != nil {
 		*dst = strings.TrimSpace(*src)

@@ -169,6 +169,51 @@ func (s *Server) handleListOrgNodeServices(c *gin.Context) {
 	ok(c, http.StatusOK, services)
 }
 
+func (s *Server) handlePatchOrgNodeService(c *gin.Context) {
+	role, memberOK := s.orgMember(c)
+	if !memberOK {
+		return
+	}
+	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+		fail(c, http.StatusForbidden, "insufficient role")
+		return
+	}
+	var req store.UpdateOrgNodeServiceInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
+		return
+	}
+	svc, err := s.store.UpdateOrgNodeService(c, c.Param("id"), c.Param("nodeId"), c.Param("serviceId"), req)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "service not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to update service")
+		return
+	}
+	ok(c, http.StatusOK, svc)
+}
+
+func (s *Server) handleDeleteOrgNodeService(c *gin.Context) {
+	role, memberOK := s.orgMember(c)
+	if !memberOK {
+		return
+	}
+	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+		fail(c, http.StatusForbidden, "insufficient role")
+		return
+	}
+	if err := s.store.DeleteOrgNodeService(c, c.Param("id"), c.Param("nodeId"), c.Param("serviceId")); errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "service not found")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to delete service")
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (s *Server) handleAttachOrgNodeService(c *gin.Context) {
 	role, memberOK := s.orgMember(c)
 	if !memberOK {

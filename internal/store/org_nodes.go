@@ -287,6 +287,67 @@ func scanOrgNodeService(sc interface{ Scan(...any) error }) (*OrgNodeService, er
 	return &svc, err
 }
 
+// GetOrgNodeService returns a service by id within an org node.
+func (s *Store) GetOrgNodeService(ctx context.Context, orgID, nodeID, serviceID string) (*OrgNodeService, error) {
+	svc, err := scanOrgNodeService(s.db.QueryRowContext(ctx,
+		`SELECT `+orgNodeServiceCols+` FROM org_node_services WHERE org_id=$1 AND node_id=$2 AND id=$3`,
+		orgID, nodeID, serviceID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return svc, err
+}
+
+// UpdateOrgNodeServiceInput carries patchable service fields.
+type UpdateOrgNodeServiceInput struct {
+	ServiceStatus *string
+	Visibility    *string
+	ConfigRef     *string
+	AccessURL     *string
+}
+
+// UpdateOrgNodeService patches a node service record.
+func (s *Store) UpdateOrgNodeService(ctx context.Context, orgID, nodeID, serviceID string, in UpdateOrgNodeServiceInput) (*OrgNodeService, error) {
+	cur, err := s.GetOrgNodeService(ctx, orgID, nodeID, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	status, visibility, cfg, url := cur.ServiceStatus, cur.Visibility, cur.ConfigRef, cur.AccessURL
+	if in.ServiceStatus != nil {
+		status = strings.TrimSpace(*in.ServiceStatus)
+	}
+	if in.Visibility != nil {
+		visibility = strings.TrimSpace(*in.Visibility)
+	}
+	if in.ConfigRef != nil {
+		cfg = strings.TrimSpace(*in.ConfigRef)
+	}
+	if in.AccessURL != nil {
+		url = strings.TrimSpace(*in.AccessURL)
+	}
+	return scanOrgNodeService(s.db.QueryRowContext(ctx,
+		`UPDATE org_node_services SET service_status=$4, visibility=$5,
+		 config_ref=NULLIF($6,''), access_url=NULLIF($7,''), updated_at=now()
+		 WHERE id=$1 AND org_id=$2 AND node_id=$3
+		 RETURNING `+orgNodeServiceCols,
+		serviceID, orgID, nodeID, status, visibility, cfg, url))
+}
+
+// DeleteOrgNodeService disables a service attachment.
+func (s *Store) DeleteOrgNodeService(ctx context.Context, orgID, nodeID, serviceID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE org_node_services SET service_status=$4, updated_at=now()
+		 WHERE id=$1 AND org_id=$2 AND node_id=$3`,
+		serviceID, orgID, nodeID, ServiceStatusDisabled)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListOrgNodeServices returns services attached to a node.
 func (s *Store) ListOrgNodeServices(ctx context.Context, orgID, nodeID string) ([]OrgNodeService, error) {
 	rows, err := s.db.QueryContext(ctx,

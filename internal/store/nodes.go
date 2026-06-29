@@ -207,6 +207,30 @@ func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	return &n, nil
 }
 
+// GetNodePeerID resolves a runtime node uuid to its peer_id.
+func (s *Store) GetNodePeerID(ctx context.Context, nodeID string) (string, error) {
+	var peerID string
+	err := s.db.QueryRowContext(ctx, `SELECT peer_id FROM nodes WHERE id=$1`, nodeID).Scan(&peerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return peerID, err
+}
+
+// ApplyNodeHeartbeat records a REST heartbeat for a runtime node.
+func (s *Store) ApplyNodeHeartbeat(ctx context.Context, nodeID, status string, load, speedtest []byte, rx, tx int64, version string) error {
+	peerID, err := s.GetNodePeerID(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	if err := s.ApplyHeartbeat(ctx, peerID, status, load, speedtest, rx, tx, version); err != nil {
+		return err
+	}
+	now := time.Now()
+	_ = s.TouchOrgNodeHeartbeat(ctx, peerID, now)
+	return nil
+}
+
 // GetNode returns a node by id.
 func (s *Store) GetNode(ctx context.Context, id string) (*Node, error) {
 	n, err := scanNode(s.db.QueryRowContext(ctx, `SELECT `+nodeCols+` FROM nodes WHERE id = $1`, id))
