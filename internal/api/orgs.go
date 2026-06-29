@@ -408,7 +408,10 @@ func (s *Server) handleAdminPatchOrg(c *gin.Context) {
 		}
 	}
 	if req.Plan != nil {
-		if _, err := s.store.SetOrgPlan(c, oid, *req.Plan); errors.Is(err, store.ErrNotFound) {
+		enabled, region := s.cfg.ProvisioningConfig()
+		if _, err := s.store.SetOrgPlanAndProvision(c, oid, *req.Plan, store.ProvisioningConfig{
+			Enabled: enabled, DefaultRegion: region,
+		}); errors.Is(err, store.ErrNotFound) {
 			fail(c, http.StatusNotFound, "org not found")
 			return
 		} else if err != nil {
