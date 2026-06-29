@@ -5,20 +5,54 @@ import (
 	"time"
 )
 
-// Org kinds.
+// Org plans.
 const (
-	OrgKindTeam       = "team"
-	OrgKindCompany    = "company"
-	OrgKindIndividual = "individual"
-	OrgKindFamily     = "family"
-	OrgKindOther      = "other"
+	OrgPlanBasic      = "basic"
+	OrgPlanStarter    = "starter"
+	OrgPlanPro        = "pro"
+	OrgPlanBusiness   = "business"
+	OrgPlanEnterprise = "enterprise"
+)
+
+// Org billing status.
+const (
+	OrgBillingActive   = "active"
+	OrgBillingPastDue  = "past_due"
+	OrgBillingCanceled = "canceled"
+	OrgBillingTrialing = "trialing"
+)
+
+// Org verification status.
+const (
+	OrgVerificationUnverified = "unverified"
+	OrgVerificationVerified   = "verified"
+	OrgVerificationRejected   = "rejected"
 )
 
 // Org member roles.
 const (
-	OrgRoleOwner  = "owner"
-	OrgRoleAdmin  = "admin"
-	OrgRoleMember = "member"
+	OrgRoleOwner        = "owner"
+	OrgRoleAdmin        = "admin"
+	OrgRoleNodeOperator = "node_operator"
+	OrgRoleMember       = "member"
+	OrgRoleViewer       = "viewer"
+)
+
+// Seat tiers (premium access entitlement; separate from management role).
+const (
+	SeatTierFree       = "free"
+	SeatTierStarter    = "starter"
+	SeatTierPro        = "pro"
+	SeatTierBusiness   = "business"
+	SeatTierEnterprise = "enterprise"
+)
+
+// Member status.
+const (
+	MemberStatusActive    = "active"
+	MemberStatusInvited   = "invited"
+	MemberStatusSuspended = "suspended"
+	MemberStatusRemoved   = "removed"
 )
 
 // Node access modes.
@@ -90,26 +124,66 @@ type Subscription struct {
 
 // Org is a workspace; members and API keys operate within it.
 type Org struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Kind             string    `json:"kind"`
-	Verified         bool      `json:"verified"`
-	Slug             string    `json:"slug,omitempty"`
-	Description      string    `json:"description,omitempty"`
-	Website          string    `json:"website,omitempty"`
-	OwnerUserID      string    `json:"owner_user_id"`
-	EnrollmentSecret string    `json:"enrollment_secret,omitempty"` // owner/admin only
-	Role             string    `json:"role,omitempty"`              // caller's role, when listed for a user
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID                    string    `json:"id"`
+	Name                  string    `json:"name"`
+	Slug                  string    `json:"slug"`
+	Plan                  string    `json:"plan"`
+	BillingStatus         string    `json:"billing_status"`
+	VerificationStatus    string    `json:"verification_status"`
+	PublicProfileEnabled  bool      `json:"public_profile_enabled"`
+	OwnerUserID           string    `json:"owner_user_id"`
+	Role                  string    `json:"role,omitempty"` // caller's role, when listed for a user
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+// OrgProfile holds org branding and contact metadata.
+type OrgProfile struct {
+	ID           string    `json:"id"`
+	OrgID        string    `json:"org_id"`
+	LegalName    string    `json:"legal_name,omitempty"`
+	DisplayName  string    `json:"display_name,omitempty"`
+	Description  string    `json:"description,omitempty"`
+	LogoURL      string    `json:"logo_url,omitempty"`
+	WebsiteURL   string    `json:"website_url,omitempty"`
+	PublicEmail  string    `json:"public_email,omitempty"`
+	BillingEmail string    `json:"billing_email,omitempty"`
+	SupportEmail string    `json:"support_email,omitempty"`
+	Country      string    `json:"country,omitempty"`
+	Timezone     string    `json:"timezone,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// OrgEntitlement is the plan-derived resource limits for an org.
+type OrgEntitlement struct {
+	ID                         string    `json:"id"`
+	OrgID                      string    `json:"org_id"`
+	Plan                       string    `json:"plan"`
+	PaidSeatsIncluded          int       `json:"paid_seats_included"`
+	ManagedVPNNodesIncluded    int       `json:"managed_vpn_nodes_included"`
+	ShieldInstancesIncluded    int       `json:"shield_instances_included"`
+	SentinelLicensesIncluded   int       `json:"sentinel_licenses_included"`
+	PublicNodeAccessTier       string    `json:"public_node_access_tier,omitempty"`
+	APIQuotaMonthly            *int      `json:"api_quota_monthly,omitempty"`
+	BandwidthPolicy            string    `json:"bandwidth_policy,omitempty"`
+	SupportTier                string    `json:"support_tier,omitempty"`
+	AuditLogsEnabled           bool      `json:"audit_logs_enabled"`
+	AdvancedAnalyticsEnabled   bool      `json:"advanced_analytics_enabled"`
+	CreatedAt                  time.Time `json:"created_at"`
+	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
 // Member is a user's membership in an org.
 type Member struct {
+	ID            string    `json:"id"`
 	UserID        string    `json:"user_id"`
 	WalletAddress string    `json:"wallet_address,omitempty"`
 	Role          string    `json:"role"`
-	AddedAt       time.Time `json:"added_at"`
+	SeatTier      string    `json:"seat_tier"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // APIKey is an org-scoped credential (the secret is shown only once at creation).

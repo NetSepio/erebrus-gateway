@@ -118,18 +118,14 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	}
 	secret := strings.TrimSpace(req.EnrollmentSecret)
 	if secret == "" {
-		fail(c, http.StatusBadRequest, "enrollment_secret required")
+		fail(c, http.StatusBadRequest, "enrollment_secret or node_registration_token required")
 		return
 	}
-	orgID, err := s.store.LookupOrgByEnrollmentSecret(c, secret)
-	if errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusUnauthorized, "invalid enrollment secret")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "enrollment lookup failed")
-		return
-	}
+	// Node registration tokens replace org enrollment secrets (Stage 2).
+	fail(c, http.StatusNotImplemented, "node registration tokens not yet enabled; use org registration token API when available")
+	return
+
+	var resolvedOrgID string // populated by registration token lookup in Stage 2.
 
 	// Step 1: issue a machine challenge.
 	if req.Signature == "" {
@@ -140,7 +136,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		}
 		flowID := uuid.NewString()
 		// flow.Chain stores org_id; flow.WalletAddress stores peer_id for step-2 binding.
-		if err := s.store.CreateFlowID(c, flowID, peerID, orgID, flowIDTTL); err != nil {
+		if err := s.store.CreateFlowID(c, flowID, peerID, resolvedOrgID, flowIDTTL); err != nil {
 			fail(c, http.StatusInternalServerError, "failed to create challenge")
 			return
 		}
@@ -162,7 +158,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "flow id not found or expired")
 		return
 	}
-	if flow.Chain != orgID {
+	if flow.Chain != resolvedOrgID {
 		fail(c, http.StatusUnauthorized, "enrollment flow org mismatch")
 		return
 	}
@@ -198,7 +194,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	env := s.cfg.Environment
 	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
 		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
-		OrgID: orgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
+		OrgID: resolvedOrgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
 	})
 	if err != nil {

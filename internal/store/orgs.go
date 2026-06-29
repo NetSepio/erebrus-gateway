@@ -4,44 +4,101 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/NetSepio/gateway/internal/secrets"
+	"github.com/google/uuid"
 )
 
-const orgCols = `id, name, COALESCE(kind,'team'), verified,
-	COALESCE(slug,''), COALESCE(description,''), COALESCE(website,''),
-	owner_user_id, COALESCE(enrollment_secret,''), created_at, updated_at`
+const orgCols = `id, name, slug, plan, billing_status, verification_status,
+	public_profile_enabled, owner_user_id, created_at, updated_at`
 
-func scanOrg(sc interface{ Scan(...any) error }, includeSecret bool) (*Org, error) {
+func scanOrg(sc interface{ Scan(...any) error }, _ bool) (*Org, error) {
 	var o Org
-	var secret string
-	dest := []any{&o.ID, &o.Name, &o.Kind, &o.Verified, &o.Slug, &o.Description, &o.Website,
-		&o.OwnerUserID, &secret, &o.CreatedAt, &o.UpdatedAt}
-	if err := sc.Scan(dest...); err != nil {
-		return nil, err
-	}
-	if includeSecret {
-		o.EnrollmentSecret = secret
-	}
-	return &o, nil
+	err := sc.Scan(
+		&o.ID, &o.Name, &o.Slug, &o.Plan, &o.BillingStatus, &o.VerificationStatus,
+		&o.PublicProfileEnabled, &o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt,
+	)
+	return &o, err
 }
 
 // CreateOrgInput carries fields for org creation.
 type CreateOrgInput struct {
-	Name        string
-	Kind        string
-	Slug        string
-	Description string
-	Website     string
-	OwnerUserID string
+	Name string
+	Slug string
 }
 
-// CreateOrg creates an org, records the caller as owner, and mints an enrollment secret.
-func (s *Store) CreateOrg(ctx context.Context, in CreateOrgInput) (*Org, error) {
-	kind := normalizeOrgKind(in.Kind)
-	secret, err := secrets.NewOrgEnrollmentSecret()
+// CreateOrgForUser creates an org on the basic plan with profile and entitlements.
+func (s *Store) CreateOrgForUser(ctx context.Context, userID string, in CreateOrgInput) (*Org, error) {
+	return s.createOrg(ctx, userID, in, OrgPlanBasic)
+}
+
+// createOrg is the internal org creation flow.
+func (s *Store) createOrg(ctx context.Context, ownerUserID string, in CreateOrgInput, plan string) (*Org, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	slug, err := s.resolveOrgSlug(ctx, in.Slug, name)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var o Org
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO orgs (name, slug, plan, billing_status, verification_status, owner_user_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING `+orgCols,
+		name, slug, plan, OrgBillingActive, OrgVerificationUnverified, ownerUserID).
+		Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.BillingStatus, &o.VerificationStatus,
+			&o.PublicProfileEnabled, &o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO org_profiles (org_id, display_name) VALUES ($1, $2)`, o.ID, name); err != nil {
+		return nil, err
+	}
+
+	tpl := PlanEntitlementTemplates()[plan]
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO org_entitlements (
+			org_id, plan, paid_seats_included, managed_vpn_nodes_included,
+			shield_instances_included, sentinel_licenses_included,
+			public_node_access_tier, support_tier, audit_logs_enabled, advanced_analytics_enabled
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		o.ID, tpl.Plan, tpl.PaidSeatsIncluded, tpl.ManagedVPNNodesIncluded,
+		tpl.ShieldInstancesIncluded, tpl.SentinelLicensesIncluded,
+		tpl.PublicNodeAccessTier, tpl.SupportTier, tpl.AuditLogsEnabled, tpl.AdvancedAnalyticsEnabled); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO org_members (org_id, user_id, role, seat_tier, status)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		o.ID, ownerUserID, OrgRoleOwner, SeatTierFree, MemberStatusActive); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	o.Role = OrgRoleOwner
+	return &o, nil
+}
+
+// SetOrgPlan updates an org's plan and refreshes entitlements.
+func (s *Store) SetOrgPlan(ctx context.Context, orgID, plan string) (*Org, error) {
+	plan, err := normalizeOrgPlan(plan)
 	if err != nil {
 		return nil, err
 	}
@@ -53,28 +110,103 @@ func (s *Store) CreateOrg(ctx context.Context, in CreateOrgInput) (*Org, error) 
 
 	var o Org
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO orgs (name, kind, slug, description, website, owner_user_id, enrollment_secret)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6, $7)
-		 RETURNING `+orgCols,
-		in.Name, kind, in.Slug, in.Description, in.Website, in.OwnerUserID, secret).
-		Scan(&o.ID, &o.Name, &o.Kind, &o.Verified, &o.Slug, &o.Description, &o.Website,
-			&o.OwnerUserID, &o.EnrollmentSecret, &o.CreatedAt, &o.UpdatedAt)
+		`UPDATE orgs SET plan=$2, updated_at=now() WHERE id=$1
+		 RETURNING `+orgCols, orgID, plan).
+		Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.BillingStatus, &o.VerificationStatus,
+			&o.PublicProfileEnabled, &o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
+
+	tpl := PlanEntitlementTemplates()[plan]
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO org_members (org_id, user_id, role) VALUES ($1, $2, 'owner')`,
-		o.ID, in.OwnerUserID); err != nil {
+		`INSERT INTO org_entitlements (
+			org_id, plan, paid_seats_included, managed_vpn_nodes_included,
+			shield_instances_included, sentinel_licenses_included,
+			public_node_access_tier, support_tier, audit_logs_enabled, advanced_analytics_enabled
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		ON CONFLICT (org_id) DO UPDATE SET
+			plan = EXCLUDED.plan,
+			paid_seats_included = EXCLUDED.paid_seats_included,
+			managed_vpn_nodes_included = EXCLUDED.managed_vpn_nodes_included,
+			shield_instances_included = EXCLUDED.shield_instances_included,
+			sentinel_licenses_included = EXCLUDED.sentinel_licenses_included,
+			public_node_access_tier = EXCLUDED.public_node_access_tier,
+			support_tier = EXCLUDED.support_tier,
+			audit_logs_enabled = EXCLUDED.audit_logs_enabled,
+			advanced_analytics_enabled = EXCLUDED.advanced_analytics_enabled,
+			updated_at = now()`,
+		orgID, tpl.Plan, tpl.PaidSeatsIncluded, tpl.ManagedVPNNodesIncluded,
+		tpl.ShieldInstancesIncluded, tpl.SentinelLicensesIncluded,
+		tpl.PublicNodeAccessTier, tpl.SupportTier, tpl.AuditLogsEnabled, tpl.AdvancedAnalyticsEnabled); err != nil {
 		return nil, err
 	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	o.Role = OrgRoleOwner
 	return &o, nil
 }
 
-// GetOrg returns an org by id (no enrollment secret).
+// AssignSeat assigns a paid seat tier to a member.
+func (s *Store) AssignSeat(ctx context.Context, orgID, userID, seatTier string) error {
+	seatTier, err := normalizeSeatTier(seatTier)
+	if err != nil {
+		return err
+	}
+	if seatTier == SeatTierFree {
+		return fmt.Errorf("use RevokeSeat to remove a paid seat")
+	}
+	ent, err := s.GetOrgEntitlements(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	used, err := s.CountPaidSeatsUsed(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	var curTier string
+	err = s.db.QueryRowContext(ctx,
+		`SELECT seat_tier FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID).Scan(&curTier)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if curTier == seatTier {
+		return nil
+	}
+	if curTier == SeatTierFree && used >= ent.PaidSeatsIncluded {
+		return fmt.Errorf("no paid seats remaining")
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE org_members SET seat_tier=$3, updated_at=now()
+		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID, seatTier)
+	return err
+}
+
+// RevokeSeat removes a paid seat from a member.
+func (s *Store) RevokeSeat(ctx context.Context, orgID, userID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE org_members SET seat_tier=$3, updated_at=now()
+		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID, SeatTierFree)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// GetOrg returns an org by id.
 func (s *Store) GetOrg(ctx context.Context, id string) (*Org, error) {
 	o, err := scanOrg(s.db.QueryRowContext(ctx, `SELECT `+orgCols+` FROM orgs WHERE id=$1`, id), false)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -83,35 +215,13 @@ func (s *Store) GetOrg(ctx context.Context, id string) (*Org, error) {
 	return o, err
 }
 
-// GetOrgWithSecret returns an org including its enrollment secret (owner/admin views).
-func (s *Store) GetOrgWithSecret(ctx context.Context, id string) (*Org, error) {
-	o, err := scanOrg(s.db.QueryRowContext(ctx, `SELECT `+orgCols+` FROM orgs WHERE id=$1`, id), true)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	return o, err
-}
-
-// LookupOrgByEnrollmentSecret resolves an org from a presented enrollment secret.
-func (s *Store) LookupOrgByEnrollmentSecret(ctx context.Context, secret string) (string, error) {
-	secret = strings.TrimSpace(secret)
-	var orgID string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id FROM orgs WHERE enrollment_secret = $1`, secret).Scan(&orgID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrNotFound
-	}
-	return orgID, err
-}
-
 // ListOrgsForUser returns the orgs the user belongs to, with their role.
 func (s *Store) ListOrgsForUser(ctx context.Context, userID string) ([]Org, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT o.id, o.name, COALESCE(o.kind,'team'), o.verified,
-		        COALESCE(o.slug,''), COALESCE(o.description,''), COALESCE(o.website,''),
-		        o.owner_user_id, o.created_at, o.updated_at, m.role
+		`SELECT o.id, o.name, o.slug, o.plan, o.billing_status, o.verification_status,
+		        o.public_profile_enabled, o.owner_user_id, o.created_at, o.updated_at, m.role
 		 FROM orgs o JOIN org_members m ON m.org_id = o.id
-		 WHERE m.user_id = $1 ORDER BY o.created_at DESC`, userID)
+		 WHERE m.user_id = $1 AND m.status = 'active' ORDER BY o.created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +229,8 @@ func (s *Store) ListOrgsForUser(ctx context.Context, userID string) ([]Org, erro
 	var out []Org
 	for rows.Next() {
 		var o Org
-		if err := rows.Scan(&o.ID, &o.Name, &o.Kind, &o.Verified, &o.Slug, &o.Description, &o.Website,
-			&o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt, &o.Role); err != nil {
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.BillingStatus, &o.VerificationStatus,
+			&o.PublicProfileEnabled, &o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt, &o.Role); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -128,13 +238,12 @@ func (s *Store) ListOrgsForUser(ctx context.Context, userID string) ([]Org, erro
 	return out, rows.Err()
 }
 
-// UpdateOrg patches org metadata (not membership).
+// UpdateOrgInput carries patchable org fields.
 type UpdateOrgInput struct {
-	Name        *string
-	Kind        *string
-	Slug        *string
-	Description *string
-	Website     *string
+	Name                 *string
+	Slug                 *string
+	BillingStatus        *string
+	PublicProfileEnabled *bool
 }
 
 // UpdateOrg updates org fields. Nil pointers are left unchanged.
@@ -143,28 +252,35 @@ func (s *Store) UpdateOrg(ctx context.Context, orgID string, in UpdateOrgInput) 
 	if err != nil {
 		return nil, err
 	}
-	name, kind, slug, desc, site := cur.Name, cur.Kind, cur.Slug, cur.Description, cur.Website
+	name, slug, billing := cur.Name, cur.Slug, cur.BillingStatus
+	publicProfile := cur.PublicProfileEnabled
 	if in.Name != nil {
 		name = strings.TrimSpace(*in.Name)
 	}
-	if in.Kind != nil {
-		kind = normalizeOrgKind(*in.Kind)
-	}
 	if in.Slug != nil {
-		slug = strings.TrimSpace(*in.Slug)
+		slug, err = s.resolveOrgSlug(ctx, *in.Slug, name)
+		if err != nil {
+			return nil, err
+		}
+		if slug != cur.Slug {
+			var exists bool
+			_ = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM orgs WHERE slug=$1 AND id<>$2)`, slug, orgID).Scan(&exists)
+			if exists {
+				return nil, fmt.Errorf("slug already taken")
+			}
+		}
 	}
-	if in.Description != nil {
-		desc = strings.TrimSpace(*in.Description)
+	if in.BillingStatus != nil {
+		billing = strings.TrimSpace(*in.BillingStatus)
 	}
-	if in.Website != nil {
-		site = strings.TrimSpace(*in.Website)
+	if in.PublicProfileEnabled != nil {
+		publicProfile = *in.PublicProfileEnabled
 	}
 	o, err := scanOrg(s.db.QueryRowContext(ctx,
-		`UPDATE orgs SET name=$2, kind=$3, slug=NULLIF($4,''), description=NULLIF($5,''),
-		 website=NULLIF($6,''), updated_at=now()
+		`UPDATE orgs SET name=$2, slug=$3, billing_status=$4, public_profile_enabled=$5, updated_at=now()
 		 WHERE id=$1
 		 RETURNING `+orgCols,
-		orgID, name, kind, slug, desc, site), false)
+		orgID, name, slug, billing, publicProfile), false)
 	if err != nil {
 		return nil, err
 	}
@@ -175,14 +291,15 @@ func (s *Store) UpdateOrg(ctx context.Context, orgID string, in UpdateOrgInput) 
 func (s *Store) MemberRole(ctx context.Context, orgID, userID string) (string, error) {
 	var role string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2`, orgID, userID).Scan(&role)
+		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
 	return role, err
 }
 
-// IsOrgPrivileged reports whether the role can see org_id and enrollment_secret.
+// IsOrgPrivileged reports whether the role can manage org settings.
 func IsOrgPrivileged(role string) bool {
 	return role == OrgRoleOwner || role == OrgRoleAdmin
 }
@@ -191,17 +308,20 @@ func IsOrgPrivileged(role string) bool {
 func (s *Store) AddMember(ctx context.Context, orgID, userID, role string) error {
 	role = normalizeOrgRole(role)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO org_members (org_id, user_id, role) VALUES ($1, $2, $3)
-		 ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
-		orgID, userID, role)
+		`INSERT INTO org_members (org_id, user_id, role, seat_tier, status)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (org_id, user_id) DO UPDATE SET
+			role = EXCLUDED.role, status = 'active', updated_at = now()`,
+		orgID, userID, role, SeatTierFree, MemberStatusActive)
 	return err
 }
 
 // RemoveMember removes a user from an org (not the owner).
 func (s *Store) RemoveMember(ctx context.Context, orgID, userID string) error {
 	res, err := s.db.ExecContext(ctx,
-		`DELETE FROM org_members WHERE org_id=$1 AND user_id=$2 AND role <> 'owner'`,
-		orgID, userID)
+		`UPDATE org_members SET status=$3, updated_at=now()
+		 WHERE org_id=$1 AND user_id=$2 AND role <> 'owner' AND status='active'`,
+		orgID, userID, MemberStatusRemoved)
 	if err != nil {
 		return err
 	}
@@ -221,13 +341,15 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 
 	var fromRole string
 	err = tx.QueryRowContext(ctx,
-		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2`, orgID, fromUserID).Scan(&fromRole)
+		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, fromUserID).Scan(&fromRole)
 	if err != nil || fromRole != OrgRoleOwner {
 		return ErrNotFound
 	}
 	var toRole string
 	err = tx.QueryRowContext(ctx,
-		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2`, orgID, toUserID).Scan(&toRole)
+		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, toUserID).Scan(&toRole)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -238,11 +360,13 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 		return ErrNotFound
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE org_members SET role='admin' WHERE org_id=$1 AND user_id=$2`, orgID, fromUserID); err != nil {
+		`UPDATE org_members SET role='admin', updated_at=now() WHERE org_id=$1 AND user_id=$2`,
+		orgID, fromUserID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE org_members SET role='owner' WHERE org_id=$1 AND user_id=$2`, orgID, toUserID); err != nil {
+		`UPDATE org_members SET role='owner', updated_at=now() WHERE org_id=$1 AND user_id=$2`,
+		orgID, toUserID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -252,12 +376,13 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 	return tx.Commit()
 }
 
-// ListMembers returns an org's members.
+// ListMembers returns an org's active members.
 func (s *Store) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT m.user_id, COALESCE(u.wallet_address,''), m.role, m.added_at
+		`SELECT m.id, m.user_id, COALESCE(u.wallet_address,''), m.role, m.seat_tier, m.status,
+		        m.created_at, m.updated_at
 		 FROM org_members m JOIN users u ON u.id = m.user_id
-		 WHERE m.org_id = $1 ORDER BY m.added_at`, orgID)
+		 WHERE m.org_id = $1 AND m.status = 'active' ORDER BY m.created_at`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +390,8 @@ func (s *Store) ListMembers(ctx context.Context, orgID string) ([]Member, error)
 	var out []Member
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.UserID, &m.WalletAddress, &m.Role, &m.AddedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.UserID, &m.WalletAddress, &m.Role, &m.SeatTier, &m.Status,
+			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -342,10 +468,14 @@ func (s *Store) ListOrgs(ctx context.Context, limit, offset int) ([]Org, error) 
 	return out, rows.Err()
 }
 
-// SetOrgVerified sets the platform verification flag (admin).
-func (s *Store) SetOrgVerified(ctx context.Context, orgID string, verified bool) error {
+// SetOrgVerificationStatus sets the platform verification status (admin).
+func (s *Store) SetOrgVerificationStatus(ctx context.Context, orgID, status string) error {
+	status = strings.TrimSpace(status)
+	if status != OrgVerificationVerified && status != OrgVerificationUnverified && status != OrgVerificationRejected {
+		return fmt.Errorf("invalid verification status")
+	}
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE orgs SET verified=$2, updated_at=now() WHERE id=$1`, orgID, verified)
+		`UPDATE orgs SET verification_status=$2, updated_at=now() WHERE id=$1`, orgID, status)
 	if err != nil {
 		return err
 	}
@@ -355,13 +485,29 @@ func (s *Store) SetOrgVerified(ctx context.Context, orgID string, verified bool)
 	return nil
 }
 
-func normalizeOrgKind(kind string) string {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case OrgKindCompany, OrgKindIndividual, OrgKindFamily, OrgKindTeam:
-		return strings.ToLower(strings.TrimSpace(kind))
-	default:
-		return OrgKindTeam
+var slugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
+
+func (s *Store) resolveOrgSlug(ctx context.Context, requested, name string) (string, error) {
+	base := strings.TrimSpace(requested)
+	if base == "" {
+		base = slugSanitizer.ReplaceAllString(strings.ToLower(name), "-")
+		base = strings.Trim(base, "-")
 	}
+	if base == "" {
+		base = "org"
+	}
+	slug := base
+	for i := 0; i < 5; i++ {
+		var exists bool
+		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM orgs WHERE slug=$1)`, slug).Scan(&exists); err != nil {
+			return "", err
+		}
+		if !exists {
+			return slug, nil
+		}
+		slug = base + "-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	}
+	return "", fmt.Errorf("could not allocate unique slug")
 }
 
 func normalizeOrgRole(role string) string {
@@ -370,6 +516,10 @@ func normalizeOrgRole(role string) string {
 		return OrgRoleOwner
 	case OrgRoleAdmin:
 		return OrgRoleAdmin
+	case OrgRoleNodeOperator:
+		return OrgRoleNodeOperator
+	case OrgRoleViewer:
+		return OrgRoleViewer
 	default:
 		return OrgRoleMember
 	}
