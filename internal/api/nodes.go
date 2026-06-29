@@ -102,7 +102,8 @@ type nodeRegisterReq struct {
 	Zone          string `json:"zone"`
 	APIBaseURL    string `json:"api_base_url"`
 	NodeKey       string `json:"node_key"`
-	AccessMode    string `json:"access_mode"` // public | private
+	AccessMode         string `json:"access_mode"` // public | private
+	DeploymentProfile  string `json:"deployment_profile"`
 }
 
 func (s *Server) nodeChallengeMessage(flowID string) string {
@@ -205,6 +206,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		PeerID: peerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
 		OrgID: resolvedOrgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
+		DeploymentProfile: req.DeploymentProfile,
 	}); err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to register node")

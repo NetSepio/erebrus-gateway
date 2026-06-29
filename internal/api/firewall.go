@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/NetSepio/gateway/internal/nodehub"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func (s *Server) requireNodeOperator(c *gin.Context) (string, bool) {
@@ -63,49 +65,77 @@ func (s *Server) handleFirewallRestart(c *gin.Context) {
 	if _, ok := s.requireNodeOperator(c); !ok {
 		return
 	}
-	svc, err := s.store.UpdateFirewallServiceStatus(c, c.Param("id"), c.Param("nodeId"), store.ServiceStatusActive, nil, nil)
-	if errors.Is(err, store.ErrNotFound) {
+	orgID, nodeID := c.Param("id"), c.Param("nodeId")
+	if _, err := s.store.GetFirewallService(c, orgID, nodeID); errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "firewall service not found")
 		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load firewall")
+		return
 	}
+	sent := s.hub.SendCommand(nodeID, nodehub.ActionRestartFirewall, nil, uuid.NewString())
+	svc, err := s.store.UpdateFirewallServiceStatus(c, orgID, nodeID, store.ServiceStatusActive, nil, nil)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to restart firewall")
 		return
 	}
-	ok(c, http.StatusAccepted, gin.H{"service": svc, "action": "restart"})
+	ok(c, http.StatusAccepted, gin.H{"service": svc, "action": "restart", "node_notified": sent})
 }
 
 func (s *Server) handleFirewallSync(c *gin.Context) {
 	if _, ok := s.requireNodeOperator(c); !ok {
 		return
 	}
-	svc, err := s.store.UpdateFirewallServiceStatus(c, c.Param("id"), c.Param("nodeId"), store.ServiceStatusActive, nil, nil)
+	orgID, nodeID := c.Param("id"), c.Param("nodeId")
+	fw, err := s.store.GetFirewallService(c, orgID, nodeID)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "firewall service not found")
 		return
 	}
 	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load firewall")
+		return
+	}
+	rules, err := s.store.ListFirewallRules(c, orgID, nodeID, fw.Service.ID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load firewall rules")
+		return
+	}
+	payload := store.BuildFirewallSyncPayload(orgID, nodeID, fw, rules)
+	args, err := store.MarshalFirewallSyncPayload(payload)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to build sync payload")
+		return
+	}
+	sent := s.hub.SendCommand(nodeID, nodehub.ActionSyncFirewall, args, uuid.NewString())
+	svc, err := s.store.UpdateFirewallServiceStatus(c, orgID, nodeID, store.ServiceStatusActive, nil, nil)
+	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to sync firewall")
 		return
 	}
-	ok(c, http.StatusAccepted, gin.H{"service": svc, "action": "sync"})
+	ok(c, http.StatusAccepted, gin.H{"service": svc, "action": "sync", "node_notified": sent, "rules": len(payload.Rules)})
 }
 
 func (s *Server) handleFirewallResetCredentials(c *gin.Context) {
 	if _, ok := s.requireNodeOperator(c); !ok {
 		return
 	}
-	empty := ""
-	svc, err := s.store.UpdateFirewallServiceStatus(c, c.Param("id"), c.Param("nodeId"), store.ServiceStatusActive, &empty, &empty)
-	if errors.Is(err, store.ErrNotFound) {
+	orgID, nodeID := c.Param("id"), c.Param("nodeId")
+	if _, err := s.store.GetFirewallService(c, orgID, nodeID); errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "firewall service not found")
 		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load firewall")
+		return
 	}
+	empty := ""
+	sent := s.hub.SendCommand(nodeID, nodehub.ActionResetFirewallCredentials, nil, uuid.NewString())
+	svc, err := s.store.UpdateFirewallServiceStatus(c, orgID, nodeID, store.ServiceStatusActive, &empty, &empty)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to reset credentials")
 		return
 	}
-	ok(c, http.StatusAccepted, gin.H{"service": svc, "action": "reset_credentials"})
+	ok(c, http.StatusAccepted, gin.H{"service": svc, "action": "reset_credentials", "node_notified": sent})
 }
 
 func (s *Server) handleListFirewallRules(c *gin.Context) {

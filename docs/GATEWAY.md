@@ -297,7 +297,7 @@ Items intentionally stubbed or split across gateway + node repos. Implement afte
 | ~~**Node ID duality**~~ | **Fixed:** `peer_id` is canonical in APIs, tokens, WS hub, and discovery; internal UUID retained for DB FKs only | Node installer + `hello` should send `peer_id` as `node_id` (see `ws-protocol.md`) |
 | **Public node access tier** | Stored in `org_entitlements.public_node_access_tier` | Wire into discovery/VPN gating (replace or combine with XP `min_tier`) |
 | **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning should check org seat, not only user trial/NFT |
-| **Firewall runtime** | `/firewall/restart`, `/sync`, `reset-credentials` update gateway metadata | Push rules/config to Shield (AdGuard) and Sentinel (Unbound) on node |
+| ~~**Firewall runtime**~~ | **Fixed:** `/firewall/sync` pushes rules via WS `sync_firewall`; restart/reset-credentials dispatch WS commands | Node proxies to Sentinel API / Shield admin |
 | **Sentinel unlicensed** | `ReconcileUnlicensedSentinel` helper exists | Call when node reports Sentinel without license; surface user message |
 | **Managed provisioning** | DB rows with `managed_by=erebrus`, status `pending`/`provisioning` | SSH/cloud deploy using `NODE_PROVISION_SSH_*` and image env vars |
 | **Registration token lifecycle** | Mint + lookup; `used_at` recorded | Single-use enforcement, list/revoke APIs (optional) |

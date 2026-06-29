@@ -21,7 +21,8 @@ type NodeRegistration struct {
 	Zone       string
 	APIBaseURL string
 	NodeKey    string
-	AccessMode string
+	AccessMode         string
+	DeploymentProfile  string // erebrus | shield | sentinel
 }
 
 // RegisterNode inserts (or updates) the node row keyed by peer_id and returns

@@ -228,6 +228,16 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 	}); err != nil {
 		c.hub.log.Warn("apply hello failed", "peer_id", c.peerID, "err", err)
 	}
+	if h.DeploymentProfile != "" {
+		if err := c.hub.store.UpdateOrgNodeDeploymentProfile(ctx, c.peerID, h.DeploymentProfile); err != nil {
+			c.hub.log.Warn("update deployment profile failed", "peer_id", c.peerID, "err", err)
+		}
+	}
+	if len(h.Services) > 0 {
+		if err := c.hub.store.UpdateNodeServicesFromReport(ctx, c.peerID, h.Services); err != nil {
+			c.hub.log.Warn("apply hello services failed", "peer_id", c.peerID, "err", err)
+		}
+	}
 	c.setRegion(h.Spec.Region)
 	if frame, err := wrap(TypeHelloAck, HelloAck{HeartbeatIntervalSec: heartbeatIntervalSec}); err == nil {
 		select {
@@ -255,6 +265,11 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 		return
 	}
 	_ = c.hub.store.TouchOrgNodeHeartbeat(ctx, c.peerID, time.Now())
+	if len(hb.Services) > 0 {
+		if err := c.hub.store.UpdateNodeServicesFromReport(ctx, c.peerID, hb.Services); err != nil {
+			c.hub.log.Warn("apply heartbeat services failed", "peer_id", c.peerID, "err", err)
+		}
+	}
 	metrics.NodeHeartbeatsTotal.WithLabelValues("success", c.hub.environment).Inc()
 	// Time-series rollup for operator charts (per-minute bucket, last write wins).
 	if internalID, err := c.hub.store.NodeInternalID(ctx, c.peerID); err == nil {

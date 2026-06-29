@@ -164,6 +164,14 @@ Actions (v2.0):
 | `rotate_reality` | `{}` | regenerate REALITY short-ids (keypair kept), rebuild sing-box; node re-sends `hello` with new endpoint data |
 | `resync_peers` | `{"peer_ids": ["...", "..."]}` | authoritative list of active peer ids from the gateway; node deletes local peers not in the list and reports peers it has that are missing (in `command_result.error` as a JSON detail, `ok=true`) |
 | `sync_apps` | `{"apps": [...]}` (Phase 5) | reconcile hosted-apps table; schema frozen in Phase 5 addendum |
+| `sync_firewall` | gateway policy payload (`org_id`, `node_id`, `service_kind`, `rules`, `upstreams`, `licensed`) | node applies rules to Sentinel (Unbound) or clears Shield (AdGuard) cache |
+| `restart_firewall` | `{}` | reload Sentinel Unbound or restart Shield |
+| `reset_firewall_credentials` | `{}` | Shield credential reset hook (operator re-opens AdGuard setup) |
+
+Optional additive fields (v2.0+):
+
+- `hello.deployment_profile` — `erebrus` | `shield` | `sentinel`
+- `hello.services` / `heartbeat.services` — map of service health (`vpn`, `community_firewall`, `erebrus_firewall`)
 
 Unknown actions → `command_result` with `ok=false, error="unknown action"`.
 The node must answer every `command` within 30s or the gateway logs a timeout.

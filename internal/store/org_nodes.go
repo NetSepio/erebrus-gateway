@@ -194,6 +194,7 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 		ON CONFLICT (node_id) DO UPDATE SET
 			org_id = EXCLUDED.org_id,
 			node_name = COALESCE(NULLIF(EXCLUDED.node_name,''), org_nodes.node_name),
+			deployment_profile = COALESCE(NULLIF(EXCLUDED.deployment_profile,''), org_nodes.deployment_profile),
 			node_type = EXCLUDED.node_type,
 			visibility = EXCLUDED.visibility,
 			region = COALESCE(NULLIF(EXCLUDED.region,''), org_nodes.region),
@@ -201,7 +202,7 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 			status = EXCLUDED.status,
 			api_public_url = COALESCE(NULLIF(EXCLUDED.api_public_url,''), org_nodes.api_public_url),
 			updated_at = now()`,
-		orgID, r.PeerID, r.Name, DeploymentProfileErebrus, nodeType, visibility,
+		orgID, r.PeerID, r.Name, NormalizeDeploymentProfile(r.DeploymentProfile), nodeType, visibility,
 		OrgNodeManagedByOrg, r.Region, r.Zone, OrgNodeStatusActive, r.APIBaseURL); err != nil {
 		return "", err
 	}
@@ -222,10 +223,50 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 		return "", err
 	}
 
+	profile := NormalizeDeploymentProfile(r.DeploymentProfile)
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
+	if err := s.attachProfileServices(ctx, orgID, r.PeerID, profile); err != nil {
+		return "", err
+	}
 	return r.PeerID, nil
+}
+
+// NormalizeDeploymentProfile returns a valid deployment profile name.
+func NormalizeDeploymentProfile(profile string) string {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case DeploymentProfileShield, DeploymentProfileSentinel:
+		return strings.ToLower(strings.TrimSpace(profile))
+	default:
+		return DeploymentProfileErebrus
+	}
+}
+
+func (s *Store) attachProfileServices(ctx context.Context, orgID, nodeID, profile string) error {
+	switch profile {
+	case DeploymentProfileShield:
+		return s.attachShieldService(ctx, orgID, nodeID)
+	case DeploymentProfileSentinel:
+		if err := s.attachSentinelService(ctx, orgID, nodeID); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				_, attachErr := s.AttachServiceToNode(ctx, AttachServiceInput{
+					OrgID: orgID, NodeID: nodeID,
+					ServiceType: ServiceTypeErebrusFirewall, ServiceName: ServiceNameErebrusSentinel,
+					ServiceProvider: ServiceProviderUnboundErebrus, Visibility: ServiceVisibilityVPNOnly,
+				})
+				if attachErr == nil {
+					_, _ = s.db.ExecContext(ctx,
+						`UPDATE org_node_services SET service_status=$4, updated_at=now()
+						 WHERE org_id=$1 AND node_id=$2 AND service_type=$3`,
+						orgID, nodeID, ServiceTypeErebrusFirewall, ServiceStatusUnlicensed)
+				}
+				return attachErr
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func defaultIfEmpty(val, fallback string) string {
