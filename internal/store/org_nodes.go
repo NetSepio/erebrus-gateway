@@ -225,7 +225,7 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
-	return runtimeID, nil
+	return r.PeerID, nil
 }
 
 func defaultIfEmpty(val, fallback string) string {

@@ -56,19 +56,28 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 			return
 		}
 	}
+	nodeRef := req.NodeID
+	node, err := s.store.GetNode(c, nodeRef)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "node not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to resolve node")
+		return
+	}
+
 	// Tier-gated premium pool: a node may require a minimum tier to connect.
-	if c.GetString(ctxRole) != token.RoleAdmin {
-		if node, err := s.store.GetNode(c, req.NodeID); err == nil && node.MinTier > 0 {
-			if _, _, tier, _ := s.store.UserXP(c, uid); tier < node.MinTier {
-				fail(c, http.StatusForbidden, "node requires a higher tier")
-				return
-			}
+	if c.GetString(ctxRole) != token.RoleAdmin && node.MinTier > 0 {
+		if _, _, tier, _ := s.store.UserXP(c, uid); tier < node.MinTier {
+			fail(c, http.StatusForbidden, "node requires a higher tier")
+			return
 		}
 	}
 
 	// Reconnect idempotency: same device (WG pubkey) on the same node reuses the
 	// existing gateway client row instead of minting a new peer id on the node.
-	existing, _ := s.store.FindClientByUserNodeWGKey(c, uid, req.NodeID, req.WGPublicKey)
+	existing, _ := s.store.FindClientByUserNodeWGKey(c, uid, node.ID, req.WGPublicKey)
 
 	// Plan client limit (skipped for admin without an active sub row).
 	if sub != nil && existing == nil {
@@ -81,7 +90,7 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 	}
 
 	if c.GetString(ctxRole) != token.RoleAdmin {
-		ok, err := s.store.UserCanProvisionNode(c, req.NodeID, uid)
+		ok, err := s.store.UserCanProvisionNode(c, node.PeerID, uid)
 		if errors.Is(err, store.ErrNotFound) {
 			fail(c, http.StatusNotFound, "node not found")
 			return
@@ -96,7 +105,7 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 		}
 	}
 
-	s.doProvision(c, uid, "", req.NodeID, req.Name, req.WGPublicKey, req.WGPresharedKey)
+	s.doProvision(c, uid, "", node.PeerID, req.Name, req.WGPublicKey, req.WGPresharedKey)
 }
 
 // doProvision performs the node-proxied provisioning steps shared by the user
@@ -121,8 +130,10 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 		fail(c, http.StatusInternalServerError, "failed to resolve node")
 		return
 	}
+	internalID := node.ID
+	peerID := node.PeerID
 
-	baseURL, nodeKey, status, err := s.store.NodeAPI(c, nodeID)
+	baseURL, nodeKey, status, err := s.store.NodeAPI(c, peerID)
 	if errors.Is(err, store.ErrNotFound) {
 		recordVPN("failed")
 		fail(c, http.StatusNotFound, "node not found")
@@ -147,26 +158,26 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 	// Reuse an existing client row for the same device, or commit a new pending row.
 	// Its id is the peer id used on the node.
 	var clientID string
-	if existing, err := s.store.FindClientByUserNodeWGKey(c, uid, nodeID, wgPub); err == nil && existing != nil {
+	if existing, err := s.store.FindClientByUserNodeWGKey(c, uid, internalID, wgPub); err == nil && existing != nil {
 		clientID = existing.ID
-		_ = s.store.DeletePendingClientsByUserNodeWGKey(c, uid, nodeID, wgPub, clientID)
+		_ = s.store.DeletePendingClientsByUserNodeWGKey(c, uid, internalID, wgPub, clientID)
 	} else {
 		var err error
-		clientID, err = s.store.CreateClient(c, uid, org, nodeID, name, wgPub)
+		clientID, err = s.store.CreateClient(c, uid, org, internalID, name, wgPub)
 		if err != nil {
 			recordVPN("failed")
 			fail(c, http.StatusInternalServerError, "failed to create client")
 			return
 		}
 	}
-	gwTok, err := s.tokens.IssueGatewayCall(nodeID, node.PeerID, "peer_upsert")
+	gwTok, err := s.tokens.IssueGatewayCall(peerID, "peer_upsert")
 	if err != nil {
 		recordVPN("failed")
 		fail(c, http.StatusInternalServerError, "failed to sign gateway call")
 		return
 	}
 	peerReq := nodeclient.PeerRequest{Name: name, WGPublicKey: wgPub, WGPresharedKey: wgPSK}
-	bundle, err := s.upsertPeerWithFallback(c, nodeID, baseURL, gwTok, nodeKey, clientID, peerReq)
+	bundle, err := s.upsertPeerWithFallback(c, peerID, baseURL, gwTok, nodeKey, clientID, peerReq)
 	if err != nil {
 		_ = s.store.DeleteClient(c, clientID) // roll back the pending row
 		recordVPN("failed")
@@ -190,7 +201,7 @@ func (s *Server) handleDeleteClient(c *gin.Context) {
 	}
 	if node, err := s.store.GetNode(c, cl.NodeID); err == nil {
 		if baseURL, nodeKey, _, err := s.store.NodeAPI(c, cl.NodeID); err == nil && baseURL != "" {
-			if gwTok, err := s.tokens.IssueGatewayCall(cl.NodeID, node.PeerID, "peer_delete"); err == nil {
+			if gwTok, err := s.tokens.IssueGatewayCall(node.PeerID, "peer_delete"); err == nil {
 				_ = s.nodes.DeletePeer(c, baseURL, gwTok, nodeKey, cl.ID) // best-effort
 			}
 		}
@@ -227,7 +238,7 @@ func (s *Server) handleClientConfig(c *gin.Context) {
 		fail(c, http.StatusBadGateway, "node unreachable")
 		return
 	}
-	gwTok, err := s.tokens.IssueGatewayCall(cl.NodeID, node.PeerID, "peer_credentials")
+	gwTok, err := s.tokens.IssueGatewayCall(node.PeerID, "peer_credentials")
 	if err != nil {
 		recordVPN("failed")
 		fail(c, http.StatusInternalServerError, "failed to sign gateway call")

@@ -222,13 +222,17 @@ func (s *Server) handleDeleteFirewallRule(c *gin.Context) {
 
 func (s *Server) handleNodeHeartbeat(c *gin.Context) {
 	claims, err := s.tokens.Verify(bearer(c))
-	if err != nil || claims.Role != token.RoleNode || claims.NodeID == "" {
+	peerID := nodeTokenPeerID(claims)
+	if err != nil || claims.Role != token.RoleNode || peerID == "" {
 		fail(c, http.StatusUnauthorized, "valid node token required")
 		return
 	}
-	if c.Param("nodeId") != "" && c.Param("nodeId") != claims.NodeID {
-		fail(c, http.StatusForbidden, "node id mismatch")
-		return
+	if param := c.Param("nodeId"); param != "" && param != peerID {
+		// Accept legacy UUID path segments during rollout.
+		if resolved, rerr := s.store.ResolvePeerID(c, param); rerr != nil || resolved != peerID {
+			fail(c, http.StatusForbidden, "node id mismatch")
+			return
+		}
 	}
 	var req struct {
 		Status    string          `json:"status"`
@@ -246,7 +250,7 @@ func (s *Server) handleNodeHeartbeat(c *gin.Context) {
 	if status == "" {
 		status = "online"
 	}
-	if err := s.store.ApplyNodeHeartbeat(c, claims.NodeID, status, req.Load, req.Speedtest, req.RxBytes, req.TxBytes, req.Version); err != nil {
+	if err := s.store.ApplyNodeHeartbeat(c, peerID, status, req.Load, req.Speedtest, req.RxBytes, req.TxBytes, req.Version); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			fail(c, http.StatusNotFound, "node not found")
 			return

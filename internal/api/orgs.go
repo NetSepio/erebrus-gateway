@@ -142,12 +142,19 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 	}
 	var req struct {
 		WalletAddress string `json:"wallet_address"`
+		Email         string `json:"email"`
 		Chain         string `json:"chain"`
 		Role          string `json:"role"`
 		SeatTier      string `json:"seat_tier"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.WalletAddress == "" {
-		fail(c, http.StatusBadRequest, "wallet_address is required")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
+		return
+	}
+	wallet := strings.TrimSpace(req.WalletAddress)
+	email, emailOK := normalizeEmail(req.Email)
+	if wallet == "" && !emailOK {
+		fail(c, http.StatusBadRequest, "wallet_address or email is required")
 		return
 	}
 	role := normalizeMemberRole(req.Role)
@@ -155,18 +162,71 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "use transfer-ownership to change owner")
 		return
 	}
-	u, err := s.store.UpsertUserByWallet(c, req.WalletAddress, req.Chain, "")
+	orgID := c.Param("id")
+	inviterID := userID(c)
+
+	orgName, err := s.store.OrgNameForInvite(c, orgID)
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to resolve user")
+		fail(c, http.StatusInternalServerError, "failed to load org")
 		return
 	}
-	member, err := s.store.InviteMember(c, c.Param("id"), u.ID, role, req.SeatTier)
+	org, err := s.store.GetOrg(c, orgID)
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to invite member")
+		fail(c, http.StatusInternalServerError, "failed to load org")
 		return
 	}
-	member.WalletAddress = u.WalletAddress
-	ok(c, http.StatusCreated, member)
+	inviteURL := strings.TrimRight(s.cfg.ErebrusPublicBaseURL, "/") + "/orgs/" + org.Slug
+
+	var member *store.Member
+	var inviteEmail string
+
+	if emailOK {
+		if _, err := s.store.CreateOrgInvite(c, orgID, email, role, req.SeatTier, inviterID); err != nil {
+			fail(c, http.StatusInternalServerError, "failed to create invite")
+			return
+		}
+		inviteEmail = email
+		if ownerID, err := s.store.EmailOwner(c, email); err == nil {
+			m, err := s.store.InviteMember(c, orgID, ownerID, role, req.SeatTier)
+			if err != nil {
+				fail(c, http.StatusInternalServerError, "failed to invite member")
+				return
+			}
+			member = m
+		}
+	}
+
+	if wallet != "" {
+		u, err := s.store.UpsertUserByWallet(c, wallet, req.Chain, "")
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+		m, err := s.store.InviteMember(c, orgID, u.ID, role, req.SeatTier)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "failed to invite member")
+			return
+		}
+		m.WalletAddress = u.WalletAddress
+		member = m
+		if u.EmailVerified && u.Email != "" {
+			inviteEmail = u.Email
+		}
+	}
+
+	if inviteEmail != "" && s.mailer.Enabled() {
+		if err := s.mailer.SendOrgInvite(c, inviteEmail, orgName, inviteURL); err != nil {
+			fail(c, http.StatusBadGateway, "failed to send invite email")
+			return
+		}
+	}
+
+	s.logActivity(c, inviterID, "org.member.invite", orgID)
+	if member != nil {
+		ok(c, http.StatusCreated, gin.H{"member": member, "email_sent": inviteEmail != "" && s.mailer.Enabled()})
+		return
+	}
+	ok(c, http.StatusCreated, gin.H{"status": "invited", "email": inviteEmail, "email_sent": inviteEmail != "" && s.mailer.Enabled()})
 }
 
 func (s *Server) handleAddMember(c *gin.Context) {

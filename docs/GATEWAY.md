@@ -66,9 +66,13 @@ deploy/               Production docker-compose + OTel collector config
 - **Org nodes:** Control-plane records in `org_nodes` (keyed by `peer_id`) with
   `deployment_profile` (`erebrus` | `shield` | `sentinel`), attached **services**
   (`org_node_services`), and optional Sentinel **firewall rules**.
-- **Runtime nodes:** Operational VPN rows in `nodes` (UUID PK, WS heartbeats). See
-  [Deferred work](#deferred-work-requires-erebrus-node-integration) for how these
-  layers will fully converge.
+- **Runtime nodes:** Operational VPN rows in `nodes` (internal UUID PK; **`peer_id` is
+  the canonical external id** for discovery, org APIs, PASETO claims, WS hub, and
+  REST heartbeat paths). Legacy UUID lookups still resolve during rollout.
+- **Org invites:** Owners/admins invite by `wallet_address` and/or `email`. Resend
+  sends an invite link (`EREBRUS_PUBLIC_BASE_URL/orgs/{slug}`). Email-only invites
+  stay in `org_invites` until the invitee signs in and verifies that email; wallet
+  invites activate on login (or email verify when applicable).
 - **Node enrollment:** Scoped **registration tokens** (`ere_reg_*`), minted per org.
   `POST /api/v2/nodes/register` accepts `registration_token` (legacy alias:
   `enrollment_secret`). Node installer env: `EREBRUS_NODE_REGISTRATION_TOKEN`.
@@ -279,6 +283,7 @@ Applied automatically on startup (`internal/store/migrations/`):
 | 0016 | Org plan model (`orgs` plan/billing/verification, `org_profiles`, `org_members` seat tiers, `org_entitlements`) |
 | 0017 | `org_nodes`, `org_node_services`, `node_registration_tokens`, `sentinel_licenses` |
 | 0018 | `firewall_rules` (Sentinel policy, gateway-managed) |
+| 0019 | `org_invites` (pending email invites until verified) |
 
 ---
 
@@ -289,8 +294,7 @@ Items intentionally stubbed or split across gateway + node repos. Implement afte
 
 | Area | Gateway today | Needs erebrus node |
 |------|---------------|-------------------|
-| **Node ID duality** | `nodes.id` (UUID) for runtime/WS; `org_nodes.node_id` (peer_id) for org APIs | Align installer, WS `hello`, and dashboards on one canonical id |
-| **Heartbeat sync** | WS updates `nodes`; REST `POST /nodes/:id/heartbeat` also touches `org_nodes.last_seen_at` | WS path should update `org_nodes` too |
+| ~~**Node ID duality**~~ | **Fixed:** `peer_id` is canonical in APIs, tokens, WS hub, and discovery; internal UUID retained for DB FKs only | Node installer + `hello` should send `peer_id` as `node_id` (see `ws-protocol.md`) |
 | **Public node access tier** | Stored in `org_entitlements.public_node_access_tier` | Wire into discovery/VPN gating (replace or combine with XP `min_tier`) |
 | **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning should check org seat, not only user trial/NFT |
 | **Firewall runtime** | `/firewall/restart`, `/sync`, `reset-credentials` update gateway metadata | Push rules/config to Shield (AdGuard) and Sentinel (Unbound) on node |
@@ -307,8 +311,12 @@ Items intentionally stubbed or split across gateway + node repos. Implement afte
 Nodes derive from a single BIP39 mnemonic:
 
 1. Wallet keypair — signs registration challenge
-2. libp2p PeerID — stable identity anchor
+2. libp2p PeerID — stable identity anchor and **canonical `node_id`** everywhere external
 3. DID — `did:erebrus:<PeerID>`
+
+Registration returns `node_id` = `peer_id`. Node PASETO claims set both `node_id` and
+`peer_id` to the libp2p id. The gateway keeps an internal UUID in `nodes.id` for
+`vpn_clients` / metrics FKs only.
 
 Public APIs never expose raw node IP; only `ip_hash` (SHA3-256 of IPv4) may appear
 off the authenticated channel. Raw IP is used only on the node↔gateway WS for

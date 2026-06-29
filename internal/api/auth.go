@@ -76,6 +76,10 @@ func (s *Server) handleAuthComplete(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load user")
 		return
 	}
+	_ = s.store.ActivateInvitedMemberships(c, u.ID)
+	if u.EmailVerified && u.Email != "" {
+		_, _ = s.store.AcceptOrgInvitesForEmail(c, u.ID, u.Email)
+	}
 	// Optional referral binding: sets referred_by once (immutable, self-blocked).
 	// XP is awarded later, on the referee's first trial start (the qualifying action).
 	if ref := strings.TrimSpace(req.Ref); ref != "" {

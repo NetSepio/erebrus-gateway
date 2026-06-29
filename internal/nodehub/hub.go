@@ -62,9 +62,9 @@ func (h *Hub) Online() int {
 
 // SendCommand queues a command to a connected node. Returns false if the node
 // is not currently connected.
-func (h *Hub) SendCommand(nodeID, action string, args json.RawMessage, requestID string) bool {
+func (h *Hub) SendCommand(peerID, action string, args json.RawMessage, requestID string) bool {
 	h.mu.RLock()
-	c := h.conns[nodeID]
+	c := h.conns[peerID]
 	h.mu.RUnlock()
 	if c == nil {
 		return false
@@ -82,40 +82,39 @@ func (h *Hub) SendCommand(nodeID, action string, args json.RawMessage, requestID
 }
 
 // Serve upgrades an authenticated request to a node WebSocket and runs the
-// read/write pumps until the connection closes.
-func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, nodeID, peerID string) {
+// read/write pumps until the connection closes. peerID is the canonical node id.
+func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, peerID string) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.log.Warn("node ws upgrade failed", "node_id", nodeID, "err", err)
+		h.log.Warn("node ws upgrade failed", "peer_id", peerID, "err", err)
 		return
 	}
-	c := &conn{nodeID: nodeID, peerID: peerID, ws: ws, send: make(chan []byte, sendQueue), hub: h}
+	c := &conn{peerID: peerID, ws: ws, send: make(chan []byte, sendQueue), hub: h}
 
 	h.mu.Lock()
-	if old := h.conns[nodeID]; old != nil {
+	if old := h.conns[peerID]; old != nil {
 		h.adjustRegionLocked(old.region, -1)
 		close(old.send) // replace a stale connection
 	}
-	h.conns[nodeID] = c
+	h.conns[peerID] = c
 	h.adjustRegionLocked("unknown", 1)
 	h.mu.Unlock()
 
-	h.log.Info("node connected", "node_id", nodeID, "peer_id", peerID)
+	h.log.Info("node connected", "peer_id", peerID)
 	go c.writePump()
 	c.readPump() // blocks until close
 
 	h.mu.Lock()
-	if h.conns[nodeID] == c {
+	if h.conns[peerID] == c {
 		h.adjustRegionLocked(c.region, -1)
-		delete(h.conns, nodeID)
+		delete(h.conns, peerID)
 	}
 	h.mu.Unlock()
 	_ = h.store.SetNodeStatus(context.Background(), peerID, "offline")
-	h.log.Info("node disconnected", "node_id", nodeID, "peer_id", peerID)
+	h.log.Info("node disconnected", "peer_id", peerID)
 }
 
 type conn struct {
-	nodeID string
 	peerID string
 	region string
 	ws     *websocket.Conn
@@ -191,7 +190,7 @@ func (c *conn) readPump() {
 func (c *conn) handle(raw []byte) {
 	var env Envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		c.hub.log.Warn("bad node frame", "node_id", c.nodeID, "err", err)
+		c.hub.log.Warn("bad node frame", "peer_id", c.peerID, "err", err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -207,7 +206,7 @@ func (c *conn) handle(raw []byte) {
 	case TypeCommandResult:
 		var res CommandResult
 		_ = json.Unmarshal(env.Data, &res)
-		c.hub.log.Info("command result", "node_id", c.nodeID, "request_id", res.RequestID, "ok", res.OK, "error", res.Error)
+		c.hub.log.Info("command result", "peer_id", c.peerID, "request_id", res.RequestID, "ok", res.OK, "error", res.Error)
 	default:
 		c.hub.log.Debug("unknown node message", "type", env.Type) // ignore per protocol
 	}
@@ -227,7 +226,7 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 		Spec: spec, Capabilities: caps, Endpoints: eps,
 		Protocols: protocolsFromEndpoints(h.Endpoints),
 	}); err != nil {
-		c.hub.log.Warn("apply hello failed", "node_id", c.nodeID, "err", err)
+		c.hub.log.Warn("apply hello failed", "peer_id", c.peerID, "err", err)
 	}
 	c.setRegion(h.Spec.Region)
 	if frame, err := wrap(TypeHelloAck, HelloAck{HeartbeatIntervalSec: heartbeatIntervalSec}); err == nil {
@@ -251,16 +250,19 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 	st, _ := json.Marshal(hb.Speedtest)
 	if err := c.hub.store.ApplyHeartbeat(ctx, c.peerID, status, load, st,
 		hb.Load.RxBytes, hb.Load.TxBytes, hb.Versions["node"]); err != nil {
-		c.hub.log.Warn("apply heartbeat failed", "node_id", c.nodeID, "err", err)
+		c.hub.log.Warn("apply heartbeat failed", "peer_id", c.peerID, "err", err)
 		metrics.NodeHeartbeatsTotal.WithLabelValues("failed", c.hub.environment).Inc()
 		return
 	}
+	_ = c.hub.store.TouchOrgNodeHeartbeat(ctx, c.peerID, time.Now())
 	metrics.NodeHeartbeatsTotal.WithLabelValues("success", c.hub.environment).Inc()
 	// Time-series rollup for operator charts (per-minute bucket, last write wins).
-	if err := c.hub.store.RecordNodeMetrics(ctx, c.nodeID, time.Now(),
-		hb.Load.WGPeers, hb.Load.ProxySessions, hb.Load.RxBytes, hb.Load.TxBytes,
-		hb.Load.CPUPct, hb.Load.MemPct); err != nil {
-		c.hub.log.Warn("record node metrics failed", "node_id", c.nodeID, "err", err)
+	if internalID, err := c.hub.store.NodeInternalID(ctx, c.peerID); err == nil {
+		if err := c.hub.store.RecordNodeMetrics(ctx, internalID, time.Now(),
+			hb.Load.WGPeers, hb.Load.ProxySessions, hb.Load.RxBytes, hb.Load.TxBytes,
+			hb.Load.CPUPct, hb.Load.MemPct); err != nil {
+			c.hub.log.Warn("record node metrics failed", "peer_id", c.peerID, "err", err)
+		}
 	}
 }
 

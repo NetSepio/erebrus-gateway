@@ -95,7 +95,7 @@ func (s *Store) NodeOperatedBy(ctx context.Context, nodeID, userID string) (bool
 		`SELECT EXISTS(
 		   SELECT 1 FROM nodes n
 		   JOIN org_members m ON m.org_id = n.org_id
-		   WHERE n.id = $1 AND m.user_id = $2)`, nodeID, userID).Scan(&ok)
+		   WHERE (n.peer_id = $1 OR n.id::text = $1) AND m.user_id = $2)`, nodeID, userID).Scan(&ok)
 	return ok, err
 }
 
@@ -105,7 +105,7 @@ func (s *Store) UserCanProvisionNode(ctx context.Context, nodeID, userID string)
 	var access string
 	var orgID sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(access_mode,'public'), org_id::text FROM nodes WHERE id=$1`, nodeID).
+		`SELECT COALESCE(access_mode,'public'), org_id::text FROM nodes WHERE peer_id=$1 OR id::text=$1`, nodeID).
 		Scan(&access, &orgID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, ErrNotFound

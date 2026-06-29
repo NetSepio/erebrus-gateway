@@ -48,7 +48,7 @@ type nodePublic struct {
 
 func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
 	return nodePublic{
-		NodeID: n.ID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
+		NodeID: n.PeerID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, MinTier: n.MinTier,
 		Protocols: n.Protocols, Capabilities: n.Capabilities,
 		Endpoints: enrichEndpointsForDiscovery(n.Endpoints, n.IP), Speedtest: n.Speedtest,
@@ -200,17 +200,17 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	}
 
 	env := s.cfg.Environment
-	nodeID, err := s.store.RegisterOrgNodeFromRuntime(c, resolvedOrgID, regTokenID, store.NodeRegistration{
-		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
+	peerID := strings.TrimSpace(req.PeerID)
+	if _, err := s.store.RegisterOrgNodeFromRuntime(c, resolvedOrgID, regTokenID, store.NodeRegistration{
+		PeerID: peerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
 		OrgID: resolvedOrgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
-	})
-	if err != nil {
+	}); err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to register node")
 		return
 	}
-	nodeTok, err := s.tokens.IssueNode(nodeID, req.PeerID)
+	nodeTok, err := s.tokens.IssueNode(peerID)
 	if err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to issue node token")
@@ -219,7 +219,8 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	metrics.NodeRegistrationsTotal.WithLabelValues("success", env).Inc()
 	ok(c, http.StatusOK, gin.H{
 		"node_token":         nodeTok,
-		"node_id":            nodeID,
+		"node_id":            peerID,
+		"peer_id":            peerID,
 		"node_key":           nodeKey,
 		"gateway_public_key": s.tokens.PublicKeyHex(),
 	})
@@ -229,11 +230,23 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 // in the Authorization header of the upgrade request.
 func (s *Server) handleNodeWS(c *gin.Context) {
 	claims, err := s.tokens.Verify(bearer(c))
-	if err != nil || claims.Role != token.RoleNode || claims.NodeID == "" {
+	peerID := nodeTokenPeerID(claims)
+	if err != nil || claims.Role != token.RoleNode || peerID == "" {
 		fail(c, http.StatusUnauthorized, "valid node token required")
 		return
 	}
-	s.hub.Serve(c.Writer, c.Request, claims.NodeID, claims.PeerID)
+	s.hub.Serve(c.Writer, c.Request, peerID)
+}
+
+// nodeTokenPeerID returns the canonical peer_id from node or gateway-call claims.
+func nodeTokenPeerID(claims *token.Claims) string {
+	if claims == nil {
+		return ""
+	}
+	if claims.PeerID != "" {
+		return claims.PeerID
+	}
+	return claims.NodeID
 }
 
 // handleAdminNodes lists all nodes with full detail (admin).
@@ -259,7 +272,16 @@ func (s *Server) handleAdminNodeCommand(c *gin.Context) {
 		return
 	}
 	reqID := uuid.NewString()
-	if !s.hub.SendCommand(c.Param("id"), req.Action, req.Args, reqID) {
+	peerID, err := s.store.ResolvePeerID(c, c.Param("id"))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusNotFound, "node not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "failed to resolve node")
+		return
+	}
+	if !s.hub.SendCommand(peerID, req.Action, req.Args, reqID) {
 		fail(c, http.StatusConflict, "node not connected")
 		return
 	}

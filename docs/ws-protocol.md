@@ -19,10 +19,11 @@ below and compare them field-for-field. Change this file first, then both repos.
   `POST /api/v2/orgs/{org_id}/node-registration-tokens`.
   The gateway returns a machine challenge; the node signs it with its
   mnemonic-derived wallet key (not the human EULA auth flow). The gateway
-  responds with `{ node_token (PASETO role=node), node_id, node_key,
-  gateway_public_key }`.
-- Optional REST heartbeat: `POST /api/v2/nodes/{node_id}/heartbeat` with the same
+  responds with `{ node_token (PASETO role=node), node_id (= peer_id), peer_id,
+  node_key, gateway_public_key }`.
+- Optional REST heartbeat: `POST /api/v2/nodes/{peer_id}/heartbeat` with the same
   node PASETO (updates runtime `nodes` row and `org_nodes.last_seen_at` when linked).
+  WS heartbeats also touch `org_nodes.last_seen_at`.
 - Encoding: one JSON object per WebSocket text frame. Every frame has the
   envelope `{"type": "<message-type>", "data": {...}}`.
 - Direction: the node dials the gateway. The node reconnects with exponential
@@ -40,7 +41,7 @@ below and compare them field-for-field. Change this file first, then both repos.
 {
   "type": "hello",
   "data": {
-    "node_id": "9d3b0d5e-3a3c-4b9e-9a31-0c5a9f0e6c11",
+    "node_id": "12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK",
     "version": "2.0.0",
     "identity": {
       "peer_id": "12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK",

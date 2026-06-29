@@ -45,6 +45,16 @@ func New(apiKey, from string) *Mailer {
 // Enabled reports whether an API key is configured.
 func (m *Mailer) Enabled() bool { return m != nil && m.apiKey != "" }
 
+// SendOrgInvite emails an org membership invitation with a link to sign in.
+func (m *Mailer) SendOrgInvite(ctx context.Context, to, orgName, inviteURL string) error {
+	subject := fmt.Sprintf("You've been invited to %s on Erebrus", orgName)
+	text := fmt.Sprintf("You've been invited to join %s on Erebrus.\n\nSign in with your wallet and verify your email to accept:\n%s\n\nIf you didn't expect this invitation, you can ignore this email.", orgName, inviteURL)
+	html := fmt.Sprintf(`<p>You've been invited to join <strong>%s</strong> on Erebrus.</p>`+
+		`<p><a href="%s">Sign in and accept your invitation</a></p>`+
+		`<p>If you didn't expect this invitation, you can ignore this email.</p>`, orgName, inviteURL)
+	return m.send(ctx, to, subject, text, html)
+}
+
 // SendOTP emails a 6-digit verification code.
 func (m *Mailer) SendOTP(ctx context.Context, to, code string) error {
 	subject := "Your Erebrus verification code"

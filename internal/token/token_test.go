@@ -38,7 +38,7 @@ func TestUserTokenRoundTrip(t *testing.T) {
 
 func TestGatewayCallTokenRoundTrip(t *testing.T) {
 	m := newTestManager(t, time.Hour)
-	tok, err := m.IssueGatewayCall("node-1", "12D3KooW", "peer_upsert")
+	tok, err := m.IssueGatewayCall("12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK", "peer_upsert")
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -46,7 +46,8 @@ func TestGatewayCallTokenRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if claims.Role != RoleGatewayCall || claims.NodeID != "node-1" || claims.Purpose != "peer_upsert" {
+	peerID := "12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK"
+	if claims.Role != RoleGatewayCall || claims.NodeID != peerID || claims.PeerID != peerID || claims.Purpose != "peer_upsert" {
 		t.Fatalf("gateway call claims mismatch: %+v", claims)
 	}
 	if m.PublicKeyHex() == "" {
@@ -56,12 +57,13 @@ func TestGatewayCallTokenRoundTrip(t *testing.T) {
 
 func TestNodeTokenRoundTrip(t *testing.T) {
 	m := newTestManager(t, time.Hour)
-	tok, _ := m.IssueNode("node-1", "12D3KooW")
+	peerID := "12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK"
+	tok, _ := m.IssueNode(peerID)
 	claims, err := m.Verify(tok)
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if claims.Role != RoleNode || claims.NodeID != "node-1" || claims.PeerID != "12D3KooW" {
+	if claims.Role != RoleNode || claims.NodeID != peerID || claims.PeerID != peerID {
 		t.Fatalf("node claims mismatch: %+v", claims)
 	}
 }
