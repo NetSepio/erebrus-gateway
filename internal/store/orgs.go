@@ -35,6 +35,70 @@ func (s *Store) CreateOrgForUser(ctx context.Context, userID string, in CreateOr
 	return s.createOrg(ctx, userID, in, OrgPlanBasic)
 }
 
+// EnsurePersonalOrg guarantees the user owns at least one org: if they own none,
+// it creates a personal workspace on the basic plan. Idempotent. Returns the org
+// and whether it was just created. Every user gets a basic-plan org at first
+// login; they may create more orgs or have an admin upgrade this one's plan.
+func (s *Store) EnsurePersonalOrg(ctx context.Context, userID, walletAddress string) (*Org, bool, error) {
+	var existingID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id::text FROM orgs WHERE owner_user_id = $1::uuid ORDER BY created_at ASC LIMIT 1`,
+		userID).Scan(&existingID)
+	if err == nil {
+		org, gerr := s.GetOrg(ctx, existingID)
+		return org, false, gerr
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, err
+	}
+	org, err := s.createOrg(ctx, userID, CreateOrgInput{Name: personalOrgName(walletAddress)}, OrgPlanBasic)
+	if err != nil {
+		return nil, false, err
+	}
+	return org, true, nil
+}
+
+// UserOrgVPNPlan returns the highest paid org plan that entitles the user to VPN,
+// or "" if none. A paid-plan org grants VPN to its seated members: the owner
+// (always) and any member holding a paid seat (org_members.seat_tier <> 'free',
+// assigned by an admin up to org_entitlements.paid_seats_included). Members
+// without a seat fall back to their personal trial/NFT. The manual seat
+// assignment is the single source of truth (CountPaidSeatsUsed == VPN-entitled
+// members). Independent of the per-user subscription.
+func (s *Store) UserOrgVPNPlan(ctx context.Context, userID string) (string, error) {
+	var plan string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT o.plan
+		 FROM org_members m
+		 JOIN orgs o ON o.id = m.org_id
+		 WHERE m.user_id = $1::uuid AND m.status = 'active'
+		   AND o.billing_status = $2
+		   AND o.plan IN ('starter','pro','business','enterprise')
+		   AND (m.role = 'owner' OR m.seat_tier <> 'free')
+		 ORDER BY array_position(ARRAY['starter','pro','business','enterprise'], o.plan) DESC
+		 LIMIT 1`, userID, OrgBillingActive).Scan(&plan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return plan, nil
+}
+
+// personalOrgName derives a readable default name for a user's personal org.
+func personalOrgName(wallet string) string {
+	w := strings.TrimSpace(wallet)
+	switch {
+	case len(w) >= 10:
+		return "Workspace " + w[:6] + "…" + w[len(w)-4:]
+	case w != "":
+		return "Workspace " + w
+	default:
+		return "Personal Workspace"
+	}
+}
+
 // createOrg is the internal org creation flow.
 func (s *Store) createOrg(ctx context.Context, ownerUserID string, in CreateOrgInput, plan string) (*Org, error) {
 	name := strings.TrimSpace(in.Name)
@@ -85,7 +149,7 @@ func (s *Store) createOrg(ctx context.Context, ownerUserID string, in CreateOrgI
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO org_members (org_id, user_id, role, seat_tier, status)
 		 VALUES ($1, $2, $3, $4, $5)`,
-		o.ID, ownerUserID, OrgRoleOwner, SeatTierFree, MemberStatusActive); err != nil {
+		o.ID, ownerUserID, OrgRoleOwner, ownerSeatTierForPlan(plan), MemberStatusActive); err != nil {
 		return nil, err
 	}
 
@@ -145,10 +209,34 @@ func (s *Store) SetOrgPlan(ctx context.Context, orgID, plan string) (*Org, error
 		return nil, err
 	}
 
+	// Owner occupies one seat on a paid plan (so "seats used" counts the owner and
+	// starter = owner-only); basic resets the owner to a free seat.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE org_members m SET seat_tier=$2, updated_at=now()
+		 FROM orgs o
+		 WHERE o.id = m.org_id AND m.org_id=$1 AND m.user_id=o.owner_user_id AND m.status='active'`,
+		orgID, ownerSeatTierForPlan(plan)); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &o, nil
+}
+
+// DeleteOrg permanently removes an org. Child rows (members, entitlements,
+// profiles, nodes records, api keys, invites, firewall rules) cascade; runtime
+// nodes are detached (nodes.org_id ON DELETE SET NULL) and keep running.
+func (s *Store) DeleteOrg(ctx context.Context, orgID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM orgs WHERE id=$1::uuid`, orgID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // AssignSeat assigns a paid seat tier to a member.
@@ -191,8 +279,12 @@ func (s *Store) AssignSeat(ctx context.Context, orgID, userID, seatTier string) 
 	if curTier == SeatTierFree && used >= ent.PaidSeatsIncluded {
 		return fmt.Errorf("no paid seats remaining")
 	}
+	// A seat grants manager (admin) access alongside VPN entitlement; the owner's
+	// role is never downgraded by this.
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE org_members SET seat_tier=$3, updated_at=now()
+		`UPDATE org_members SET seat_tier=$3,
+		   role = CASE WHEN role='owner' THEN role ELSE 'admin' END,
+		   updated_at=now()
 		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
 		orgID, userID, seatTier)
 	return err
@@ -200,17 +292,25 @@ func (s *Store) AssignSeat(ctx context.Context, orgID, userID, seatTier string) 
 
 // RevokeSeat removes a paid seat from a member.
 func (s *Store) RevokeSeat(ctx context.Context, orgID, userID string) error {
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE org_members SET seat_tier=$3, updated_at=now()
-		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
-		orgID, userID, SeatTierFree)
+	var role string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
+	if role == OrgRoleOwner {
+		return fmt.Errorf("cannot revoke the owner's seat")
 	}
-	return nil
+	// Revoking a seat removes VPN entitlement and the manager role together.
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE org_members SET seat_tier=$3, role='member', updated_at=now()
+		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID, SeatTierFree)
+	return err
 }
 
 // GetOrg returns an org by id.

@@ -124,6 +124,23 @@ func (s *Server) handlePatchOrg(c *gin.Context) {
 	ok(c, http.StatusOK, orgResponse(org, store.IsOrgPrivileged(role)))
 }
 
+// handleDeleteOrg permanently deletes an org. Owner only — managers (admins)
+// cannot delete; runtime nodes are detached and keep running.
+func (s *Server) handleDeleteOrg(c *gin.Context) {
+	if !s.orgOwner(c) {
+		return
+	}
+	if err := s.store.DeleteOrg(c, c.Param("id")); errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "org not found")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to delete org")
+		return
+	}
+	s.logActivity(c, userID(c), "org.delete", c.Param("id"))
+	c.Status(http.StatusNoContent)
+}
+
 func (s *Server) handleListMembers(c *gin.Context) {
 	if _, ok := s.orgMember(c); !ok {
 		return
@@ -490,7 +507,9 @@ func (s *Server) handleAdminOrgs(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(orgs))
 	for i := range orgs {
-		out = append(out, orgResponse(&orgs[i], false))
+		// Admin context: expose org id (+ owner) so the console can target
+		// per-org actions like plan assignment and verification.
+		out = append(out, orgResponse(&orgs[i], true))
 	}
 	ok(c, http.StatusOK, gin.H{"orgs": out, "limit": limit, "offset": offset})
 }
@@ -657,7 +676,7 @@ func (s *Server) handleRevokeSeat(c *gin.Context) {
 		fail(c, http.StatusNotFound, "member not found")
 		return
 	} else if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to revoke seat")
+		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	ok(c, http.StatusOK, gin.H{"user_id": req.UserID, "seat_tier": store.SeatTierFree})

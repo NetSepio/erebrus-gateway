@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/wallet"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -81,17 +82,44 @@ func (s *Server) handleAuthComplete(c *gin.Context) {
 		_, _ = s.store.AcceptOrgInvitesForEmail(c, u.ID, u.Email)
 	}
 	// Optional referral binding: sets referred_by once (immutable, self-blocked).
-	// XP is awarded later, on the referee's first trial start (the qualifying action).
+	// Must precede the trial below so the qualifying trial awards referral XP.
 	if ref := strings.TrimSpace(req.Ref); ref != "" {
 		if referrerID, err := s.store.UserIDByReferralCode(c, ref); err == nil {
 			_, _ = s.store.BindReferrer(c, u.ID, referrerID)
 		}
 	}
+	s.bootstrapUser(c, u)
 	tok, err := s.tokens.IssueUser(u.ID, u.WalletAddress, u.Chain, u.Role)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to issue token")
 		return
 	}
 	s.logActivity(c, u.ID, "auth.login", "") // audit (this route is public, no middleware)
+	ok(c, http.StatusOK, gin.H{"token": tok, "user_id": u.ID, "role": u.Role})
+}
+
+// bootstrapUser runs the shared first-login bootstrap for any identity (wallet,
+// email, Google, Apple): ensure the user owns a personal basic-plan org and, when
+// it was just created, grant the automatic 7-day VPN trial. Best-effort — login
+// proceeds even if this fails, and the one-trial-per-user index makes a re-grant
+// a no-op.
+func (s *Server) bootstrapUser(c *gin.Context, u *store.User) {
+	if _, created, _ := s.store.EnsurePersonalOrg(c, u.ID, u.WalletAddress); created {
+		s.logActivity(c, u.ID, "org.create", "")
+		if _, err := s.store.StartTrial(c, u.ID, "pro", s.platform.Snapshot().TrialPeriod); err == nil {
+			s.awardReferralXP(c, u.ID)
+			s.logActivity(c, u.ID, "subscription.trial", "")
+		}
+	}
+}
+
+// issueAndRespond writes the standard login response for a resolved user.
+func (s *Server) issueAndRespond(c *gin.Context, u *store.User, method string) {
+	tok, err := s.tokens.IssueUser(u.ID, u.WalletAddress, u.Chain, u.Role)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to issue token")
+		return
+	}
+	s.logActivity(c, u.ID, "auth.login."+method, "")
 	ok(c, http.StatusOK, gin.H{"token": tok, "user_id": u.ID, "role": u.Role})
 }

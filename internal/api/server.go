@@ -10,6 +10,7 @@ import (
 	"github.com/NetSepio/gateway/internal/nftgate"
 	"github.com/NetSepio/gateway/internal/nodeclient"
 	"github.com/NetSepio/gateway/internal/nodehub"
+	"github.com/NetSepio/gateway/internal/oauth"
 	"github.com/NetSepio/gateway/internal/socialverify"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
@@ -30,6 +31,8 @@ type Server struct {
 	nft      nftgate.Checker
 	mailer   *mailer.Mailer
 	xverify  *socialverify.XVerifier
+	google   *oauth.Verifier
+	apple    *oauth.Verifier
 }
 
 // New builds the API server. platform is the live DB-backed settings object
@@ -43,6 +46,8 @@ func New(cfg *config.Config, platform *config.PlatformSettings, st *store.Store,
 	return &Server{
 		cfg: cfg, platform: platform, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(),
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(p.XAPIBaseURL),
+		google: oauth.NewGoogle(splitCSVRaw(cfg.GoogleClientIDs)),
+		apple:  oauth.NewApple(splitCSVRaw(cfg.AppleClientIDs)),
 	}
 }
 
@@ -79,9 +84,16 @@ func (s *Server) Router() *gin.Engine {
 	{
 		auth.GET("", s.handleAuthChallenge)
 		auth.POST("", s.handleAuthComplete)
+		// which login methods are configured (so clients hide the rest cleanly)
+		auth.GET("/methods", s.handleAuthMethods)
 		// optional email linking (authenticated wallet session; verified OTP)
 		auth.POST("/email", s.authUser(), s.handleEmailOTPStart)
 		auth.POST("/email/verify", s.authUser(), s.handleEmailOTPVerify)
+		// passwordless / OIDC login (public; resolve-or-create by verified identity)
+		auth.POST("/email/login/start", s.handleEmailLoginStart)
+		auth.POST("/email/login/verify", s.handleEmailLoginVerify)
+		auth.POST("/google", s.handleGoogleAuth)
+		auth.POST("/apple", s.handleAppleAuth)
 	}
 
 	// node discovery (public) + control plane
@@ -105,6 +117,7 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/account/profile", s.handleGetProfile)
 		user.PATCH("/account/profile", s.handlePatchProfile)
 		user.GET("/account/activity", s.handleAccountActivity)
+		user.POST("/account/wallet", s.handleLinkWallet)
 
 		user.GET("/vpn/clients", s.handleListClients)
 		user.POST("/vpn/clients", s.handleProvisionClient)
@@ -128,6 +141,8 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/social/accounts", s.handleSocialAccounts)
 		user.POST("/social/telegram", s.handleVerifyTelegram)
 		user.POST("/social/x", s.handleVerifyX)
+		user.POST("/social/google", s.handleLinkGoogle)
+		user.POST("/social/apple", s.handleLinkApple)
 
 		// perks: catalog (tier-annotated) + my granted perks
 		user.GET("/perks", s.handleListPerks)
@@ -143,6 +158,7 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/orgs", s.handleListOrgs)
 		user.GET("/orgs/:id", s.handleGetOrg)
 		user.PATCH("/orgs/:id", s.handlePatchOrg)
+		user.DELETE("/orgs/:id", s.handleDeleteOrg)
 		user.GET("/orgs/:id/entitlements", s.handleGetOrgEntitlements)
 		user.GET("/orgs/:id/profile", s.handleGetOrgProfile)
 		user.PATCH("/orgs/:id/profile", s.handlePatchOrgProfile)

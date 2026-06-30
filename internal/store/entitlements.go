@@ -40,7 +40,10 @@ func PlanEntitlementTemplates() map[string]PlanEntitlementTemplate {
 			AuditLogsEnabled: true, AdvancedAnalyticsEnabled: true,
 		},
 		OrgPlanEnterprise: {
-			Plan: OrgPlanEnterprise, SupportTier: "enterprise",
+			// Effectively unlimited seats/managed nodes (custom/negotiated plan).
+			Plan: OrgPlanEnterprise, PaidSeatsIncluded: 100000, ManagedVPNNodesIncluded: 100000,
+			ShieldInstancesIncluded: 100000, SentinelLicensesIncluded: 100000,
+			PublicNodeAccessTier: "enterprise", SupportTier: "enterprise",
 			AuditLogsEnabled: true, AdvancedAnalyticsEnabled: true,
 		},
 	}
@@ -82,6 +85,23 @@ func seatTierRank(tier string) int {
 }
 
 func maxSeatTierForPlan(plan string) string {
+	switch plan {
+	case OrgPlanStarter:
+		return SeatTierStarter
+	case OrgPlanPro:
+		return SeatTierPro
+	case OrgPlanBusiness:
+		return SeatTierBusiness
+	case OrgPlanEnterprise:
+		return SeatTierEnterprise
+	default:
+		return SeatTierFree
+	}
+}
+
+// ownerSeatTierForPlan is the seat tier the org owner occupies on a given plan:
+// the matching paid tier, or free on basic (paid tiers share names with plans).
+func ownerSeatTierForPlan(plan string) string {
 	switch plan {
 	case OrgPlanStarter:
 		return SeatTierStarter

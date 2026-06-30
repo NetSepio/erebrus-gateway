@@ -49,6 +49,11 @@ type Config struct {
 	ResendAPIKey     string `env:"RESEND_API_KEY"`
 	ResendFrom       string `env:"RESEND_FROM" envDefault:"Erebrus <no-reply@info.erebrus.io>"`
 
+	// OIDC login: CSV of accepted client-id audiences across web/iOS/Android.
+	// Empty disables the provider's login/link endpoints (503).
+	GoogleClientIDs string `env:"GOOGLE_CLIENT_IDS"`
+	AppleClientIDs  string `env:"APPLE_CLIENT_IDS"`
+
 	// managed node / service provisioning
 	ManagedNodeProvisioningEnabled bool   `env:"MANAGED_NODE_PROVISIONING_ENABLED" envDefault:"false"`
 	ManagedNodeDefaultRegion       string `env:"MANAGED_NODE_DEFAULT_REGION" envDefault:"unknown"`

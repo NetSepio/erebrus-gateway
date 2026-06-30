@@ -41,23 +41,10 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 		return
 	}
 	uid := userID(c)
+	isAdmin := c.GetString(ctxRole) == token.RoleAdmin
 
-	// Entitlement: active subscription/trial, or admin role.
-	var sub *store.Subscription
-	if c.GetString(ctxRole) != token.RoleAdmin {
-		var err error
-		sub, err = s.store.ActiveSubscription(c, uid)
-		if errors.Is(err, store.ErrNotFound) {
-			fail(c, http.StatusPaymentRequired, "no active subscription — renew on erebrus.io or hold the gating NFT")
-			return
-		}
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "entitlement check failed")
-			return
-		}
-	}
-	nodeRef := req.NodeID
-	node, err := s.store.GetNode(c, nodeRef)
+	// Resolve the node first; entitlement depends on its access mode.
+	node, err := s.store.GetNode(c, req.NodeID)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "node not found")
 		return
@@ -67,8 +54,45 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 		return
 	}
 
+	// Entitlement:
+	//   - admin: always.
+	//   - private node: any member of the node's org (membership covers the org's
+	//     own private nodes — no trial/seat needed).
+	//   - public node: an active subscription (trial/NFT) or a paid org seat.
+	var sub *store.Subscription
+	if !isAdmin {
+		if node.AccessMode == store.NodeAccessPrivate {
+			member, err := s.store.UserCanProvisionNode(c, node.PeerID, uid)
+			if err != nil {
+				fail(c, http.StatusInternalServerError, "node access check failed")
+				return
+			}
+			if !member {
+				fail(c, http.StatusForbidden, "private node — org membership required")
+				return
+			}
+		} else {
+			sub, err = s.store.ActiveSubscription(c, uid)
+			if errors.Is(err, store.ErrNotFound) {
+				orgPlan, perr := s.store.UserOrgVPNPlan(c, uid)
+				if perr != nil {
+					fail(c, http.StatusInternalServerError, "entitlement check failed")
+					return
+				}
+				if orgPlan == "" {
+					fail(c, http.StatusPaymentRequired, "your trial has ended — contact support to upgrade your plan, or hold the access NFT")
+					return
+				}
+				// Entitled via an org seat; sub stays nil (no per-subscription client cap).
+			} else if err != nil {
+				fail(c, http.StatusInternalServerError, "entitlement check failed")
+				return
+			}
+		}
+	}
+
 	// Tier-gated premium pool: a node may require a minimum tier to connect.
-	if c.GetString(ctxRole) != token.RoleAdmin && node.MinTier > 0 {
+	if !isAdmin && node.MinTier > 0 {
 		if _, _, tier, _ := s.store.UserXP(c, uid); tier < node.MinTier {
 			fail(c, http.StatusForbidden, "node requires a higher tier")
 			return
@@ -79,29 +103,13 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 	// existing gateway client row instead of minting a new peer id on the node.
 	existing, _ := s.store.FindClientByUserNodeWGKey(c, uid, node.ID, req.WGPublicKey)
 
-	// Plan client limit (skipped for admin without an active sub row).
+	// Plan client limit (only when entitled via a subscription that carries a cap).
 	if sub != nil && existing == nil {
 		if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {
 			if n, _ := s.store.CountActiveClientsByUser(c, uid); n >= plan.MaxClients {
 				fail(c, http.StatusConflict, "client limit reached for your plan")
 				return
 			}
-		}
-	}
-
-	if c.GetString(ctxRole) != token.RoleAdmin {
-		ok, err := s.store.UserCanProvisionNode(c, node.PeerID, uid)
-		if errors.Is(err, store.ErrNotFound) {
-			fail(c, http.StatusNotFound, "node not found")
-			return
-		}
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "node access check failed")
-			return
-		}
-		if !ok {
-			fail(c, http.StatusForbidden, "private node — org membership required")
-			return
 		}
 	}
 
