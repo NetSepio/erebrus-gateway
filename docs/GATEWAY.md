@@ -77,9 +77,11 @@ deploy/               Production docker-compose + OTel collector config
   `POST /api/v2/nodes/register` accepts `registration_token` (legacy alias:
   `enrollment_secret`). Node installer env: `EREBRUS_NODE_REGISTRATION_TOKEN`.
   Two-step machine challenge → node PASETO + per-node `node_key`.
-- **Plans (gateway-side today):** Entitlement limits and managed-node **reservations**
-  in DB on admin plan change. Shield/Sentinel lifecycle metadata via generic
-  `/firewall/*` APIs. Actual deploy and runtime sync deferred (see below).
+- **Plans (gateway-side today):** Entitlement limits update on admin plan change.
+  Managed-node **reservations** in `org_nodes` are created only when
+  `MANAGED_NODE_PROVISIONING_ENABLED=true`; otherwise self-hosted nodes use plan
+  entitlements directly. Shield/Sentinel lifecycle metadata via generic `/firewall/*`
+  APIs. Actual deploy and runtime sync deferred (see below).
 - **Social layer:** Referrals, XP/tiers, leaderboard, X/Telegram/email verify, perks.
 - **Activity log:** Authenticated mutations logged with IP + device for user visibility.
 
