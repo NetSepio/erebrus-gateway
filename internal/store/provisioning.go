@@ -15,7 +15,12 @@ type ProvisioningConfig struct {
 }
 
 // ProvisionIncludedPlanResources creates or reserves plan-included nodes and services.
+// Managed node rows are only created when cfg.Enabled is true (MANAGED_NODE_PROVISIONING_ENABLED).
+// Otherwise entitlements from SetOrgPlan are sufficient for self-hosted nodes.
 func (s *Store) ProvisionIncludedPlanResources(ctx context.Context, orgID, plan string, cfg ProvisioningConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
 	plan, err := normalizeOrgPlan(plan)
 	if err != nil {
 		return err
