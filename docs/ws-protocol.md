@@ -13,11 +13,17 @@ below and compare them field-for-field. Change this file first, then both repos.
 - Auth: node-scoped PASETO bearer token in the `Authorization` header of the
   upgrade request. Tokens are issued by the HTTPS registration flow
   (`POST /api/v2/nodes/register`, see `docs/gateway-api.openapi.yaml`): gated by
-  the org `enrollment_secret` (`EREBRUS_ORG_ENROLLMENT_SECRET` on the node).
+  a scoped org **registration token** (`registration_token` in JSON; legacy alias
+  `enrollment_secret`). On the node, set `EREBRUS_NODE_REGISTRATION_TOKEN` (replaces
+  `EREBRUS_ORG_ENROLLMENT_SECRET`). Tokens are minted via
+  `POST /api/v2/orgs/{org_id}/node-registration-tokens`.
   The gateway returns a machine challenge; the node signs it with its
   mnemonic-derived wallet key (not the human EULA auth flow). The gateway
-  responds with `{ node_token (PASETO role=node), node_id, node_key,
-  gateway_public_key }`.
+  responds with `{ node_token (PASETO role=node), node_id (= peer_id), peer_id,
+  node_key, gateway_public_key }`.
+- Optional REST heartbeat: `POST /api/v2/nodes/{peer_id}/heartbeat` with the same
+  node PASETO (updates runtime `nodes` row and `org_nodes.last_seen_at` when linked).
+  WS heartbeats also touch `org_nodes.last_seen_at`.
 - Encoding: one JSON object per WebSocket text frame. Every frame has the
   envelope `{"type": "<message-type>", "data": {...}}`.
 - Direction: the node dials the gateway. The node reconnects with exponential
@@ -35,7 +41,7 @@ below and compare them field-for-field. Change this file first, then both repos.
 {
   "type": "hello",
   "data": {
-    "node_id": "9d3b0d5e-3a3c-4b9e-9a31-0c5a9f0e6c11",
+    "node_id": "12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK",
     "version": "2.0.0",
     "identity": {
       "peer_id": "12D3KooWQYhTNQdmr3ArTeo5gCtJ8m1bbb73Bb4Q4xxK9zMrf1nK",
@@ -158,6 +164,14 @@ Actions (v2.0):
 | `rotate_reality` | `{}` | regenerate REALITY short-ids (keypair kept), rebuild sing-box; node re-sends `hello` with new endpoint data |
 | `resync_peers` | `{"peer_ids": ["...", "..."]}` | authoritative list of active peer ids from the gateway; node deletes local peers not in the list and reports peers it has that are missing (in `command_result.error` as a JSON detail, `ok=true`) |
 | `sync_apps` | `{"apps": [...]}` (Phase 5) | reconcile hosted-apps table; schema frozen in Phase 5 addendum |
+| `sync_firewall` | gateway policy payload (`org_id`, `node_id`, `service_kind`, `rules`, `upstreams`, `licensed`) | node applies rules to Sentinel (Unbound) or clears Shield (AdGuard) cache |
+| `restart_firewall` | `{}` | reload Sentinel Unbound or restart Shield |
+| `reset_firewall_credentials` | `{}` | Shield credential reset hook (operator re-opens AdGuard setup) |
+
+Optional additive fields (v2.0+):
+
+- `hello.deployment_profile` — `erebrus` | `shield` | `sentinel`
+- `hello.services` / `heartbeat.services` — map of service health (`vpn`, `community_firewall`, `erebrus_firewall`)
 
 Unknown actions → `command_result` with `ok=false, error="unknown action"`.
 The node must answer every `command` within 30s or the gateway logs a timeout.

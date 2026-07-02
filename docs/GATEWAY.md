@@ -56,16 +56,30 @@ deploy/               Production docker-compose + OTel collector config
 
 - **Auth:** Reown wallet signature only (`chain ∈ {evm, sol}`). Email links via
   Resend OTP — never a login method.
-- **Entitlements:** 7-day trial (once), NFT → 30 days direct, rank perks, admin bypass.
-  No payments in v2.
-- **Nodes:** Machine enrollment via org `enrollment_secret` (retrievable anytime);
-  node signs a machine challenge (not human wallet auth). `access_mode` is
-  `public` | `private` (defaults to `public` for network health; org members
-  only for private). Gateway→node calls use
-  short-lived gateway PASETO + per-node `node_key`.
-- **Orgs:** Any user creates a workspace (`kind`: team/company/individual/family);
-  owner adds admins/members; `enrollment_secret` for node boot; API keys for
-  programmatic VPN (one-time secret). Org `id` visible to owner/admin only.
+- **User entitlements (legacy):** 7-day trial (once), NFT → 30 days direct, rank perks,
+  admin bypass. Per-user; separate from org plans below.
+- **Orgs:** Control-plane workspace with plans (`basic` | `starter` | `pro` | `business`
+  | `enterprise`), billing status, verification status, and optional public profile.
+  Members have a **role** (management) and **seat_tier** (premium access) — these are
+  independent. New orgs start on `basic` with entitlements seeded from
+  `org_entitlements`.
+- **Org nodes:** Control-plane records in `org_nodes` (keyed by `peer_id`) with
+  `deployment_profile` (`erebrus` | `shield` | `sentinel`), attached **services**
+  (`org_node_services`), and optional Sentinel **firewall rules**.
+- **Runtime nodes:** Operational VPN rows in `nodes` (internal UUID PK; **`peer_id` is
+  the canonical external id** for discovery, org APIs, PASETO claims, WS hub, and
+  REST heartbeat paths). Legacy UUID lookups still resolve during rollout.
+- **Org invites:** Owners/admins invite by `wallet_address` and/or `email`. Resend
+  sends an invite link (`EREBRUS_PUBLIC_BASE_URL/orgs/{slug}`). Email-only invites
+  stay in `org_invites` until the invitee signs in and verifies that email; wallet
+  invites activate on login (or email verify when applicable).
+- **Node enrollment:** Scoped **registration tokens** (`ere_reg_*`), minted per org.
+  `POST /api/v2/nodes/register` accepts `registration_token` (legacy alias:
+  `enrollment_secret`). Node installer env: `EREBRUS_NODE_REGISTRATION_TOKEN`.
+  Two-step machine challenge → node PASETO + per-node `node_key`.
+- **Plans (gateway-side today):** Entitlement limits and managed-node **reservations**
+  in DB on admin plan change. Shield/Sentinel lifecycle metadata via generic
+  `/firewall/*` APIs. Actual deploy and runtime sync deferred (see below).
 - **Social layer:** Referrals, XP/tiers, leaderboard, X/Telegram/email verify, perks.
 - **Activity log:** Authenticated mutations logged with IP + device for user visibility.
 
@@ -88,6 +102,9 @@ The same file is used by the gateway container (`env_file`) and compose variable
 | `SOLANA_RPC_URL` | Solana JSON-RPC for NFT gating (DAS-capable in prod) |
 | `GATEWAY_IMAGE`, `GATEWAY_HOST`, … | Compose/Traefik only (ignored by gateway binary) |
 | `OTEL_AUTH_TOKEN` | Optional — starts otel-collector when set |
+| `MANAGED_NODE_PROVISIONING_ENABLED` | When true, reserved managed nodes use `provisioning` status (no cloud deploy yet) |
+| `MANAGED_NODE_DEFAULT_REGION`, `MANAGED_NODE_DEFAULT_IMAGE`, `SENTINEL_IMAGE` | Managed-node defaults (DB reservation today) |
+| `EREBRUS_PUBLIC_BASE_URL`, `GATEWAY_PUBLIC_BASE_URL` | URLs embedded in generated installer/config (node repo) |
 
 Gating collections are in **`nft_gate_contracts`** (migration `0012`): IslandDAO + Erebrus Free Trial NFT on Solana; more chains/addresses can be inserted later.
 
@@ -260,6 +277,32 @@ Applied automatically on startup (`internal/store/migrations/`):
 | 0010 | Remove payments scaffolding |
 | 0011 | Org node model (`enrollment_secret`, `node_key`, drop `owner_user_id`, public/private `access_mode`) |
 | 0012 | `nft_gate_contracts` (Solana gating collections; IslandDAO + Erebrus Free Trial NFT) |
+| 0013 | Node `zone` field |
+| 0014 | `last_peer_handshake` on nodes |
+| 0015 | Node wallet `chain` at enrollment |
+| 0016 | Org plan model (`orgs` plan/billing/verification, `org_profiles`, `org_members` seat tiers, `org_entitlements`) |
+| 0017 | `org_nodes`, `org_node_services`, `node_registration_tokens`, `sentinel_licenses` |
+| 0018 | `firewall_rules` (Sentinel policy, gateway-managed) |
+| 0019 | `org_invites` (pending email invites until verified) |
+
+---
+
+## Deferred work (requires erebrus node integration)
+
+Items intentionally stubbed or split across gateway + node repos. Implement after
+`erebrus` node/runtime is updated to consume registration tokens and service APIs.
+
+| Area | Gateway today | Needs erebrus node |
+|------|---------------|-------------------|
+| ~~**Node ID duality**~~ | **Fixed:** `peer_id` is canonical in APIs, tokens, WS hub, and discovery; internal UUID retained for DB FKs only | Node installer + `hello` should send `peer_id` as `node_id` (see `ws-protocol.md`) |
+| **Public node access tier** | Stored in `org_entitlements.public_node_access_tier` | Wire into discovery/VPN gating (replace or combine with XP `min_tier`) |
+| **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning should check org seat, not only user trial/NFT |
+| ~~**Firewall runtime**~~ | **Fixed:** `/firewall/sync` pushes rules via WS `sync_firewall`; restart/reset-credentials dispatch WS commands | Node proxies to Sentinel API / Shield admin |
+| **Sentinel unlicensed** | `ReconcileUnlicensedSentinel` helper exists | Call when node reports Sentinel without license; surface user message |
+| **Managed provisioning** | DB rows with `managed_by=erebrus`, status `pending`/`provisioning` | SSH/cloud deploy using `NODE_PROVISION_SSH_*` and image env vars |
+| **Registration token lifecycle** | Mint + lookup; `used_at` recorded | Single-use enforcement, list/revoke APIs (optional) |
+| **Billing / plan changes** | Admin `PATCH /admin/orgs/:id` with `plan` | Checkout webhooks, self-serve upgrade, Enterprise entitlements |
+| **Extra Sentinel licenses** | `sentinel_licenses` table | Purchase flow and attach API |
 
 ---
 
@@ -268,8 +311,12 @@ Applied automatically on startup (`internal/store/migrations/`):
 Nodes derive from a single BIP39 mnemonic:
 
 1. Wallet keypair — signs registration challenge
-2. libp2p PeerID — stable identity anchor
+2. libp2p PeerID — stable identity anchor and **canonical `node_id`** everywhere external
 3. DID — `did:erebrus:<PeerID>`
+
+Registration returns `node_id` = `peer_id`. Node PASETO claims set both `node_id` and
+`peer_id` to the libp2p id. The gateway keeps an internal UUID in `nodes.id` for
+`vpn_clients` / metrics FKs only.
 
 Public APIs never expose raw node IP; only `ip_hash` (SHA3-256 of IPv4) may appear
 off the authenticated channel. Raw IP is used only on the node↔gateway WS for
@@ -308,10 +355,11 @@ go build ./... && go vet ./... && go test ./...
 
 ### S4 — Operator layer
 
-- [ ] Migration `0011`; org `enrollment_secret`, node `org_id` + `node_key`
-- [ ] Registration gated by `enrollment_secret`; machine challenge (not `/auth`)
+- [ ] Migrations through `0018`; org plan model + registration tokens
+- [ ] Registration gated by `registration_token`; machine challenge (not `/auth`)
 - [ ] `access_mode=private` hidden from public `GET /nodes`, visible in operator view
 - [ ] Heartbeats populate `node_metrics`; operator/admin chart endpoints work
+- [ ] `GET /orgs/:id/nodes` returns org control-plane nodes; `GET /orgs/:id/runtime-nodes` returns runtime `nodes` rows
 
 ### S5 — Referrals
 
@@ -355,12 +403,14 @@ go build ./... && go vet ./... && go test ./...
 |------|--------|
 | Ops | `/healthz`, `/readyz`, `/version`, `/metrics`, `/telemetry/event` |
 | Auth | `GET+POST /api/v2/auth`, `/auth/email`, `/auth/email/verify` |
-| Nodes | `GET /nodes`, `POST /nodes/register`, `GET /nodes/ws` |
+| Nodes | `GET /nodes`, `POST /nodes/register`, `POST /nodes/:id/heartbeat`, `GET /nodes/ws` |
 | VPN | `/vpn/clients`, `/vpn/clients/:id/config` |
 | Account | `/account/profile`, `/account/activity` |
 | Subs | `/subscriptions/*`, `/subscriptions/trial` |
 | Social | `/referrals/me`, `/rank/*`, `/leaderboard`, `/social/*`, `/perks/*` |
+| Orgs | `/orgs`, `/orgs/:id/entitlements`, `/orgs/:id/profile`, `/orgs/:id/seats`, `/orgs/:id/nodes`, `/orgs/:id/nodes/:nodeId/firewall/*` |
+| Public | `/public/orgs/:slug` |
 | Operator | `/operator/nodes`, `/operator/nodes/:id/metrics` |
-| Admin | `/admin/*` |
+| Admin | `/admin/*` (incl. `PATCH /admin/orgs/:id` for plan + verification) |
 
 Full OpenAPI: [`gateway-api.openapi.yaml`](gateway-api.openapi.yaml).

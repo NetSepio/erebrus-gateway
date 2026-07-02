@@ -118,6 +118,11 @@ func (s *Server) handleEmailOTPVerify(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to link email")
 		return
 	}
+	if _, err := s.store.AcceptOrgInvitesForEmail(c, uid, email); err != nil {
+		fail(c, http.StatusInternalServerError, "failed to accept org invites")
+		return
+	}
+	_ = s.store.ActivateInvitedMemberships(c, uid)
 	_ = s.store.DeleteEmailOTPs(c, uid, email)
 	plat := s.platform.Snapshot()
 	// XP driver: verifying an email earns XP once (best-effort).

@@ -77,17 +77,17 @@ func (m *Manager) IssueUser(userID, wallet, chain, role string) (string, error) 
 	return m.issue(Claims{UserID: userID, Wallet: wallet, Chain: chain, Role: role}, m.ttl)
 }
 
-// IssueNode mints a node token for the WS control plane.
-func (m *Manager) IssueNode(nodeID, peerID string) (string, error) {
-	return m.issue(Claims{NodeID: nodeID, PeerID: peerID, Role: RoleNode}, m.ttl)
+// IssueNode mints a node token for the WS control plane. peer_id is the canonical node id.
+func (m *Manager) IssueNode(peerID string) (string, error) {
+	return m.issue(Claims{NodeID: peerID, PeerID: peerID, Role: RoleNode}, m.ttl)
 }
 
 // IssueGatewayCall mints a short-lived token for gateway→node private API calls.
-func (m *Manager) IssueGatewayCall(nodeID, peerID, purpose string) (string, error) {
+func (m *Manager) IssueGatewayCall(peerID, purpose string) (string, error) {
 	if purpose == "" {
 		purpose = "node_api"
 	}
-	return m.issue(Claims{NodeID: nodeID, PeerID: peerID, Role: RoleGatewayCall, Purpose: purpose}, 60*time.Second)
+	return m.issue(Claims{NodeID: peerID, PeerID: peerID, Role: RoleGatewayCall, Purpose: purpose}, 60*time.Second)
 }
 
 // PublicKeyHex returns the gateway Ed25519 public key as hex (nodes verify gateway calls).

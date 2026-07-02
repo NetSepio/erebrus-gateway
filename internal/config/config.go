@@ -48,6 +48,26 @@ type Config struct {
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN"`
 	ResendAPIKey     string `env:"RESEND_API_KEY"`
 	ResendFrom       string `env:"RESEND_FROM" envDefault:"Erebrus <no-reply@info.erebrus.io>"`
+
+	// OIDC login: CSV of accepted client-id audiences across web/iOS/Android.
+	// Empty disables the provider's login/link endpoints (503).
+	GoogleClientIDs string `env:"GOOGLE_CLIENT_IDS"`
+	AppleClientIDs  string `env:"APPLE_CLIENT_IDS"`
+
+	// managed node / service provisioning
+	ManagedNodeProvisioningEnabled bool   `env:"MANAGED_NODE_PROVISIONING_ENABLED" envDefault:"false"`
+	ManagedNodeDefaultRegion       string `env:"MANAGED_NODE_DEFAULT_REGION" envDefault:"unknown"`
+	ManagedNodeDefaultImage        string `env:"MANAGED_NODE_DEFAULT_IMAGE" envDefault:"ghcr.io/netsepio/erebrus:latest"`
+	SentinelImage                  string `env:"SENTINEL_IMAGE" envDefault:"ghcr.io/netsepio/erebrus-sentinel:latest"`
+	NodeProvisionSSHUser           string `env:"NODE_PROVISION_SSH_USER"`
+	NodeProvisionSSHKeyPath        string `env:"NODE_PROVISION_SSH_KEY_PATH"`
+	ErebrusPublicBaseURL           string `env:"EREBRUS_PUBLIC_BASE_URL" envDefault:"https://erebrus.io"`
+	GatewayPublicBaseURL           string `env:"GATEWAY_PUBLIC_BASE_URL" envDefault:"https://gateway.erebrus.io"`
+}
+
+// ProvisioningConfig returns managed-node provisioning settings for the store layer.
+func (c *Config) ProvisioningConfig() (enabled bool, defaultRegion string) {
+	return c.ManagedNodeProvisioningEnabled, c.ManagedNodeDefaultRegion
 }
 
 // Load reads .env (best-effort) then parses the environment.

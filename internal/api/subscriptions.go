@@ -41,6 +41,17 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 		return
 	}
 
+	// Plan entitlement (holding a seat in an active paid-plan org) takes precedence
+	// over trial/NFT — it is ongoing, so a seated member shows source "plan" even
+	// while a trial is still active.
+	if orgPlan, perr := s.store.UserOrgVPNPlan(c, uid); perr == nil && orgPlan != "" {
+		ok(c, http.StatusOK, gin.H{
+			"status": "active", "entitled": true, "plan_id": orgPlan,
+			"source": "plan", "trial_consumed": trialConsumed, "nft_gating": s.nft.Enabled(),
+		})
+		return
+	}
+
 	sub, err := s.store.ActiveSubscription(c, uid)
 	if err == nil {
 		ok(c, http.StatusOK, gin.H{

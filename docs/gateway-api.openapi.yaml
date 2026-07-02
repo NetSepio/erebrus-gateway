@@ -222,13 +222,14 @@ paths:
       summary: Node registration (challenge + signed response → node PASETO)
       security: []
       description: >
-        Two-step machine enrollment gated by org enrollment_secret (not human wallet auth).
-        Step 1: { enrollment_secret, peer_id } → { flow_id, message, gateway_public_key }.
-        Step 2: signed challenge + identity → { node_token, node_id, node_key, gateway_public_key }.
-        Node binds to the org resolved from enrollment_secret. access_mode is public | private.
+        Two-step machine enrollment gated by org registration_token (not human wallet auth).
+        Legacy alias: enrollment_secret. Mint tokens via POST /orgs/{id}/node-registration-tokens.
+        Step 1: { registration_token, peer_id } → { flow_id, message, gateway_public_key }.
+        Step 2: signed challenge + identity → { node_token, node_id (= peer_id), peer_id, node_key, gateway_public_key }.
+        Node binds to the org resolved from the token. access_mode is public | private.
       responses:
-        "200": { description: "{ node_token, node_id, node_key, gateway_public_key }" }
-        "401": { description: invalid enrollment_secret or signature }
+        "200": { description: "{ node_token, node_id, peer_id, node_key, gateway_public_key }" }
+        "401": { description: invalid registration_token or signature }
   /api/v2/nodes/ws:
     get:
       summary: WebSocket upgrade for the node control plane
@@ -239,7 +240,7 @@ paths:
   /api/v2/operator/nodes:
     get:
       summary: My org nodes
-      description: Nodes for orgs the caller belongs to. Org id shown only to owner/admin; others see org name/kind. Includes private nodes.
+      description: Runtime VPN nodes for orgs the caller belongs to (nodes table). Org id shown only to owner/admin. Includes private nodes. For org control-plane nodes use GET /orgs/{id}/nodes.
       responses: { "200": { description: Operator node list } }
   /api/v2/operator/nodes/{id}/metrics:
     get:
@@ -456,7 +457,7 @@ paths:
               required: [name, node_id, wg_public_key]
               properties:
                 name: { type: string }
-                node_id: { type: string }
+                node_id: { type: string, description: Node peer_id (legacy UUID still accepted) }
                 wg_public_key: { type: string }
                 wg_preshared_key: { type: string }
                 idempotency_key: { type: string }
@@ -591,6 +592,69 @@ paths:
         summary: VPN clients provisioned under this org,
         responses: { "200": { description: Clients } },
       }
+  /api/v2/public/orgs/{slug}:
+    get:
+      summary: Public org profile (requires public_profile_enabled)
+      security: []
+      responses:
+        "200": { description: Public org projection }
+        "404": { description: Not found or profile disabled }
+  /api/v2/orgs/{id}/entitlements:
+    get:
+      summary: Org plan entitlements
+      responses: { "200": { description: Entitlement limits } }
+  /api/v2/orgs/{id}/profile/public:
+    get:
+      summary: Org public profile (member)
+      responses: { "200": { description: Public profile fields } }
+    patch:
+      summary: Update public profile fields (owner/admin)
+      responses: { "200": { description: Updated } }
+  /api/v2/orgs/{id}/members/invite:
+    post:
+      summary: Invite member by wallet and/or email
+      description: >
+        Requires org owner/admin. Provide wallet_address and/or email. Sends a Resend invite
+        email when configured. Email-only invites stay pending until the invitee verifies
+        that email; wallet invites activate on login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wallet_address: { type: string }
+                email: { type: string, format: email }
+                chain: { type: string }
+                role: { type: string }
+                seat_tier: { type: string }
+      responses:
+        "201": { description: "{ member } or { status, email, email_sent }" }
+        "502": { description: Invite email failed to send }
+  /api/v2/orgs/{id}/seats:
+    get:
+      summary: Seat allocation summary
+      responses: { "200": { description: "{ members, paid_seats_used, paid_seats_included }" } }
+  /api/v2/orgs/{id}/nodes:
+    get:
+      summary: Org control-plane nodes
+      responses: { "200": { description: Org nodes } }
+  /api/v2/orgs/{id}/nodes/{nodeId}/firewall:
+    get:
+      summary: Abstract firewall service (Shield or Sentinel)
+      responses: { "200": { description: Firewall service } }
+  /api/v2/orgs/{id}/nodes/{nodeId}/firewall/rules:
+    get:
+      summary: Sentinel firewall rules
+      responses: { "200": { description: Rules } }
+    post:
+      summary: Create Sentinel firewall rule
+      responses: { "201": { description: Rule created } }
+  /api/v2/nodes/{nodeId}/heartbeat:
+    post:
+      summary: Node REST heartbeat (node PASETO)
+      responses: { "204": { description: Recorded } }
   # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
   /api/v2/apps:
     get:
@@ -740,7 +804,7 @@ components:
     NodePublic:
       type: object
       properties:
-        node_id: { type: string }
+        node_id: { type: string, description: Canonical libp2p peer_id (same as peer_id) }
         name: { type: string }
         did: { type: string }
         region: { type: string }
@@ -795,8 +859,10 @@ components:
           type: object
           properties:
             name: { type: string }
-            kind: { type: string }
-            verified: { type: boolean, description: Always present when org is set }
             slug: { type: string }
+            plan: { type: string, enum: [basic, starter, pro, business, enterprise] }
+            verification_status: { type: string, enum: [unverified, verified, rejected] }
+            public_profile_enabled: { type: boolean }
+            display_name: { type: string }
             description: { type: string }
-            website: { type: string }
+            website_url: { type: string }

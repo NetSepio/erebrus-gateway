@@ -10,6 +10,7 @@ import (
 	"github.com/NetSepio/gateway/internal/nftgate"
 	"github.com/NetSepio/gateway/internal/nodeclient"
 	"github.com/NetSepio/gateway/internal/nodehub"
+	"github.com/NetSepio/gateway/internal/oauth"
 	"github.com/NetSepio/gateway/internal/socialverify"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
@@ -30,6 +31,8 @@ type Server struct {
 	nft      nftgate.Checker
 	mailer   *mailer.Mailer
 	xverify  *socialverify.XVerifier
+	google   *oauth.Verifier
+	apple    *oauth.Verifier
 }
 
 // New builds the API server. platform is the live DB-backed settings object
@@ -43,6 +46,8 @@ func New(cfg *config.Config, platform *config.PlatformSettings, st *store.Store,
 	return &Server{
 		cfg: cfg, platform: platform, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(),
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(p.XAPIBaseURL),
+		google: oauth.NewGoogle(splitCSVRaw(cfg.GoogleClientIDs)),
+		apple:  oauth.NewApple(splitCSVRaw(cfg.AppleClientIDs)),
 	}
 }
 
@@ -79,9 +84,16 @@ func (s *Server) Router() *gin.Engine {
 	{
 		auth.GET("", s.handleAuthChallenge)
 		auth.POST("", s.handleAuthComplete)
+		// which login methods are configured (so clients hide the rest cleanly)
+		auth.GET("/methods", s.handleAuthMethods)
 		// optional email linking (authenticated wallet session; verified OTP)
 		auth.POST("/email", s.authUser(), s.handleEmailOTPStart)
 		auth.POST("/email/verify", s.authUser(), s.handleEmailOTPVerify)
+		// passwordless / OIDC login (public; resolve-or-create by verified identity)
+		auth.POST("/email/login/start", s.handleEmailLoginStart)
+		auth.POST("/email/login/verify", s.handleEmailLoginVerify)
+		auth.POST("/google", s.handleGoogleAuth)
+		auth.POST("/apple", s.handleAppleAuth)
 	}
 
 	// node discovery (public) + control plane
@@ -92,6 +104,12 @@ func (s *Server) Router() *gin.Engine {
 	// subscriptions: plans are public
 	v2.GET("/subscriptions/plans", s.handlePlans)
 
+	// public org profiles
+	v2.GET("/public/orgs/:slug", s.handlePublicOrgBySlug)
+
+	// node heartbeat (node PASETO)
+	v2.POST("/nodes/:nodeId/heartbeat", s.handleNodeHeartbeat)
+
 	// authenticated user routes (audit-logged on successful mutations)
 	user := v2.Group("")
 	user.Use(s.authUser(), s.activityLog())
@@ -99,6 +117,7 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/account/profile", s.handleGetProfile)
 		user.PATCH("/account/profile", s.handlePatchProfile)
 		user.GET("/account/activity", s.handleAccountActivity)
+		user.POST("/account/wallet", s.handleLinkWallet)
 
 		user.GET("/vpn/clients", s.handleListClients)
 		user.POST("/vpn/clients", s.handleProvisionClient)
@@ -122,6 +141,8 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/social/accounts", s.handleSocialAccounts)
 		user.POST("/social/telegram", s.handleVerifyTelegram)
 		user.POST("/social/x", s.handleVerifyX)
+		user.POST("/social/google", s.handleLinkGoogle)
+		user.POST("/social/apple", s.handleLinkApple)
 
 		// perks: catalog (tier-annotated) + my granted perks
 		user.GET("/perks", s.handleListPerks)
@@ -137,12 +158,40 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/orgs", s.handleListOrgs)
 		user.GET("/orgs/:id", s.handleGetOrg)
 		user.PATCH("/orgs/:id", s.handlePatchOrg)
+		user.DELETE("/orgs/:id", s.handleDeleteOrg)
+		user.GET("/orgs/:id/entitlements", s.handleGetOrgEntitlements)
+		user.GET("/orgs/:id/profile", s.handleGetOrgProfile)
+		user.PATCH("/orgs/:id/profile", s.handlePatchOrgProfile)
+		user.GET("/orgs/:id/profile/public", s.handleGetOrgPublicProfile)
+		user.PATCH("/orgs/:id/profile/public", s.handlePatchOrgPublicProfile)
+		user.GET("/orgs/:id/seats", s.handleListSeats)
+		user.POST("/orgs/:id/seats/assign", s.handleAssignSeat)
+		user.POST("/orgs/:id/seats/revoke", s.handleRevokeSeat)
 		user.GET("/orgs/:id/members", s.handleListMembers)
+		user.POST("/orgs/:id/members/invite", s.handleInviteMember)
 		user.POST("/orgs/:id/members", s.handleAddMember)
-		user.PATCH("/orgs/:id/members/:userId", s.handlePatchMember)
-		user.DELETE("/orgs/:id/members/:userId", s.handleRemoveMember)
+		user.PATCH("/orgs/:id/members/:memberId", s.handlePatchMember)
+		user.DELETE("/orgs/:id/members/:memberId", s.handleRemoveMember)
 		user.POST("/orgs/:id/transfer-ownership", s.handleTransferOwnership)
-		user.GET("/orgs/:id/nodes", s.handleOrgNodes)
+		user.GET("/orgs/:id/nodes", s.handleListOrgNodes)
+		user.POST("/orgs/:id/nodes/register", s.handleOrgNodeRegister)
+		user.GET("/orgs/:id/nodes/:nodeId", s.handleGetOrgNode)
+		user.PATCH("/orgs/:id/nodes/:nodeId", s.handlePatchOrgNode)
+		user.POST("/orgs/:id/node-registration-tokens", s.handleCreateNodeRegistrationToken)
+		user.GET("/orgs/:id/nodes/:nodeId/services", s.handleListOrgNodeServices)
+		user.POST("/orgs/:id/nodes/:nodeId/services", s.handleAttachOrgNodeService)
+		user.PATCH("/orgs/:id/nodes/:nodeId/services/:serviceId", s.handlePatchOrgNodeService)
+		user.DELETE("/orgs/:id/nodes/:nodeId/services/:serviceId", s.handleDeleteOrgNodeService)
+		user.GET("/orgs/:id/nodes/:nodeId/firewall", s.handleGetFirewall)
+		user.GET("/orgs/:id/nodes/:nodeId/firewall/status", s.handleGetFirewallStatus)
+		user.POST("/orgs/:id/nodes/:nodeId/firewall/restart", s.handleFirewallRestart)
+		user.POST("/orgs/:id/nodes/:nodeId/firewall/sync", s.handleFirewallSync)
+		user.POST("/orgs/:id/nodes/:nodeId/firewall/reset-credentials", s.handleFirewallResetCredentials)
+		user.GET("/orgs/:id/nodes/:nodeId/firewall/rules", s.handleListFirewallRules)
+		user.POST("/orgs/:id/nodes/:nodeId/firewall/rules", s.handleCreateFirewallRule)
+		user.PATCH("/orgs/:id/nodes/:nodeId/firewall/rules/:ruleId", s.handlePatchFirewallRule)
+		user.DELETE("/orgs/:id/nodes/:nodeId/firewall/rules/:ruleId", s.handleDeleteFirewallRule)
+		user.GET("/orgs/:id/runtime-nodes", s.handleOrgNodes)
 		user.GET("/orgs/:id/apikeys", s.handleListAPIKeys)
 		user.POST("/orgs/:id/apikeys", s.handleCreateAPIKey)
 		user.DELETE("/orgs/:id/apikeys/:keyId", s.handleRevokeAPIKey)

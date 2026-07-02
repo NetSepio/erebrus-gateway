@@ -21,7 +21,8 @@ type NodeRegistration struct {
 	Zone       string
 	APIBaseURL string
 	NodeKey    string
-	AccessMode string
+	AccessMode         string
+	DeploymentProfile  string // erebrus | shield | sentinel
 }
 
 // RegisterNode inserts (or updates) the node row keyed by peer_id and returns
@@ -52,13 +53,35 @@ func (s *Store) RegisterNode(ctx context.Context, r NodeRegistration) (string, e
 	return id, err
 }
 
+// ResolvePeerID maps a node reference (peer_id or legacy UUID) to peer_id.
+func (s *Store) ResolvePeerID(ctx context.Context, ref string) (string, error) {
+	var peerID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT peer_id FROM nodes WHERE peer_id = $1 OR id::text = $1`, ref).Scan(&peerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return peerID, err
+}
+
+// NodeInternalID maps a node reference (peer_id or legacy UUID) to the runtime UUID.
+func (s *Store) NodeInternalID(ctx context.Context, ref string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id::text FROM nodes WHERE peer_id = $1 OR id::text = $1`, ref).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return id, err
+}
+
 // NodeAPI returns the gateway-reachable API base URL, node key and status
 // for a node, used when proxying provisioning calls.
-func (s *Store) NodeAPI(ctx context.Context, nodeID string) (baseURL, nodeKey, status string, err error) {
+func (s *Store) NodeAPI(ctx context.Context, ref string) (baseURL, nodeKey, status string, err error) {
 	var ip string
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(api_base_url,''), COALESCE(node_key,''), status, COALESCE(ip,'')
-		 FROM nodes WHERE id = $1`, nodeID).
+		 FROM nodes WHERE peer_id = $1 OR id::text = $1`, ref).
 		Scan(&baseURL, &nodeKey, &status, &ip)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", "", ErrNotFound
@@ -127,9 +150,9 @@ func (s *Store) ApplyHeartbeat(ctx context.Context, peerID, status string, load,
 
 // SetNodeMinTier sets a node's premium-pool gate (admin). Returns ErrNotFound
 // when the node does not exist.
-func (s *Store) SetNodeMinTier(ctx context.Context, nodeID string, minTier int) error {
+func (s *Store) SetNodeMinTier(ctx context.Context, ref string, minTier int) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET min_tier = $2, updated_at = now() WHERE id = $1`, nodeID, minTier)
+		`UPDATE nodes SET min_tier = $2, updated_at = now() WHERE peer_id = $1 OR id::text = $1`, ref, minTier)
 	if err != nil {
 		return err
 	}
@@ -140,10 +163,10 @@ func (s *Store) SetNodeMinTier(ctx context.Context, nodeID string, minTier int) 
 }
 
 // SetNodeOrg updates a node's org attachment (operator/admin).
-func (s *Store) SetNodeOrg(ctx context.Context, nodeID, orgID string) error {
+func (s *Store) SetNodeOrg(ctx context.Context, ref, orgID string) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET org_id = NULLIF($2,'')::uuid, updated_at = now() WHERE id = $1`,
-		nodeID, orgID)
+		`UPDATE nodes SET org_id = NULLIF($2,'')::uuid, updated_at = now() WHERE peer_id = $1 OR id::text = $1`,
+		ref, orgID)
 	if err != nil {
 		return err
 	}
@@ -154,12 +177,12 @@ func (s *Store) SetNodeOrg(ctx context.Context, nodeID, orgID string) error {
 }
 
 // SetNodeAccessMode sets public/private visibility.
-func (s *Store) SetNodeAccessMode(ctx context.Context, nodeID, mode string) error {
+func (s *Store) SetNodeAccessMode(ctx context.Context, ref, mode string) error {
 	if mode != NodeAccessPublic && mode != NodeAccessPrivate {
 		return errors.New("invalid access_mode")
 	}
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET access_mode = $2, updated_at = now() WHERE id = $1`, nodeID, mode)
+		`UPDATE nodes SET access_mode = $2, updated_at = now() WHERE peer_id = $1 OR id::text = $1`, ref, mode)
 	if err != nil {
 		return err
 	}
@@ -207,9 +230,28 @@ func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	return &n, nil
 }
 
-// GetNode returns a node by id.
-func (s *Store) GetNode(ctx context.Context, id string) (*Node, error) {
-	n, err := scanNode(s.db.QueryRowContext(ctx, `SELECT `+nodeCols+` FROM nodes WHERE id = $1`, id))
+// GetNodePeerID resolves a node reference to peer_id.
+func (s *Store) GetNodePeerID(ctx context.Context, ref string) (string, error) {
+	return s.ResolvePeerID(ctx, ref)
+}
+
+// ApplyNodeHeartbeat records a REST heartbeat for a runtime node (peer_id canonical).
+func (s *Store) ApplyNodeHeartbeat(ctx context.Context, ref, status string, load, speedtest []byte, rx, tx int64, version string) error {
+	peerID, err := s.ResolvePeerID(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if err := s.ApplyHeartbeat(ctx, peerID, status, load, speedtest, rx, tx, version); err != nil {
+		return err
+	}
+	now := time.Now()
+	_ = s.TouchOrgNodeHeartbeat(ctx, peerID, now)
+	return nil
+}
+
+// GetNode returns a node by peer_id (or legacy UUID).
+func (s *Store) GetNode(ctx context.Context, ref string) (*Node, error) {
+	n, err := scanNode(s.db.QueryRowContext(ctx, `SELECT `+nodeCols+` FROM nodes WHERE peer_id = $1 OR id::text = $1`, ref))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

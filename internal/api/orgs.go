@@ -53,20 +53,15 @@ func (s *Server) orgPrivileged(c *gin.Context) (role string, ok bool) {
 
 func (s *Server) handleCreateOrg(c *gin.Context) {
 	var req struct {
-		Name        string `json:"name"`
-		Kind        string `json:"kind"`
-		Slug        string `json:"slug"`
-		Description string `json:"description"`
-		Website     string `json:"website"`
+		Name string `json:"name"`
+		Slug string `json:"slug"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
 		fail(c, http.StatusBadRequest, "name is required")
 		return
 	}
-	org, err := s.store.CreateOrg(c, store.CreateOrgInput{
-		Name: req.Name, Kind: req.Kind, Slug: req.Slug,
-		Description: req.Description, Website: req.Website,
-		OwnerUserID: userID(c),
+	org, err := s.store.CreateOrgForUser(c, userID(c), store.CreateOrgInput{
+		Name: req.Name, Slug: req.Slug,
 	})
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to create org")
@@ -83,14 +78,7 @@ func (s *Server) handleListOrgs(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(orgs))
 	for i := range orgs {
-		includeSecret := store.IsOrgPrivileged(orgs[i].Role)
-		if includeSecret {
-			full, err := s.store.GetOrgWithSecret(c, orgs[i].ID)
-			if err == nil {
-				orgs[i].EnrollmentSecret = full.EnrollmentSecret
-			}
-		}
-		out = append(out, orgResponse(&orgs[i], includeSecret))
+		out = append(out, orgResponse(&orgs[i], store.IsOrgPrivileged(orgs[i].Role)))
 	}
 	ok(c, http.StatusOK, out)
 }
@@ -100,23 +88,13 @@ func (s *Server) handleGetOrg(c *gin.Context) {
 	if !memberOK {
 		return
 	}
-	if store.IsOrgPrivileged(role) {
-		org, err := s.store.GetOrgWithSecret(c, c.Param("id"))
-		if err != nil {
-			fail(c, http.StatusNotFound, "org not found")
-			return
-		}
-		org.Role = role
-		ok(c, http.StatusOK, orgResponse(org, true))
-		return
-	}
 	org, err := s.store.GetOrg(c, c.Param("id"))
 	if err != nil {
 		fail(c, http.StatusNotFound, "org not found")
 		return
 	}
 	org.Role = role
-	ok(c, http.StatusOK, orgResponse(org, false))
+	ok(c, http.StatusOK, orgResponse(org, store.IsOrgPrivileged(role)))
 }
 
 func (s *Server) handlePatchOrg(c *gin.Context) {
@@ -124,19 +102,18 @@ func (s *Server) handlePatchOrg(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name        *string `json:"name"`
-		Kind        *string `json:"kind"`
-		Slug        *string `json:"slug"`
-		Description *string `json:"description"`
-		Website     *string `json:"website"`
+		Name                 *string `json:"name"`
+		Slug                 *string `json:"slug"`
+		BillingStatus        *string `json:"billing_status"`
+		PublicProfileEnabled *bool   `json:"public_profile_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
 	org, err := s.store.UpdateOrg(c, c.Param("id"), store.UpdateOrgInput{
-		Name: req.Name, Kind: req.Kind, Slug: req.Slug,
-		Description: req.Description, Website: req.Website,
+		Name: req.Name, Slug: req.Slug,
+		BillingStatus: req.BillingStatus, PublicProfileEnabled: req.PublicProfileEnabled,
 	})
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to update org")
@@ -145,6 +122,23 @@ func (s *Server) handlePatchOrg(c *gin.Context) {
 	role, _ := s.store.MemberRole(c, org.ID, userID(c))
 	org.Role = role
 	ok(c, http.StatusOK, orgResponse(org, store.IsOrgPrivileged(role)))
+}
+
+// handleDeleteOrg permanently deletes an org. Owner only — managers (admins)
+// cannot delete; runtime nodes are detached and keep running.
+func (s *Server) handleDeleteOrg(c *gin.Context) {
+	if !s.orgOwner(c) {
+		return
+	}
+	if err := s.store.DeleteOrg(c, c.Param("id")); errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "org not found")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to delete org")
+		return
+	}
+	s.logActivity(c, userID(c), "org.delete", c.Param("id"))
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleListMembers(c *gin.Context) {
@@ -157,6 +151,99 @@ func (s *Server) handleListMembers(c *gin.Context) {
 		return
 	}
 	ok(c, http.StatusOK, members)
+}
+
+func (s *Server) handleInviteMember(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	var req struct {
+		WalletAddress string `json:"wallet_address"`
+		Email         string `json:"email"`
+		Chain         string `json:"chain"`
+		Role          string `json:"role"`
+		SeatTier      string `json:"seat_tier"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
+		return
+	}
+	wallet := strings.TrimSpace(req.WalletAddress)
+	email, emailOK := normalizeEmail(req.Email)
+	if wallet == "" && !emailOK {
+		fail(c, http.StatusBadRequest, "wallet_address or email is required")
+		return
+	}
+	role := normalizeMemberRole(req.Role)
+	if role == store.OrgRoleOwner {
+		fail(c, http.StatusBadRequest, "use transfer-ownership to change owner")
+		return
+	}
+	orgID := c.Param("id")
+	inviterID := userID(c)
+
+	orgName, err := s.store.OrgNameForInvite(c, orgID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load org")
+		return
+	}
+	org, err := s.store.GetOrg(c, orgID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load org")
+		return
+	}
+	inviteURL := strings.TrimRight(s.cfg.ErebrusPublicBaseURL, "/") + "/orgs/" + org.Slug
+
+	var member *store.Member
+	var inviteEmail string
+
+	if emailOK {
+		if _, err := s.store.CreateOrgInvite(c, orgID, email, role, req.SeatTier, inviterID); err != nil {
+			fail(c, http.StatusInternalServerError, "failed to create invite")
+			return
+		}
+		inviteEmail = email
+		if ownerID, err := s.store.EmailOwner(c, email); err == nil {
+			m, err := s.store.InviteMember(c, orgID, ownerID, role, req.SeatTier)
+			if err != nil {
+				fail(c, http.StatusInternalServerError, "failed to invite member")
+				return
+			}
+			member = m
+		}
+	}
+
+	if wallet != "" {
+		u, err := s.store.UpsertUserByWallet(c, wallet, req.Chain, "")
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+		m, err := s.store.InviteMember(c, orgID, u.ID, role, req.SeatTier)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "failed to invite member")
+			return
+		}
+		m.WalletAddress = u.WalletAddress
+		member = m
+		if u.EmailVerified && u.Email != "" {
+			inviteEmail = u.Email
+		}
+	}
+
+	if inviteEmail != "" && s.mailer.Enabled() {
+		if err := s.mailer.SendOrgInvite(c, inviteEmail, orgName, inviteURL); err != nil {
+			fail(c, http.StatusBadGateway, "failed to send invite email")
+			return
+		}
+	}
+
+	s.logActivity(c, inviterID, "org.member.invite", orgID)
+	if member != nil {
+		ok(c, http.StatusCreated, gin.H{"member": member, "email_sent": inviteEmail != "" && s.mailer.Enabled()})
+		return
+	}
+	ok(c, http.StatusCreated, gin.H{"status": "invited", "email": inviteEmail, "email_sent": inviteEmail != "" && s.mailer.Enabled()})
 }
 
 func (s *Server) handleAddMember(c *gin.Context) {
@@ -194,19 +281,33 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Role string `json:"role"`
+		Role     string `json:"role"`
+		SeatTier string `json:"seat_tier"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.Role == "" {
-		fail(c, http.StatusBadRequest, "role is required")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	role := normalizeMemberRole(req.Role)
-	if role == store.OrgRoleOwner {
+	if req.Role == "" && req.SeatTier == "" {
+		fail(c, http.StatusBadRequest, "role or seat_tier is required")
+		return
+	}
+	if req.Role == store.OrgRoleOwner {
 		fail(c, http.StatusBadRequest, "use transfer-ownership to change owner")
 		return
 	}
-	targetID := c.Param("userId")
-	curRole, err := s.store.MemberRole(c, c.Param("id"), targetID)
+	orgID := c.Param("id")
+	memberKey := c.Param("memberId")
+	if member, err := s.store.PatchMember(c, orgID, memberKey, req.Role, req.SeatTier); err == nil {
+		ok(c, http.StatusOK, member)
+		return
+	}
+	if req.SeatTier != "" {
+		fail(c, http.StatusBadRequest, "seat_tier updates require member id")
+		return
+	}
+	role := normalizeMemberRole(req.Role)
+	curRole, err := s.store.MemberRole(c, orgID, memberKey)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "member not found")
 		return
@@ -219,18 +320,24 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		fail(c, http.StatusForbidden, "cannot change owner role here")
 		return
 	}
-	if err := s.store.AddMember(c, c.Param("id"), targetID, role); err != nil {
+	if err := s.store.AddMember(c, orgID, memberKey, role); err != nil {
 		fail(c, http.StatusInternalServerError, "failed to update member")
 		return
 	}
-	ok(c, http.StatusOK, gin.H{"user_id": targetID, "role": role})
+	ok(c, http.StatusOK, gin.H{"user_id": memberKey, "role": role})
 }
 
 func (s *Server) handleRemoveMember(c *gin.Context) {
 	if _, ok := s.orgPrivileged(c); !ok {
 		return
 	}
-	if err := s.store.RemoveMember(c, c.Param("id"), c.Param("userId")); errors.Is(err, store.ErrNotFound) {
+	orgID := c.Param("id")
+	memberKey := c.Param("memberId")
+	if err := s.store.RemoveMemberByID(c, orgID, memberKey); err == nil {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	if err := s.store.RemoveMember(c, orgID, memberKey); errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "member not found")
 		return
 	} else if err != nil {
@@ -400,29 +507,56 @@ func (s *Server) handleAdminOrgs(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(orgs))
 	for i := range orgs {
-		out = append(out, orgResponse(&orgs[i], false))
+		// Admin context: expose org id (+ owner) so the console can target
+		// per-org actions like plan assignment and verification.
+		out = append(out, orgResponse(&orgs[i], true))
 	}
 	ok(c, http.StatusOK, gin.H{"orgs": out, "limit": limit, "offset": offset})
 }
 
 type patchAdminOrgReq struct {
-	Verified *bool `json:"verified"`
+	VerificationStatus *string `json:"verification_status"`
+	Plan               *string `json:"plan"`
 }
 
 func (s *Server) handleAdminPatchOrg(c *gin.Context) {
 	var req patchAdminOrgReq
-	if err := c.ShouldBindJSON(&req); err != nil || req.Verified == nil {
-		fail(c, http.StatusBadRequest, "verified is required")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if err := s.store.SetOrgVerified(c, c.Param("id"), *req.Verified); errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusNotFound, "org not found")
-		return
-	} else if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to update org")
+	if req.VerificationStatus == nil && req.Plan == nil {
+		fail(c, http.StatusBadRequest, "verification_status or plan is required")
 		return
 	}
-	ok(c, http.StatusOK, gin.H{"org_id": c.Param("id"), "verified": *req.Verified})
+	oid := c.Param("id")
+	if req.VerificationStatus != nil {
+		if err := s.store.SetOrgVerificationStatus(c, oid, *req.VerificationStatus); errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusNotFound, "org not found")
+			return
+		} else if err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if req.Plan != nil {
+		enabled, region := s.cfg.ProvisioningConfig()
+		if _, err := s.store.SetOrgPlanAndProvision(c, oid, *req.Plan, store.ProvisioningConfig{
+			Enabled: enabled, DefaultRegion: region,
+		}); errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusNotFound, "org not found")
+			return
+		} else if err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	org, err := s.store.GetOrg(c, oid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load org")
+		return
+	}
+	ok(c, http.StatusOK, orgResponse(org, true))
 }
 
 func (s *Server) handleAdminOrgUsage(c *gin.Context) {
@@ -452,12 +586,130 @@ func (s *Server) orgUsagePayload(c *gin.Context, oid, role string) gin.H {
 	return out
 }
 
+func (s *Server) handleGetOrgEntitlements(c *gin.Context) {
+	if _, ok := s.orgMember(c); !ok {
+		return
+	}
+	ent, err := s.store.GetOrgEntitlements(c, c.Param("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "entitlements not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load entitlements")
+		return
+	}
+	ok(c, http.StatusOK, entitlementResponse(ent))
+}
+
+func (s *Server) handleGetOrgProfile(c *gin.Context) {
+	if _, ok := s.orgMember(c); !ok {
+		return
+	}
+	profile, err := s.store.GetOrgProfile(c, c.Param("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "profile not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load profile")
+		return
+	}
+	ok(c, http.StatusOK, orgProfileResponse(profile))
+}
+
+func (s *Server) handlePatchOrgProfile(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	var req store.UpdateOrgProfileInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
+		return
+	}
+	profile, err := s.store.UpdateOrgProfile(c, c.Param("id"), req)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "profile not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to update profile")
+		return
+	}
+	ok(c, http.StatusOK, orgProfileResponse(profile))
+}
+
+func (s *Server) handleAssignSeat(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	var req struct {
+		UserID   string `json:"user_id"`
+		SeatTier string `json:"seat_tier"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.UserID == "" || req.SeatTier == "" {
+		fail(c, http.StatusBadRequest, "user_id and seat_tier are required")
+		return
+	}
+	if err := s.store.AssignSeat(c, c.Param("id"), req.UserID, req.SeatTier); errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "member not found")
+		return
+	} else if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ok(c, http.StatusOK, gin.H{"user_id": req.UserID, "seat_tier": req.SeatTier})
+}
+
+func (s *Server) handleRevokeSeat(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.UserID == "" {
+		fail(c, http.StatusBadRequest, "user_id is required")
+		return
+	}
+	if err := s.store.RevokeSeat(c, c.Param("id"), req.UserID); errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "member not found")
+		return
+	} else if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ok(c, http.StatusOK, gin.H{"user_id": req.UserID, "seat_tier": store.SeatTierFree})
+}
+
+func (s *Server) handleListSeats(c *gin.Context) {
+	if _, ok := s.orgMember(c); !ok {
+		return
+	}
+	members, err := s.store.ListMembers(c, c.Param("id"))
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to list seats")
+		return
+	}
+	ent, _ := s.store.GetOrgEntitlements(c, c.Param("id"))
+	used, _ := s.store.CountPaidSeatsUsed(c, c.Param("id"))
+	out := gin.H{"members": members, "paid_seats_used": used}
+	if ent != nil {
+		out["paid_seats_included"] = ent.PaidSeatsIncluded
+	}
+	ok(c, http.StatusOK, out)
+}
+
 func normalizeMemberRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case store.OrgRoleAdmin:
 		return store.OrgRoleAdmin
 	case store.OrgRoleOwner:
 		return store.OrgRoleOwner
+	case store.OrgRoleNodeOperator:
+		return store.OrgRoleNodeOperator
+	case store.OrgRoleViewer:
+		return store.OrgRoleViewer
 	default:
 		return store.OrgRoleMember
 	}

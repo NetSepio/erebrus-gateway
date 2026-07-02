@@ -26,7 +26,10 @@ const (
 	ActionUndrain       = "undrain"
 	ActionRotateReality = "rotate_reality"
 	ActionResyncPeers   = "resync_peers"
-	ActionSyncApps      = "sync_apps"
+	ActionSyncApps                = "sync_apps"
+	ActionSyncFirewall            = "sync_firewall"
+	ActionRestartFirewall         = "restart_firewall"
+	ActionResetFirewallCredentials = "reset_firewall_credentials"
 )
 
 // Envelope wraps every WebSocket frame: {"type": "...", "data": {...}}.
@@ -85,12 +88,14 @@ type Hysteria2Endpoint struct {
 
 // Hello is sent by the node on every (re)connect.
 type Hello struct {
-	NodeID       string       `json:"node_id"`
-	Version      string       `json:"version"`
-	Identity     Identity     `json:"identity"`
-	Spec         Spec         `json:"spec"`
-	Capabilities Capabilities `json:"capabilities"`
-	Endpoints    Endpoints    `json:"endpoints"`
+	NodeID             string            `json:"node_id"`
+	Version            string            `json:"version"`
+	Identity           Identity          `json:"identity"`
+	Spec               Spec              `json:"spec"`
+	Capabilities       Capabilities      `json:"capabilities"`
+	Endpoints          Endpoints         `json:"endpoints"`
+	DeploymentProfile  string            `json:"deployment_profile,omitempty"`
+	Services           map[string]string `json:"services,omitempty"`
 }
 
 // HelloAck is the gateway's response to hello.
@@ -123,6 +128,7 @@ type Heartbeat struct {
 	Load      Load              `json:"load"`
 	Speedtest Speedtest         `json:"speedtest"`
 	Versions  map[string]string `json:"versions"`
+	Services  map[string]string `json:"services,omitempty"`
 }
 
 // PeerUsage is one client's traffic delta in a usage_report.

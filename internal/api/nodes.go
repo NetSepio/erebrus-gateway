@@ -48,7 +48,7 @@ type nodePublic struct {
 
 func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
 	return nodePublic{
-		NodeID: n.ID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
+		NodeID: n.PeerID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, MinTier: n.MinTier,
 		Protocols: n.Protocols, Capabilities: n.Capabilities,
 		Endpoints: enrichEndpointsForDiscovery(n.Endpoints, n.IP), Speedtest: n.Speedtest,
@@ -87,7 +87,8 @@ func (s *Server) handleListNodes(c *gin.Context) {
 }
 
 type nodeRegisterReq struct {
-	EnrollmentSecret string `json:"enrollment_secret"`
+	EnrollmentSecret  string `json:"enrollment_secret"`
+	RegistrationToken string `json:"registration_token"`
 	PeerID           string `json:"peer_id"`
 	// step 2
 	FlowID        string `json:"flow_id"`
@@ -101,7 +102,8 @@ type nodeRegisterReq struct {
 	Zone          string `json:"zone"`
 	APIBaseURL    string `json:"api_base_url"`
 	NodeKey       string `json:"node_key"`
-	AccessMode    string `json:"access_mode"` // public | private
+	AccessMode         string `json:"access_mode"` // public | private
+	DeploymentProfile  string `json:"deployment_profile"`
 }
 
 func (s *Server) nodeChallengeMessage(flowID string) string {
@@ -116,18 +118,21 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	secret := strings.TrimSpace(req.EnrollmentSecret)
-	if secret == "" {
-		fail(c, http.StatusBadRequest, "enrollment_secret required")
+	token := strings.TrimSpace(req.RegistrationToken)
+	if token == "" {
+		token = strings.TrimSpace(req.EnrollmentSecret) // legacy alias
+	}
+	if token == "" {
+		fail(c, http.StatusBadRequest, "registration_token required")
 		return
 	}
-	orgID, err := s.store.LookupOrgByEnrollmentSecret(c, secret)
+	resolvedOrgID, regTokenID, _, err := s.store.LookupNodeRegistrationToken(c, token, store.TokenScopeNodeRegistration)
 	if errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusUnauthorized, "invalid enrollment secret")
+		fail(c, http.StatusUnauthorized, "invalid registration token")
 		return
 	}
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "enrollment lookup failed")
+		fail(c, http.StatusInternalServerError, "token lookup failed")
 		return
 	}
 
@@ -140,7 +145,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		}
 		flowID := uuid.NewString()
 		// flow.Chain stores org_id; flow.WalletAddress stores peer_id for step-2 binding.
-		if err := s.store.CreateFlowID(c, flowID, peerID, orgID, flowIDTTL); err != nil {
+		if err := s.store.CreateFlowID(c, flowID, peerID, resolvedOrgID, flowIDTTL); err != nil {
 			fail(c, http.StatusInternalServerError, "failed to create challenge")
 			return
 		}
@@ -162,7 +167,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "flow id not found or expired")
 		return
 	}
-	if flow.Chain != orgID {
+	if flow.Chain != resolvedOrgID {
 		fail(c, http.StatusUnauthorized, "enrollment flow org mismatch")
 		return
 	}
@@ -196,17 +201,18 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	}
 
 	env := s.cfg.Environment
-	nodeID, err := s.store.RegisterNode(c, store.NodeRegistration{
-		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
-		OrgID: orgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
+	peerID := strings.TrimSpace(req.PeerID)
+	if _, err := s.store.RegisterOrgNodeFromRuntime(c, resolvedOrgID, regTokenID, store.NodeRegistration{
+		PeerID: peerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
+		OrgID: resolvedOrgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
-	})
-	if err != nil {
+		DeploymentProfile: req.DeploymentProfile,
+	}); err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to register node")
 		return
 	}
-	nodeTok, err := s.tokens.IssueNode(nodeID, req.PeerID)
+	nodeTok, err := s.tokens.IssueNode(peerID)
 	if err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
 		fail(c, http.StatusInternalServerError, "failed to issue node token")
@@ -215,7 +221,8 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	metrics.NodeRegistrationsTotal.WithLabelValues("success", env).Inc()
 	ok(c, http.StatusOK, gin.H{
 		"node_token":         nodeTok,
-		"node_id":            nodeID,
+		"node_id":            peerID,
+		"peer_id":            peerID,
 		"node_key":           nodeKey,
 		"gateway_public_key": s.tokens.PublicKeyHex(),
 	})
@@ -225,11 +232,23 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 // in the Authorization header of the upgrade request.
 func (s *Server) handleNodeWS(c *gin.Context) {
 	claims, err := s.tokens.Verify(bearer(c))
-	if err != nil || claims.Role != token.RoleNode || claims.NodeID == "" {
+	peerID := nodeTokenPeerID(claims)
+	if err != nil || claims.Role != token.RoleNode || peerID == "" {
 		fail(c, http.StatusUnauthorized, "valid node token required")
 		return
 	}
-	s.hub.Serve(c.Writer, c.Request, claims.NodeID, claims.PeerID)
+	s.hub.Serve(c.Writer, c.Request, peerID)
+}
+
+// nodeTokenPeerID returns the canonical peer_id from node or gateway-call claims.
+func nodeTokenPeerID(claims *token.Claims) string {
+	if claims == nil {
+		return ""
+	}
+	if claims.PeerID != "" {
+		return claims.PeerID
+	}
+	return claims.NodeID
 }
 
 // handleAdminNodes lists all nodes with full detail (admin).
@@ -255,7 +274,16 @@ func (s *Server) handleAdminNodeCommand(c *gin.Context) {
 		return
 	}
 	reqID := uuid.NewString()
-	if !s.hub.SendCommand(c.Param("id"), req.Action, req.Args, reqID) {
+	peerID, err := s.store.ResolvePeerID(c, c.Param("id"))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			fail(c, http.StatusNotFound, "node not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "failed to resolve node")
+		return
+	}
+	if !s.hub.SendCommand(peerID, req.Action, req.Args, reqID) {
 		fail(c, http.StatusConflict, "node not connected")
 		return
 	}
