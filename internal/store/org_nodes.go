@@ -166,8 +166,8 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 		access = NodeAccessPublic
 	}
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO nodes (peer_id, did, wallet_address, chain, org_id, name, region, zone, api_base_url, node_key, access_mode)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11)
+		`INSERT INTO nodes (peer_id, did, wallet_address, chain, org_id, name, region, zone, api_base_url, node_key, access_mode, deployment_profile)
+		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11, $12)
 		 ON CONFLICT (peer_id) DO UPDATE SET
 		   did = EXCLUDED.did,
 		   wallet_address = COALESCE(NULLIF(EXCLUDED.wallet_address,''), nodes.wallet_address),
@@ -179,9 +179,11 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 		   api_base_url = COALESCE(NULLIF(EXCLUDED.api_base_url,''), nodes.api_base_url),
 		   node_key = COALESCE(NULLIF(EXCLUDED.node_key,''), nodes.node_key),
 		   access_mode = EXCLUDED.access_mode,
+		   deployment_profile = EXCLUDED.deployment_profile,
 		   updated_at = now()
 		 RETURNING id`,
-		r.PeerID, r.DID, r.Wallet, r.Chain, orgID, r.Name, r.Region, r.Zone, r.APIBaseURL, r.NodeKey, access).Scan(&runtimeID)
+		r.PeerID, r.DID, r.Wallet, r.Chain, orgID, r.Name, r.Region, r.Zone, r.APIBaseURL, r.NodeKey, access,
+		NormalizeDeploymentProfile(r.DeploymentProfile)).Scan(&runtimeID)
 	if err != nil {
 		return "", err
 	}
