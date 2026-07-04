@@ -167,6 +167,7 @@ Actions (v2.0):
 | `sync_firewall` | gateway policy payload (`org_id`, `node_id`, `service_kind`, `rules`, `upstreams`, `licensed`) | node applies rules to Sentinel (Unbound) or clears Shield (AdGuard) cache |
 | `restart_firewall` | `{}` | reload Sentinel Unbound or restart Shield |
 | `reset_firewall_credentials` | `{}` | Shield credential reset hook (operator re-opens AdGuard setup) |
+| `set_firewall_credentials` | `{"admin_user","admin_password"}` | apply a new AdGuard admin password (Shield) |
 
 Optional additive fields (v2.0+):
 

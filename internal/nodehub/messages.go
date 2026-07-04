@@ -30,6 +30,7 @@ const (
 	ActionSyncFirewall            = "sync_firewall"
 	ActionRestartFirewall         = "restart_firewall"
 	ActionResetFirewallCredentials = "reset_firewall_credentials"
+	ActionSetFirewallCredentials   = "set_firewall_credentials"
 )
 
 // Envelope wraps every WebSocket frame: {"type": "...", "data": {...}}.
