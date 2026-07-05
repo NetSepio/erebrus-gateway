@@ -23,6 +23,7 @@ type nodeOperatorView struct {
 	Zone          string          `json:"zone,omitempty"`
 	Status        string          `json:"status"`
 	AccessMode    string          `json:"access_mode"`
+	DeploymentProfile string      `json:"deployment_profile"` // erebrus(Standard) | shield | sentinel
 	MinTier       int             `json:"min_tier"`
 	Spec          json.RawMessage `json:"spec"`
 	Org           *orgSummary     `json:"org,omitempty"`
@@ -40,7 +41,7 @@ func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole
 	return nodeOperatorView{
 		NodeID: n.PeerID, PeerID: n.PeerID, DID: n.DID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Name: n.Name, Region: n.Region, Zone: n.Zone, Status: n.Status,
-		AccessMode: n.AccessMode, MinTier: n.MinTier, Spec: n.Spec,
+		AccessMode: n.AccessMode, DeploymentProfile: n.DeploymentProfile, MinTier: n.MinTier, Spec: n.Spec,
 		Org: s.orgSummaryFor(c, n.OrgID, callerRole, privileged),
 		Protocols: n.Protocols, LoadPct: loadPct(n.Load),
 		RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,

@@ -216,14 +216,14 @@ const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''), COALESCE(chain,
 	COALESCE(org_id::text,''), COALESCE(access_mode,'public'),
 	COALESCE(min_tier,0), COALESCE(name,''), COALESCE(region,''), COALESCE(zone,''), COALESCE(ip,''), COALESCE(ip_hash,''),
 	spec, capabilities, endpoints, protocols, status, load, speedtest, rx_bytes, tx_bytes,
-	COALESCE(version,''), last_heartbeat, last_peer_handshake, created_at`
+	COALESCE(version,''), COALESCE(deployment_profile,'erebrus'), last_heartbeat, last_peer_handshake, created_at`
 
 func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	var n Node
 	if err := sc.Scan(&n.ID, &n.PeerID, &n.DID, &n.WalletAddress, &n.Chain,
 		&n.OrgID, &n.AccessMode, &n.MinTier, &n.Name, &n.Region, &n.Zone,
 		&n.IP, &n.IPHash, &n.Spec, &n.Capabilities, &n.Endpoints, pq.Array(&n.Protocols),
-		&n.Status, &n.Load, &n.Speedtest, &n.RxBytes, &n.TxBytes, &n.Version,
+		&n.Status, &n.Load, &n.Speedtest, &n.RxBytes, &n.TxBytes, &n.Version, &n.DeploymentProfile,
 		&n.LastHeartbeat, &n.LastPeerHandshake, &n.CreatedAt); err != nil {
 		return nil, err
 	}

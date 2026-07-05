@@ -411,6 +411,19 @@ func IsOrgPrivileged(role string) bool {
 	return role == OrgRoleOwner || role == OrgRoleAdmin
 }
 
+// UserHasOrgSeat reports whether the user owns, or holds a paid seat in, the org
+// (the "manager" gate for sensitive org resources like node admin credentials).
+func (s *Store) UserHasOrgSeat(ctx context.Context, orgID, userID string) (bool, error) {
+	var ok bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM org_members
+			WHERE org_id = $1 AND user_id = $2 AND status = 'active'
+			  AND (role = 'owner' OR seat_tier <> 'free')
+		)`, orgID, userID).Scan(&ok)
+	return ok, err
+}
+
 // InviteMember adds a member invitation (active membership with optional seat).
 func (s *Store) InviteMember(ctx context.Context, orgID, userID, role, seatTier string) (*Member, error) {
 	role = normalizeOrgRole(role)

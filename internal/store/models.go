@@ -204,6 +204,7 @@ type Node struct {
 	RxBytes       int64           `json:"rx_bytes"`
 	TxBytes       int64           `json:"tx_bytes"`
 	Version       string          `json:"version"`
+	DeploymentProfile string      `json:"deployment_profile"` // erebrus(Standard) | shield | sentinel
 	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
 	LastPeerHandshake *time.Time `json:"last_peer_handshake,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`

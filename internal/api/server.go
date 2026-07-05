@@ -11,6 +11,7 @@ import (
 	"github.com/NetSepio/gateway/internal/nodeclient"
 	"github.com/NetSepio/gateway/internal/nodehub"
 	"github.com/NetSepio/gateway/internal/oauth"
+	"github.com/NetSepio/gateway/internal/secretbox"
 	"github.com/NetSepio/gateway/internal/socialverify"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
@@ -33,6 +34,7 @@ type Server struct {
 	xverify  *socialverify.XVerifier
 	google   *oauth.Verifier
 	apple    *oauth.Verifier
+	crypt    *secretbox.Box
 }
 
 // New builds the API server. platform is the live DB-backed settings object
@@ -48,6 +50,7 @@ func New(cfg *config.Config, platform *config.PlatformSettings, st *store.Store,
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(p.XAPIBaseURL),
 		google: oauth.NewGoogle(splitCSVRaw(cfg.GoogleClientIDs)),
 		apple:  oauth.NewApple(splitCSVRaw(cfg.AppleClientIDs)),
+		crypt:  secretbox.New(cfg.Mnemonic),
 	}
 }
 
@@ -106,9 +109,12 @@ func (s *Server) Router() *gin.Engine {
 
 	// public org profiles
 	v2.GET("/public/orgs/:slug", s.handlePublicOrgBySlug)
+	v2.GET("/public/orgs/:slug/invite", s.handleOrgInviteBySlug)
 
 	// node heartbeat (node PASETO)
 	v2.POST("/nodes/:nodeId/heartbeat", s.handleNodeHeartbeat)
+	// node reports its Shield (AdGuard) admin credential (node PASETO)
+	v2.POST("/nodes/:nodeId/firewall/credentials", s.handleNodeReportFirewallCredentials)
 
 	// authenticated user routes (audit-logged on successful mutations)
 	user := v2.Group("")
@@ -168,6 +174,7 @@ func (s *Server) Router() *gin.Engine {
 		user.POST("/orgs/:id/seats/assign", s.handleAssignSeat)
 		user.POST("/orgs/:id/seats/revoke", s.handleRevokeSeat)
 		user.GET("/orgs/:id/members", s.handleListMembers)
+		user.GET("/orgs/:id/invites", s.handleListOrgInvites)
 		user.POST("/orgs/:id/members/invite", s.handleInviteMember)
 		user.POST("/orgs/:id/members", s.handleAddMember)
 		user.PATCH("/orgs/:id/members/:memberId", s.handlePatchMember)
@@ -187,6 +194,8 @@ func (s *Server) Router() *gin.Engine {
 		user.POST("/orgs/:id/nodes/:nodeId/firewall/restart", s.handleFirewallRestart)
 		user.POST("/orgs/:id/nodes/:nodeId/firewall/sync", s.handleFirewallSync)
 		user.POST("/orgs/:id/nodes/:nodeId/firewall/reset-credentials", s.handleFirewallResetCredentials)
+		user.GET("/orgs/:id/nodes/:nodeId/firewall/credentials", s.handleGetFirewallCredentials)
+		user.POST("/orgs/:id/nodes/:nodeId/firewall/credentials", s.handleUpdateFirewallCredentials)
 		user.GET("/orgs/:id/nodes/:nodeId/firewall/rules", s.handleListFirewallRules)
 		user.POST("/orgs/:id/nodes/:nodeId/firewall/rules", s.handleCreateFirewallRule)
 		user.PATCH("/orgs/:id/nodes/:nodeId/firewall/rules/:ruleId", s.handlePatchFirewallRule)
