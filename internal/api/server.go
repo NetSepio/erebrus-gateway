@@ -175,6 +175,7 @@ func (s *Server) Router() *gin.Engine {
 		user.POST("/orgs/:id/seats/revoke", s.handleRevokeSeat)
 		user.GET("/orgs/:id/members", s.handleListMembers)
 		user.GET("/orgs/:id/invites", s.handleListOrgInvites)
+		user.DELETE("/orgs/:id/invites/:inviteId", s.handleRevokeOrgInvite)
 		user.POST("/orgs/:id/members/invite", s.handleInviteMember)
 		user.POST("/orgs/:id/members", s.handleAddMember)
 		user.PATCH("/orgs/:id/members/:memberId", s.handlePatchMember)
