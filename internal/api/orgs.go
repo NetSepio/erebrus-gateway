@@ -165,6 +165,20 @@ func (s *Server) handleListOrgInvites(c *gin.Context) {
 	ok(c, http.StatusOK, invites)
 }
 
+func (s *Server) handleRevokeOrgInvite(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	if err := s.store.RevokeOrgInvite(c, c.Param("id"), c.Param("inviteId")); errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "invite not found")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to revoke invite")
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (s *Server) handleInviteMember(c *gin.Context) {
 	if _, ok := s.orgPrivileged(c); !ok {
 		return

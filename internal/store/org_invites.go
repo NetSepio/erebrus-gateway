@@ -133,6 +133,25 @@ func (s *Store) OrgNameForInvite(ctx context.Context, orgID string) (string, err
 	return name, err
 }
 
+// RevokeOrgInvite marks a pending email invitation as revoked.
+func (s *Store) RevokeOrgInvite(ctx context.Context, orgID, inviteID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE org_invites SET status = $4, updated_at = now()
+		 WHERE id = $1 AND org_id = $2 AND status = $3`,
+		inviteID, orgID, OrgInviteStatusPending, OrgInviteStatusRevoked)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListPendingOrgInvites returns pending email invitations for an org.
 func (s *Store) ListPendingOrgInvites(ctx context.Context, orgID string) ([]OrgInvite, error) {
 	rows, err := s.db.QueryContext(ctx,
