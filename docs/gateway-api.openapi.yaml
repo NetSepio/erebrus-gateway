@@ -223,7 +223,7 @@ paths:
       security: []
       description: >
         Two-step machine enrollment gated by org registration_token (not human wallet auth).
-        Legacy alias: enrollment_secret. Mint tokens via POST /orgs/{id}/node-registration-tokens.
+        Mint tokens via POST /orgs/{id}/node-registration-tokens.
         Step 1: { registration_token, peer_id } → { flow_id, message, gateway_public_key }.
         Step 2: signed challenge + identity → { node_token, node_id (= peer_id), peer_id, node_key, gateway_public_key }.
         Node binds to the org resolved from the token. access_mode is public | private.
@@ -457,7 +457,7 @@ paths:
               required: [name, node_id, wg_public_key]
               properties:
                 name: { type: string }
-                node_id: { type: string, description: Node peer_id (legacy UUID still accepted) }
+                node_id: { type: string, description: Node peer_id }
                 wg_public_key: { type: string }
                 wg_preshared_key: { type: string }
                 idempotency_key: { type: string }

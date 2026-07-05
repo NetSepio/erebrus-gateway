@@ -2,16 +2,16 @@ package secrets
 
 import "testing"
 
-func TestNewOrgEnrollmentSecret(t *testing.T) {
-	s, err := NewOrgEnrollmentSecret()
+func TestNewNodeRegistrationToken(t *testing.T) {
+	tok, err := NewNodeRegistrationToken()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s) < len(OrgEnrollmentPrefix)+16 {
-		t.Fatalf("secret too short: %q", s)
+	if len(tok) < len(NodeRegistrationPrefix)+16 {
+		t.Fatalf("token too short: %q", tok)
 	}
-	if s[:len(OrgEnrollmentPrefix)] != OrgEnrollmentPrefix {
-		t.Fatalf("prefix = %q", s)
+	if tok[:len(NodeRegistrationPrefix)] != NodeRegistrationPrefix {
+		t.Fatalf("prefix = %q", tok)
 	}
 }
 

@@ -13,8 +13,8 @@ below and compare them field-for-field. Change this file first, then both repos.
 - Auth: node-scoped PASETO bearer token in the `Authorization` header of the
   upgrade request. Tokens are issued by the HTTPS registration flow
   (`POST /api/v2/nodes/register`, see `docs/gateway-api.openapi.yaml`): gated by
-  a scoped org **registration token** (`registration_token` in JSON; legacy alias
-  `enrollment_secret`). On the node, set `EREBRUS_NODE_REGISTRATION_TOKEN` (replaces
+  a scoped org **registration token** (`registration_token` in JSON). On the node, set
+  `EREBRUS_NODE_REGISTRATION_TOKEN` (replaces
   `EREBRUS_ORG_ENROLLMENT_SECRET`). Tokens are minted via
   `POST /api/v2/orgs/{org_id}/node-registration-tokens`.
   The gateway returns a machine challenge; the node signs it with its
