@@ -126,12 +126,32 @@ func (s *Store) PendingOrgInviteCount(ctx context.Context, email string) (int, e
 func (s *Store) OrgNameForInvite(ctx context.Context, orgID string) (string, error) {
 	var name string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(NULLIF(p.display_name,''), o.name)
-		 FROM orgs o
-		 LEFT JOIN org_profiles p ON p.org_id = o.id
-		 WHERE o.id = $1`, orgID).Scan(&name)
+		`SELECT o.name FROM orgs o WHERE o.id = $1`, orgID).Scan(&name)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
 	return name, err
+}
+
+// ListPendingOrgInvites returns pending email invitations for an org.
+func (s *Store) ListPendingOrgInvites(ctx context.Context, orgID string) ([]OrgInvite, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, org_id, email, role, seat_tier, COALESCE(invited_by::text,''), status
+		 FROM org_invites
+		 WHERE org_id = $1 AND status = $2
+		 ORDER BY created_at`,
+		orgID, OrgInviteStatusPending)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OrgInvite
+	for rows.Next() {
+		var inv OrgInvite
+		if err := rows.Scan(&inv.ID, &inv.OrgID, &inv.Email, &inv.Role, &inv.SeatTier, &inv.InvitedBy, &inv.Status); err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
+	}
+	return out, rows.Err()
 }

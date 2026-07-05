@@ -109,6 +109,7 @@ func (s *Server) Router() *gin.Engine {
 
 	// public org profiles
 	v2.GET("/public/orgs/:slug", s.handlePublicOrgBySlug)
+	v2.GET("/public/orgs/:slug/invite", s.handleOrgInviteBySlug)
 
 	// node heartbeat (node PASETO)
 	v2.POST("/nodes/:nodeId/heartbeat", s.handleNodeHeartbeat)
@@ -173,6 +174,7 @@ func (s *Server) Router() *gin.Engine {
 		user.POST("/orgs/:id/seats/assign", s.handleAssignSeat)
 		user.POST("/orgs/:id/seats/revoke", s.handleRevokeSeat)
 		user.GET("/orgs/:id/members", s.handleListMembers)
+		user.GET("/orgs/:id/invites", s.handleListOrgInvites)
 		user.POST("/orgs/:id/members/invite", s.handleInviteMember)
 		user.POST("/orgs/:id/members", s.handleAddMember)
 		user.PATCH("/orgs/:id/members/:memberId", s.handlePatchMember)

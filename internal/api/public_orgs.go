@@ -21,6 +21,25 @@ func (s *Server) handlePublicOrgBySlug(c *gin.Context) {
 	ok(c, http.StatusOK, profile)
 }
 
+// handleOrgInviteBySlug returns minimal org info for invite landing pages.
+// Does not require public_profile_enabled — the slug acts as an unlisted invite link.
+func (s *Server) handleOrgInviteBySlug(c *gin.Context) {
+	org, err := s.store.GetOrgBySlug(c, c.Param("slug"))
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "org not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load org")
+		return
+	}
+	ok(c, http.StatusOK, gin.H{
+		"org_id": org.ID,
+		"name":   org.Name,
+		"slug":   org.Slug,
+	})
+}
+
 func (s *Server) handleGetOrgPublicProfile(c *gin.Context) {
 	org, err := s.store.GetOrg(c, c.Param("id"))
 	if errors.Is(err, store.ErrNotFound) {

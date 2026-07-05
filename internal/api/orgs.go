@@ -153,6 +153,18 @@ func (s *Server) handleListMembers(c *gin.Context) {
 	ok(c, http.StatusOK, members)
 }
 
+func (s *Server) handleListOrgInvites(c *gin.Context) {
+	if _, ok := s.orgPrivileged(c); !ok {
+		return
+	}
+	invites, err := s.store.ListPendingOrgInvites(c, c.Param("id"))
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to list invites")
+		return
+	}
+	ok(c, http.StatusOK, invites)
+}
+
 func (s *Server) handleInviteMember(c *gin.Context) {
 	if _, ok := s.orgPrivileged(c); !ok {
 		return
