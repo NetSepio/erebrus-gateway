@@ -100,10 +100,15 @@ func (s *Server) handleGetFirewallCredentials(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load credential")
 		return
 	}
-	password, err := s.crypt.Open(cred.Secret)
+	password, legacyKDF, err := s.crypt.OpenBlob(cred.Secret)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to decrypt credential")
 		return
+	}
+	if legacyKDF {
+		if resealed, serr := s.crypt.Seal(password); serr == nil {
+			_ = s.store.UpsertFirewallCredential(c, node.PeerID, cred.AdminUser, resealed, cred.AdminURL)
+		}
 	}
 	s.logActivity(c, userID(c), "firewall.credentials.view", node.PeerID)
 	ok(c, http.StatusOK, gin.H{
