@@ -105,7 +105,7 @@ func (s *Store) createOrg(ctx context.Context, ownerUserID string, in CreateOrgI
 	if name == "" {
 		return nil, fmt.Errorf("name is required")
 	}
-	slug, err := s.resolveOrgSlug(ctx, in.Slug, name)
+	slug, err := s.resolveOrgSlug(ctx, in.Slug, name, "")
 	if err != nil {
 		return nil, err
 	}
@@ -365,15 +365,13 @@ func (s *Store) UpdateOrg(ctx context.Context, orgID string, in UpdateOrgInput) 
 		name = strings.TrimSpace(*in.Name)
 	}
 	if in.Slug != nil {
-		slug, err = s.resolveOrgSlug(ctx, *in.Slug, name)
-		if err != nil {
-			return nil, err
-		}
-		if slug != cur.Slug {
-			var exists bool
-			_ = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM orgs WHERE slug=$1 AND id<>$2)`, slug, orgID).Scan(&exists)
-			if exists {
-				return nil, fmt.Errorf("slug already taken")
+		requested := strings.TrimSpace(*in.Slug)
+		if requested == cur.Slug {
+			slug = cur.Slug
+		} else {
+			slug, err = s.resolveOrgSlug(ctx, requested, name, orgID)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -692,7 +690,7 @@ func (s *Store) SetOrgVerificationStatus(ctx context.Context, orgID, status stri
 
 var slugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
 
-func (s *Store) resolveOrgSlug(ctx context.Context, requested, name string) (string, error) {
+func (s *Store) resolveOrgSlug(ctx context.Context, requested, name, excludeOrgID string) (string, error) {
 	base := strings.TrimSpace(requested)
 	if base == "" {
 		base = slugSanitizer.ReplaceAllString(strings.ToLower(name), "-")
@@ -701,14 +699,29 @@ func (s *Store) resolveOrgSlug(ctx context.Context, requested, name string) (str
 	if base == "" {
 		base = "org"
 	}
+	base = strings.Trim(slugSanitizer.ReplaceAllString(strings.ToLower(base), "-"), "-")
+	if base == "" {
+		base = "org"
+	}
 	slug := base
 	for i := 0; i < 5; i++ {
 		var exists bool
-		if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM orgs WHERE slug=$1)`, slug).Scan(&exists); err != nil {
+		var err error
+		if excludeOrgID != "" {
+			err = s.db.QueryRowContext(ctx,
+				`SELECT EXISTS(SELECT 1 FROM orgs WHERE slug=$1 AND id<>$2)`, slug, excludeOrgID).Scan(&exists)
+		} else {
+			err = s.db.QueryRowContext(ctx,
+				`SELECT EXISTS(SELECT 1 FROM orgs WHERE slug=$1)`, slug).Scan(&exists)
+		}
+		if err != nil {
 			return "", err
 		}
 		if !exists {
 			return slug, nil
+		}
+		if excludeOrgID != "" {
+			return "", fmt.Errorf("slug already taken")
 		}
 		slug = base + "-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
 	}

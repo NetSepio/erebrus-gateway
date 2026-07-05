@@ -45,16 +45,16 @@ func (s *Store) GetOrgBySlug(ctx context.Context, slug string) (*Org, error) {
 
 // UpdateOrgProfileInput carries optional profile fields.
 type UpdateOrgProfileInput struct {
-	LegalName    *string
-	DisplayName  *string
-	Description  *string
-	LogoURL      *string
-	WebsiteURL   *string
-	PublicEmail  *string
-	BillingEmail *string
-	SupportEmail *string
-	Country      *string
-	Timezone     *string
+	LegalName    *string `json:"legal_name"`
+	DisplayName  *string `json:"display_name"`
+	Description  *string `json:"description"`
+	LogoURL      *string `json:"logo_url"`
+	WebsiteURL   *string `json:"website_url"`
+	PublicEmail  *string `json:"public_email"`
+	BillingEmail *string `json:"billing_email"`
+	SupportEmail *string `json:"support_email"`
+	Country      *string `json:"country"`
+	Timezone     *string `json:"timezone"`
 }
 
 // UpdateOrgProfile patches org profile fields.
@@ -130,12 +130,12 @@ func (s *Store) GetPublicOrgBySlug(ctx context.Context, slug string) (*PublicOrg
 
 // UpdatePublicOrgProfileInput carries public-profile fields.
 type UpdatePublicOrgProfileInput struct {
-	DisplayName *string
-	Description *string
-	LogoURL     *string
-	WebsiteURL  *string
-	PublicEmail *string
-	Country     *string
+	DisplayName *string `json:"display_name"`
+	Description *string `json:"description"`
+	LogoURL     *string `json:"logo_url"`
+	WebsiteURL  *string `json:"website_url"`
+	PublicEmail *string `json:"public_email"`
+	Country     *string `json:"country"`
 }
 
 // UpdatePublicOrgProfile patches only public-facing profile fields.
