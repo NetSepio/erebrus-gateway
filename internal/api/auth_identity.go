@@ -145,10 +145,7 @@ func (s *Server) oidcLogin(c *gin.Context, provider string, v *oauth.Verifier) {
 // finishIdentityLogin accepts pending org invites for the email, runs the
 // first-login bootstrap, and issues the session token.
 func (s *Server) finishIdentityLogin(c *gin.Context, u *store.User, created bool, email, method string) {
-	if email != "" {
-		_, _ = s.store.AcceptOrgInvitesForEmail(c, u.ID, email)
-	}
-	_ = s.store.ActivateInvitedMemberships(c, u.ID)
+	// Org invites stay pending until the user accepts them in-app.
 	s.bootstrapUser(c, u)
 	if created {
 		s.logActivity(c, u.ID, "auth.signup."+method, "")
