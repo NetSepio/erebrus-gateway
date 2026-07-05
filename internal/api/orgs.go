@@ -210,11 +210,8 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 	var inviteEmail string
 
 	if emailOK {
-		if _, err := s.store.CreateOrgInvite(c, orgID, email, role, req.SeatTier, inviterID); err != nil {
-			fail(c, http.StatusInternalServerError, "failed to create invite")
-			return
-		}
 		inviteEmail = email
+		// Known account: invited org_members row only. Unknown email: pending org_invites only.
 		if ownerID, err := s.store.EmailOwner(c, email); err == nil {
 			m, err := s.store.InviteMember(c, orgID, ownerID, role, req.SeatTier)
 			if err != nil {
@@ -222,6 +219,14 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 				return
 			}
 			member = m
+		} else if errors.Is(err, store.ErrNotFound) {
+			if _, err := s.store.CreateOrgInvite(c, orgID, email, role, req.SeatTier, inviterID); err != nil {
+				fail(c, http.StatusInternalServerError, "failed to create invite")
+				return
+			}
+		} else {
+			fail(c, http.StatusInternalServerError, "failed to resolve invitee")
+			return
 		}
 	}
 
@@ -252,6 +257,13 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 
 	s.logActivity(c, inviterID, "org.member.invite", orgID)
 	if member != nil {
+		if u, uerr := s.store.GetUser(c, member.UserID); uerr == nil {
+			member.Email = u.Email
+			member.Name = u.Name
+			if member.WalletAddress == "" {
+				member.WalletAddress = u.WalletAddress
+			}
+		}
 		ok(c, http.StatusCreated, gin.H{"member": member, "email_sent": inviteEmail != "" && s.mailer.Enabled()})
 		return
 	}
