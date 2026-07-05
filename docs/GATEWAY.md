@@ -74,8 +74,8 @@ deploy/               Production docker-compose + OTel collector config
   stay in `org_invites` until the invitee signs in and verifies that email; wallet
   invites activate on login (or email verify when applicable).
 - **Node enrollment:** Scoped **registration tokens** (`ere_reg_*`), minted per org.
-  `POST /api/v2/nodes/register` accepts `registration_token` (legacy alias:
-  `enrollment_secret`). Node installer env: `EREBRUS_NODE_REGISTRATION_TOKEN`.
+  `POST /api/v2/nodes/register` accepts a scoped `registration_token`. Node installer
+  env: `EREBRUS_NODE_REGISTRATION_TOKEN`.
   Two-step machine challenge → node PASETO + per-node `node_key`.
 - **Plans (gateway-side today):** Entitlement limits update on admin plan change.
   Managed-node **reservations** in `org_nodes` are created only when

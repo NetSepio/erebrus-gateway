@@ -51,10 +51,8 @@ func (s *Server) handleNodeReportFirewallCredentials(c *gin.Context) {
 		return
 	}
 	if param := c.Param("nodeId"); param != "" && param != peerID {
-		if resolved, rerr := s.store.ResolvePeerID(c, param); rerr != nil || resolved != peerID {
-			fail(c, http.StatusForbidden, "node id mismatch")
-			return
-		}
+		fail(c, http.StatusForbidden, "node id mismatch")
+		return
 	}
 	if !s.crypt.Enabled() {
 		fail(c, http.StatusServiceUnavailable, "credential encryption not configured")
@@ -100,15 +98,10 @@ func (s *Server) handleGetFirewallCredentials(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load credential")
 		return
 	}
-	password, legacyKDF, err := s.crypt.OpenBlob(cred.Secret)
+	password, err := s.crypt.Open(cred.Secret)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to decrypt credential")
 		return
-	}
-	if legacyKDF {
-		if resealed, serr := s.crypt.Seal(password); serr == nil {
-			_ = s.store.UpsertFirewallCredential(c, node.PeerID, cred.AdminUser, resealed, cred.AdminURL)
-		}
 	}
 	s.logActivity(c, userID(c), "firewall.credentials.view", node.PeerID)
 	ok(c, http.StatusOK, gin.H{

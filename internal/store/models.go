@@ -285,6 +285,8 @@ type Member struct {
 	ID            string    `json:"id"`
 	UserID        string    `json:"user_id"`
 	WalletAddress string    `json:"wallet_address,omitempty"`
+	Email         string    `json:"email,omitempty"`
+	Name          string    `json:"name,omitempty"`
 	Role          string    `json:"role"`
 	SeatTier      string    `json:"seat_tier"`
 	Status        string    `json:"status"`

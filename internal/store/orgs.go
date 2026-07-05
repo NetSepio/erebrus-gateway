@@ -584,8 +584,8 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 // ListMembers returns an org's active and invited members.
 func (s *Store) ListMembers(ctx context.Context, orgID string) ([]Member, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT m.id, m.user_id, COALESCE(u.wallet_address,''), m.role, m.seat_tier, m.status,
-		        m.created_at, m.updated_at
+		`SELECT m.id, m.user_id, COALESCE(u.wallet_address,''), COALESCE(u.email,''), COALESCE(u.name,''),
+		        m.role, m.seat_tier, m.status, m.created_at, m.updated_at
 		 FROM org_members m JOIN users u ON u.id = m.user_id
 		 WHERE m.org_id = $1 AND m.status IN ('active', 'invited') ORDER BY m.created_at`, orgID)
 	if err != nil {
@@ -595,7 +595,7 @@ func (s *Store) ListMembers(ctx context.Context, orgID string) ([]Member, error)
 	var out []Member
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.UserID, &m.WalletAddress, &m.Role, &m.SeatTier, &m.Status,
+		if err := rows.Scan(&m.ID, &m.UserID, &m.WalletAddress, &m.Email, &m.Name, &m.Role, &m.SeatTier, &m.Status,
 			&m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, err
 		}

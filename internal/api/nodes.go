@@ -87,7 +87,6 @@ func (s *Server) handleListNodes(c *gin.Context) {
 }
 
 type nodeRegisterReq struct {
-	EnrollmentSecret  string `json:"enrollment_secret"`
 	RegistrationToken string `json:"registration_token"`
 	PeerID           string `json:"peer_id"`
 	// step 2
@@ -111,7 +110,7 @@ func (s *Server) nodeChallengeMessage(flowID string) string {
 }
 
 // handleNodeRegister is the two-step node enrollment (challenge → machine-signed
-// response → node PASETO). Gated by org enrollment_secret, not human wallet auth.
+// response → node PASETO). Gated by a scoped org registration token.
 func (s *Server) handleNodeRegister(c *gin.Context) {
 	var req nodeRegisterReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -119,9 +118,6 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		return
 	}
 	token := strings.TrimSpace(req.RegistrationToken)
-	if token == "" {
-		token = strings.TrimSpace(req.EnrollmentSecret) // legacy alias
-	}
 	if token == "" {
 		fail(c, http.StatusBadRequest, "registration_token required")
 		return

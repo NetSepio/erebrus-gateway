@@ -258,11 +258,8 @@ func (s *Server) handleNodeHeartbeat(c *gin.Context) {
 		return
 	}
 	if param := c.Param("nodeId"); param != "" && param != peerID {
-		// Accept legacy UUID path segments during rollout.
-		if resolved, rerr := s.store.ResolvePeerID(c, param); rerr != nil || resolved != peerID {
-			fail(c, http.StatusForbidden, "node id mismatch")
-			return
-		}
+		fail(c, http.StatusForbidden, "node id mismatch")
+		return
 	}
 	var req struct {
 		Status    string          `json:"status"`
