@@ -10,14 +10,24 @@ import (
 
 // UserOrgInvite is a pending workspace invitation for the authenticated user.
 type UserOrgInvite struct {
-	ID        string    `json:"id"`
-	OrgID     string    `json:"org_id"`
-	OrgName   string    `json:"org_name"`
-	OrgSlug   string    `json:"org_slug,omitempty"`
-	Role      string    `json:"role"`
-	SeatTier  string    `json:"seat_tier,omitempty"`
-	Source    string    `json:"source"` // membership | email
-	CreatedAt time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	OrgID          string    `json:"org_id"`
+	OrgName        string    `json:"org_name"`
+	OrgSlug        string    `json:"org_slug,omitempty"`
+	OrgDisplayName string    `json:"org_display_name,omitempty"`
+	OrgPlan        string    `json:"org_plan,omitempty"`
+	OrgDescription string    `json:"org_description,omitempty"`
+	OrgLogoURL     string    `json:"org_logo_url,omitempty"`
+	MemberCount    int       `json:"member_count"`
+	NodeCount      int       `json:"node_count"`
+	Role           string    `json:"role"`
+	SeatTier       string    `json:"seat_tier,omitempty"`
+	Source         string    `json:"source"` // membership | email
+	InviteChannel  string    `json:"invite_channel,omitempty"` // wallet | email
+	InvitedByID    string    `json:"invited_by_id,omitempty"`
+	InvitedByName  string    `json:"invited_by_name,omitempty"`
+	InvitedByEmail string    `json:"invited_by_email,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // ListUserOrgInvites returns pending membership and email invites for a user.
@@ -42,7 +52,11 @@ func (s *Store) ListUserOrgInvites(ctx context.Context, userID, email string) ([
 			return nil, err
 		}
 		inv.Source = "membership"
+		inv.InviteChannel = "wallet"
 		seen[inv.OrgID] = struct{}{}
+		if err := s.enrichUserOrgInvite(ctx, &inv, email); err != nil {
+			return nil, err
+		}
 		out = append(out, inv)
 	}
 	if err := rows.Err(); err != nil {
@@ -55,7 +69,8 @@ func (s *Store) ListUserOrgInvites(ctx context.Context, userID, email string) ([
 	}
 
 	emailRows, err := s.db.QueryContext(ctx,
-		`SELECT i.id::text, o.id::text, o.name, COALESCE(o.slug,''), i.role, COALESCE(i.seat_tier,''), i.created_at
+		`SELECT i.id::text, o.id::text, o.name, COALESCE(o.slug,''), i.role, COALESCE(i.seat_tier,''),
+		        COALESCE(i.invited_by::text,''), i.created_at
 		 FROM org_invites i
 		 JOIN orgs o ON o.id = i.org_id
 		 WHERE lower(i.email) = lower($1) AND i.status = $2
@@ -68,16 +83,174 @@ func (s *Store) ListUserOrgInvites(ctx context.Context, userID, email string) ([
 
 	for emailRows.Next() {
 		var inv UserOrgInvite
-		if err := emailRows.Scan(&inv.ID, &inv.OrgID, &inv.OrgName, &inv.OrgSlug, &inv.Role, &inv.SeatTier, &inv.CreatedAt); err != nil {
+		var invitedBy string
+		if err := emailRows.Scan(&inv.ID, &inv.OrgID, &inv.OrgName, &inv.OrgSlug, &inv.Role, &inv.SeatTier, &invitedBy, &inv.CreatedAt); err != nil {
 			return nil, err
 		}
 		if _, dup := seen[inv.OrgID]; dup {
 			continue
 		}
 		inv.Source = "email"
+		inv.InviteChannel = "email"
+		if err := s.enrichUserOrgInvite(ctx, &inv, email); err != nil {
+			return nil, err
+		}
+		if invitedBy != "" {
+			inv.InvitedByID = invitedBy
+			s.applyInviter(ctx, &inv, invitedBy)
+		}
 		out = append(out, inv)
 	}
 	return out, emailRows.Err()
+}
+
+// GetUserOrgInvite returns one pending invite for the user within an org.
+func (s *Store) GetUserOrgInvite(ctx context.Context, userID, orgID, email string) (*UserOrgInvite, error) {
+	invites, err := s.ListUserOrgInvites(ctx, userID, email)
+	if err != nil {
+		return nil, err
+	}
+	for i := range invites {
+		if invites[i].OrgID == orgID {
+			return &invites[i], nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (s *Store) enrichUserOrgInvite(ctx context.Context, inv *UserOrgInvite, userEmail string) error {
+	org, err := s.GetOrg(ctx, inv.OrgID)
+	if err != nil {
+		return err
+	}
+	inv.OrgPlan = org.Plan
+	if profile, err := s.GetOrgProfile(ctx, inv.OrgID); err == nil {
+		inv.OrgDisplayName = strings.TrimSpace(profile.DisplayName)
+		inv.OrgDescription = strings.TrimSpace(profile.Description)
+		inv.OrgLogoURL = strings.TrimSpace(profile.LogoURL)
+	}
+	if inv.OrgDisplayName == "" {
+		inv.OrgDisplayName = org.Name
+	}
+
+	_ = s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM org_members WHERE org_id=$1 AND status IN ('active','invited')`, inv.OrgID).
+		Scan(&inv.MemberCount)
+	_ = s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM nodes WHERE org_id=$1::uuid`, inv.OrgID).
+		Scan(&inv.NodeCount)
+
+	if inv.InvitedByName == "" {
+		if inv.Source == "email" && userEmail != "" {
+			var invitedBy string
+			_ = s.db.QueryRowContext(ctx,
+				`SELECT COALESCE(invited_by::text,'') FROM org_invites
+				 WHERE org_id=$1 AND lower(email)=lower($2) AND status=$3`,
+				inv.OrgID, userEmail, OrgInviteStatusPending).Scan(&invitedBy)
+			if invitedBy != "" {
+				inv.InvitedByID = invitedBy
+				s.applyInviter(ctx, inv, invitedBy)
+			}
+		}
+		if inv.InvitedByName == "" && org.OwnerUserID != "" {
+			inv.InvitedByID = org.OwnerUserID
+			s.applyInviter(ctx, inv, org.OwnerUserID)
+		}
+	}
+	return nil
+}
+
+func (s *Store) applyInviter(ctx context.Context, inv *UserOrgInvite, userID string) {
+	u, err := s.GetUser(ctx, userID)
+	if err != nil {
+		return
+	}
+	if n := strings.TrimSpace(u.Name); n != "" {
+		inv.InvitedByName = n
+	} else if u.EmailVerified && strings.TrimSpace(u.Email) != "" {
+		inv.InvitedByName = u.Email
+	} else if w := strings.TrimSpace(u.WalletAddress); w != "" {
+		if len(w) > 10 {
+			inv.InvitedByName = w[:6] + "…" + w[len(w)-4:]
+		} else {
+			inv.InvitedByName = w
+		}
+	}
+	if u.EmailVerified {
+		inv.InvitedByEmail = strings.TrimSpace(u.Email)
+	}
+}
+
+// InviteNotificationContext carries data for invite outcome emails.
+type InviteNotificationContext struct {
+	OrgID          string
+	OrgName        string
+	OrgDisplayName string
+	OrgSlug        string
+	Role           string
+	SeatTier       string
+	InviteeName    string
+	InviteeEmail   string
+	InviterID      string
+	InviterName    string
+	InviterEmail   string
+	OwnerID        string
+	OwnerEmail     string
+}
+
+// InviteNotificationContextForUser loads email context for an org invite action.
+func (s *Store) InviteNotificationContextForUser(ctx context.Context, userID, orgID, email string) (*InviteNotificationContext, error) {
+	inv, err := s.GetUserOrgInvite(ctx, userID, orgID, email)
+	if err != nil {
+		return nil, err
+	}
+	org, err := s.GetOrg(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	u, err := s.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &InviteNotificationContext{
+		OrgID:          orgID,
+		OrgName:        org.Name,
+		OrgDisplayName: inv.OrgDisplayName,
+		OrgSlug:        org.Slug,
+		Role:           inv.Role,
+		SeatTier:       inv.SeatTier,
+		InviteeEmail:   strings.TrimSpace(email),
+		OwnerID:        org.OwnerUserID,
+	}
+	if out.OrgDisplayName == "" {
+		out.OrgDisplayName = org.Name
+	}
+	if n := strings.TrimSpace(u.Name); n != "" {
+		out.InviteeName = n
+	} else if out.InviteeEmail != "" {
+		out.InviteeName = out.InviteeEmail
+	} else if w := strings.TrimSpace(u.WalletAddress); w != "" {
+		out.InviteeName = w
+	}
+
+	out.InviterName = inv.InvitedByName
+	out.InviterEmail = inv.InvitedByEmail
+	out.InviterID = inv.InvitedByID
+	if out.InviterID != "" {
+		if inviter, err := s.GetUser(ctx, out.InviterID); err == nil && inviter.EmailVerified {
+			out.InviterEmail = strings.TrimSpace(inviter.Email)
+			if out.InviterName == "" {
+				out.InviterName = strings.TrimSpace(inviter.Name)
+			}
+		}
+	}
+	if org.OwnerUserID != "" {
+		if owner, err := s.GetUser(ctx, org.OwnerUserID); err == nil && owner.EmailVerified {
+			out.OwnerEmail = strings.TrimSpace(owner.Email)
+		}
+	}
+	return out, nil
 }
 
 // AcceptUserOrgInvite activates a pending membership or email invite for one org.

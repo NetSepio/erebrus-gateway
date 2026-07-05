@@ -123,6 +123,7 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/account/profile", s.handleGetProfile)
 		user.PATCH("/account/profile", s.handlePatchProfile)
 		user.GET("/account/org-invites", s.handleListAccountOrgInvites)
+		user.GET("/account/org-invites/:orgId", s.handleGetAccountOrgInvite)
 		user.POST("/account/org-invites/:orgId/accept", s.handleAcceptAccountOrgInvite)
 		user.POST("/account/org-invites/:orgId/decline", s.handleDeclineAccountOrgInvite)
 		user.GET("/account/activity", s.handleAccountActivity)

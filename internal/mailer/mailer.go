@@ -55,6 +55,43 @@ func (m *Mailer) SendOrgInvite(ctx context.Context, to, orgName, inviteURL strin
 	return m.send(ctx, to, subject, text, html)
 }
 
+// SendOrgInviteAccepted notifies parties that an invite was accepted.
+func (m *Mailer) SendOrgInviteAccepted(ctx context.Context, to, orgDisplayName, inviteeLabel, role, workspaceURL string, toInviter bool) error {
+	subject := fmt.Sprintf("%s joined %s on Erebrus", inviteeLabel, orgDisplayName)
+	if toInviter {
+		subject = fmt.Sprintf("%s accepted your %s workspace invite", inviteeLabel, orgDisplayName)
+	}
+	text := fmt.Sprintf("%s accepted the invitation to join %s as %s.\n\nOpen workspace: %s",
+		inviteeLabel, orgDisplayName, role, workspaceURL)
+	html := fmt.Sprintf(`<p><strong>%s</strong> accepted the invitation to join <strong>%s</strong> as <strong>%s</strong>.</p>`+
+		`<p><a href="%s">Open workspace</a></p>`, inviteeLabel, orgDisplayName, role, workspaceURL)
+	if !toInviter {
+		subject = fmt.Sprintf("You're now a member of %s", orgDisplayName)
+		text = fmt.Sprintf("Welcome to %s — you joined as %s.\n\nOpen your workspace: %s", orgDisplayName, role, workspaceURL)
+		html = fmt.Sprintf(`<p>Welcome to <strong>%s</strong>. You joined as <strong>%s</strong>.</p>`+
+			`<p><a href="%s">Open workspace</a></p>`, orgDisplayName, role, workspaceURL)
+	}
+	return m.send(ctx, to, subject, text, html)
+}
+
+// SendOrgInviteDeclined notifies parties that an invite was declined.
+func (m *Mailer) SendOrgInviteDeclined(ctx context.Context, to, orgDisplayName, inviteeLabel, role string, toInviter bool) error {
+	subject := fmt.Sprintf("Invite to %s was declined", orgDisplayName)
+	if toInviter {
+		subject = fmt.Sprintf("%s declined your %s workspace invite", inviteeLabel, orgDisplayName)
+	}
+	text := fmt.Sprintf("%s declined the invitation to join %s as %s.", inviteeLabel, orgDisplayName, role)
+	html := fmt.Sprintf(`<p><strong>%s</strong> declined the invitation to join <strong>%s</strong> as <strong>%s</strong>.</p>`,
+		inviteeLabel, orgDisplayName, role)
+	if !toInviter {
+		subject = fmt.Sprintf("You declined the %s workspace invite", orgDisplayName)
+		text = fmt.Sprintf("You declined the invitation to join %s as %s. No further action is needed.", orgDisplayName, role)
+		html = fmt.Sprintf(`<p>You declined the invitation to join <strong>%s</strong> as <strong>%s</strong>.</p>`+
+			`<p>No further action is needed.</p>`, orgDisplayName, role)
+	}
+	return m.send(ctx, to, subject, text, html)
+}
+
 // SendOTP emails a 6-digit verification code.
 func (m *Mailer) SendOTP(ctx context.Context, to, code string) error {
 	subject := "Your Erebrus verification code"

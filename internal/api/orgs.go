@@ -213,12 +213,7 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load org")
 		return
 	}
-	org, err := s.store.GetOrg(c, orgID)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to load org")
-		return
-	}
-	inviteURL := strings.TrimRight(s.cfg.ErebrusPublicBaseURL, "/") + "/orgs/" + org.Slug
+	inviteURL := strings.TrimRight(s.cfg.ErebrusPublicBaseURL, "/") + "/notifications/invite/" + orgID
 
 	var member *store.Member
 	var inviteEmail string
