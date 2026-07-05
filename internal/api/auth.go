@@ -77,10 +77,7 @@ func (s *Server) handleAuthComplete(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load user")
 		return
 	}
-	_ = s.store.ActivateInvitedMemberships(c, u.ID)
-	if u.EmailVerified && u.Email != "" {
-		_, _ = s.store.AcceptOrgInvitesForEmail(c, u.ID, u.Email)
-	}
+	// Org invites stay pending until the user accepts them in-app.
 	// Optional referral binding: sets referred_by once (immutable, self-blocked).
 	// Must precede the trial below so the qualifying trial awards referral XP.
 	if ref := strings.TrimSpace(req.Ref); ref != "" {
