@@ -158,6 +158,31 @@ func (s *Server) sendOrgInviteOutcomeEmails(c *gin.Context, ctx *store.InviteNot
 	}
 }
 
+func userDisplayLabel(c *gin.Context, s *Server, userID string) string {
+	if userID == "" {
+		return ""
+	}
+	u, err := s.store.GetUser(c, userID)
+	if err != nil || u == nil {
+		return ""
+	}
+	if n := strings.TrimSpace(u.Name); n != "" {
+		return n
+	}
+	if u.EmailVerified {
+		if e := strings.TrimSpace(u.Email); e != "" {
+			return e
+		}
+	}
+	if w := strings.TrimSpace(u.WalletAddress); w != "" {
+		if len(w) > 10 {
+			return w[:6] + "…" + w[len(w)-4:]
+		}
+		return w
+	}
+	return ""
+}
+
 func humanRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case store.OrgRoleAdmin:

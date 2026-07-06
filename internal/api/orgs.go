@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetSepio/gateway/internal/mailer"
 	"github.com/NetSepio/gateway/internal/store"
+	"github.com/NetSepio/gateway/internal/token"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,6 +46,19 @@ func (s *Server) orgPrivileged(c *gin.Context) (role string, ok bool) {
 	}
 	if !store.IsOrgPrivileged(role) {
 		fail(c, http.StatusForbidden, "owner or admin role required")
+		return "", false
+	}
+	return role, true
+}
+
+// orgCanManageNodes allows owners, admins, and node operators to enroll nodes.
+func (s *Server) orgCanManageNodes(c *gin.Context) (role string, ok bool) {
+	role, ok = s.orgMember(c)
+	if !ok {
+		return "", false
+	}
+	if !store.CanManageOrgNodes(role) {
+		fail(c, http.StatusForbidden, "node management role required")
 		return "", false
 	}
 	return role, true
@@ -258,7 +273,16 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 	}
 
 	if inviteEmail != "" && s.mailer.Enabled() {
-		if err := s.mailer.SendOrgInvite(c, inviteEmail, orgName, inviteURL); err != nil {
+		inviteData := mailer.OrgInviteEmail{
+			OrgName:     orgName,
+			InviterName: userDisplayLabel(c, s, inviterID),
+			Role:        humanRole(role),
+			InviteURL:   inviteURL,
+		}
+		if profile, err := s.store.GetOrgProfile(c, orgID); err == nil {
+			inviteData.LogoURL = strings.TrimSpace(profile.LogoURL)
+		}
+		if err := s.mailer.SendOrgInvite(c, inviteEmail, inviteData); err != nil {
 			fail(c, http.StatusBadGateway, "failed to send invite email")
 			return
 		}
@@ -484,6 +508,75 @@ func (s *Server) handleOrgClients(c *gin.Context) {
 		return
 	}
 	ok(c, http.StatusOK, clients)
+}
+
+// handleUserOrgProvisionClient provisions a VPN client on an org node for the
+// authenticated member (same entitlement rules as POST /vpn/clients).
+func (s *Server) handleUserOrgProvisionClient(c *gin.Context) {
+	if _, ok := s.orgMember(c); !ok {
+		return
+	}
+	oid := c.Param("id")
+	var req provisionReq
+	if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" || req.NodeID == "" || req.WGPublicKey == "" {
+		fail(c, http.StatusBadRequest, "name, node_id and wg_public_key are required")
+		return
+	}
+	node, err := s.store.GetNode(c, req.NodeID)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "node not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to resolve node")
+		return
+	}
+	if node.OrgID != oid {
+		fail(c, http.StatusForbidden, "node does not belong to this org")
+		return
+	}
+	uid := userID(c)
+	isAdmin := c.GetString(ctxRole) == token.RoleAdmin
+	if !isAdmin {
+		if node.AccessMode == store.NodeAccessPrivate {
+			member, err := s.store.UserCanProvisionNode(c, node.PeerID, uid)
+			if err != nil {
+				fail(c, http.StatusInternalServerError, "node access check failed")
+				return
+			}
+			if !member {
+				fail(c, http.StatusForbidden, "private node — org membership required")
+				return
+			}
+		} else {
+			sub, err := s.store.ActiveSubscription(c, uid)
+			if errors.Is(err, store.ErrNotFound) {
+				orgPlan, perr := s.store.UserOrgVPNPlan(c, uid)
+				if perr != nil {
+					fail(c, http.StatusInternalServerError, "entitlement check failed")
+					return
+				}
+				if orgPlan == "" {
+					fail(c, http.StatusPaymentRequired, "your trial has ended — contact support to upgrade your plan, or hold the access NFT")
+					return
+				}
+				_ = orgPlan
+			} else if err != nil {
+				fail(c, http.StatusInternalServerError, "entitlement check failed")
+				return
+			} else if sub != nil {
+				if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {
+					if existing, _ := s.store.FindClientByUserNodeWGKey(c, uid, node.ID, req.WGPublicKey); existing == nil {
+						if n, _ := s.store.CountActiveClientsByUser(c, uid); n >= plan.MaxClients {
+							fail(c, http.StatusConflict, "client limit reached for your plan")
+							return
+						}
+					}
+				}
+			}
+		}
+	}
+	s.doProvision(c, uid, oid, req.NodeID, req.Name, req.WGPublicKey, req.WGPresharedKey)
 }
 
 // ── org programmatic access (X-Api-Key) ──────────────

@@ -211,6 +211,7 @@ func (s *Server) Router() *gin.Engine {
 		user.DELETE("/orgs/:id/apikeys/:keyId", s.handleRevokeAPIKey)
 		user.GET("/orgs/:id/usage", s.handleOrgUsage)
 		user.GET("/orgs/:id/clients", s.handleOrgClients)
+		user.POST("/orgs/:id/vpn/clients", s.handleUserOrgProvisionClient)
 	}
 
 	// org programmatic access (X-Api-Key) — scoped to the key's org

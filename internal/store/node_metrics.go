@@ -67,12 +67,12 @@ func (s *Store) PurgeOldNodeMetrics(ctx context.Context, retention time.Duration
 	return err
 }
 
-// OrgNodes returns nodes attached to orgs the user belongs to.
+// OrgNodes returns nodes attached to orgs the user actively belongs to.
 func (s *Store) OrgNodes(ctx context.Context, userID string) ([]*Node, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+nodeCols+` FROM nodes
-		 WHERE org_id IN (SELECT org_id FROM org_members WHERE user_id = $1)
-		 ORDER BY created_at DESC`, userID)
+		 WHERE org_id IN (SELECT org_id FROM org_members WHERE user_id = $1 AND status = $2)
+		 ORDER BY created_at DESC`, userID, MemberStatusActive)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (s *Store) NodeOperatedBy(ctx context.Context, nodeID, userID string) (bool
 		`SELECT EXISTS(
 		   SELECT 1 FROM nodes n
 		   JOIN org_members m ON m.org_id = n.org_id
-		   WHERE n.peer_id = $1 AND m.user_id = $2)`, nodeID, userID).Scan(&ok)
+		   WHERE n.peer_id = $1 AND m.user_id = $2 AND m.status = $3)`, nodeID, userID, MemberStatusActive).Scan(&ok)
 	return ok, err
 }
 
@@ -121,7 +121,7 @@ func (s *Store) UserCanProvisionNode(ctx context.Context, nodeID, userID string)
 	}
 	var member bool
 	err = s.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM org_members WHERE org_id=$1 AND user_id=$2)`,
-		orgID.String, userID).Scan(&member)
+		`SELECT EXISTS(SELECT 1 FROM org_members WHERE org_id=$1 AND user_id=$2 AND status=$3)`,
+		orgID.String, userID, MemberStatusActive).Scan(&member)
 	return member, err
 }
