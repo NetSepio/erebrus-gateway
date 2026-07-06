@@ -40,6 +40,7 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load subscription")
 		return
 	}
+	orgMember, _ := s.store.UserHasActiveOrgMembership(c, uid)
 
 	// Plan entitlement (holding a seat in an active paid-plan org) takes precedence
 	// over trial/NFT — it is ongoing, so a seated member shows source "plan" even
@@ -48,6 +49,7 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 		ok(c, http.StatusOK, gin.H{
 			"status": "active", "entitled": true, "plan_id": orgPlan,
 			"source": "plan", "trial_consumed": trialConsumed, "nft_gating": s.nft.Enabled(),
+			"org_member": orgMember,
 		})
 		return
 	}
@@ -58,6 +60,7 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 			"status": sub.Status, "entitled": true, "plan_id": sub.PlanID,
 			"source": sub.Source, "current_period_end": sub.CurrentPeriodEnd,
 			"trial_consumed": trialConsumed, "nft_gating": s.nft.Enabled(),
+			"org_member": orgMember,
 		})
 		return
 	}
@@ -68,7 +71,7 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 
 	resp := gin.H{
 		"entitled": false, "trial_consumed": trialConsumed,
-		"nft_gating": s.nft.Enabled(),
+		"nft_gating": s.nft.Enabled(), "org_member": orgMember,
 	}
 	if last, err := s.store.LastSubscription(c, uid); err == nil {
 		resp["status"] = "expired"

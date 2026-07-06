@@ -47,6 +47,34 @@ func TestSendOTPPostsToResend(t *testing.T) {
 	}
 }
 
+func TestSendOrgInviteUsesBrandedHTML(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	m := New("re_test_key", "")
+	m.baseURL = srv.URL
+	data := OrgInviteEmail{
+		OrgName:     "Acme Corp",
+		InviterName: "Alex",
+		Role:        "Node operator",
+		InviteURL:   "https://erebrus.io/notifications/invite/org-1",
+	}
+	if err := m.SendOrgInvite(context.Background(), "user@example.com", data); err != nil {
+		t.Fatalf("SendOrgInvite: %v", err)
+	}
+	html, _ := body["html"].(string)
+	for _, want := range []string{"Erebrus VPN", "Acme Corp", "Alex", "Node operator", "NetSepio LLC", brandLogoURL} {
+		if !contains(html, want) {
+			t.Fatalf("html missing %q: %.200s…", want, html)
+		}
+	}
+}
+
 func TestDisabledMailer(t *testing.T) {
 	m := New("", "")
 	if m.Enabled() {

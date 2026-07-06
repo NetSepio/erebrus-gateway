@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) handleCreateNodeRegistrationToken(c *gin.Context) {
-	if _, ok := s.orgPrivileged(c); !ok {
+	if _, ok := s.orgCanManageNodes(c); !ok {
 		return
 	}
 	var req struct {

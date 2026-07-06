@@ -409,6 +409,20 @@ func IsOrgPrivileged(role string) bool {
 	return role == OrgRoleOwner || role == OrgRoleAdmin
 }
 
+// CanManageOrgNodes reports whether the role may register and operate org nodes.
+func CanManageOrgNodes(role string) bool {
+	return role == OrgRoleOwner || role == OrgRoleAdmin || role == OrgRoleNodeOperator
+}
+
+// UserHasActiveOrgMembership reports whether the user belongs to any active workspace.
+func (s *Store) UserHasActiveOrgMembership(ctx context.Context, userID string) (bool, error) {
+	var ok bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM org_members WHERE user_id=$1 AND status=$2)`,
+		userID, MemberStatusActive).Scan(&ok)
+	return ok, err
+}
+
 // UserHasOrgSeat reports whether the user owns, or holds a paid seat in, the org
 // (the "manager" gate for sensitive org resources like node admin credentials).
 func (s *Store) UserHasOrgSeat(ctx context.Context, orgID, userID string) (bool, error) {

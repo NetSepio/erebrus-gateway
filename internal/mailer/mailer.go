@@ -45,50 +45,30 @@ func New(apiKey, from string) *Mailer {
 // Enabled reports whether an API key is configured.
 func (m *Mailer) Enabled() bool { return m != nil && m.apiKey != "" }
 
-// SendOrgInvite emails an org membership invitation with a link to sign in.
-func (m *Mailer) SendOrgInvite(ctx context.Context, to, orgName, inviteURL string) error {
-	subject := fmt.Sprintf("You've been invited to %s on Erebrus", orgName)
-	text := fmt.Sprintf("You've been invited to join %s on Erebrus.\n\nSign in with your wallet and verify your email to accept:\n%s\n\nIf you didn't expect this invitation, you can ignore this email.", orgName, inviteURL)
-	html := fmt.Sprintf(`<p>You've been invited to join <strong>%s</strong> on Erebrus.</p>`+
-		`<p><a href="%s">Sign in and accept your invitation</a></p>`+
-		`<p>If you didn't expect this invitation, you can ignore this email.</p>`, orgName, inviteURL)
-	return m.send(ctx, to, subject, text, html)
+// SendOrgInvite emails a branded org membership invitation.
+func (m *Mailer) SendOrgInvite(ctx context.Context, to string, data OrgInviteEmail) error {
+	orgName := strings.TrimSpace(data.OrgName)
+	inviteURL := strings.TrimSpace(data.InviteURL)
+	subject := fmt.Sprintf("You've been invited to %s on Erebrus VPN", orgName)
+	inviter := strings.TrimSpace(data.InviterName)
+	role := strings.TrimSpace(data.Role)
+	text := fmt.Sprintf("You've been invited to join %s on Erebrus VPN.\n\n", orgName)
+	if inviter != "" && role != "" {
+		text += fmt.Sprintf("%s invited you as %s.\n\n", inviter, role)
+	}
+	text += fmt.Sprintf("Accept your invitation:\n%s\n\nIf you didn't expect this invitation, you can ignore this email.", inviteURL)
+	return m.send(ctx, to, subject, text, renderOrgInviteHTML(data))
 }
 
 // SendOrgInviteAccepted notifies parties that an invite was accepted.
 func (m *Mailer) SendOrgInviteAccepted(ctx context.Context, to, orgDisplayName, inviteeLabel, role, workspaceURL string, toInviter bool) error {
-	subject := fmt.Sprintf("%s joined %s on Erebrus", inviteeLabel, orgDisplayName)
-	if toInviter {
-		subject = fmt.Sprintf("%s accepted your %s workspace invite", inviteeLabel, orgDisplayName)
-	}
-	text := fmt.Sprintf("%s accepted the invitation to join %s as %s.\n\nOpen workspace: %s",
-		inviteeLabel, orgDisplayName, role, workspaceURL)
-	html := fmt.Sprintf(`<p><strong>%s</strong> accepted the invitation to join <strong>%s</strong> as <strong>%s</strong>.</p>`+
-		`<p><a href="%s">Open workspace</a></p>`, inviteeLabel, orgDisplayName, role, workspaceURL)
-	if !toInviter {
-		subject = fmt.Sprintf("You're now a member of %s", orgDisplayName)
-		text = fmt.Sprintf("Welcome to %s — you joined as %s.\n\nOpen your workspace: %s", orgDisplayName, role, workspaceURL)
-		html = fmt.Sprintf(`<p>Welcome to <strong>%s</strong>. You joined as <strong>%s</strong>.</p>`+
-			`<p><a href="%s">Open workspace</a></p>`, orgDisplayName, role, workspaceURL)
-	}
+	subject, text, html := renderOrgInviteAcceptedHTML(orgDisplayName, inviteeLabel, role, workspaceURL, toInviter)
 	return m.send(ctx, to, subject, text, html)
 }
 
 // SendOrgInviteDeclined notifies parties that an invite was declined.
 func (m *Mailer) SendOrgInviteDeclined(ctx context.Context, to, orgDisplayName, inviteeLabel, role string, toInviter bool) error {
-	subject := fmt.Sprintf("Invite to %s was declined", orgDisplayName)
-	if toInviter {
-		subject = fmt.Sprintf("%s declined your %s workspace invite", inviteeLabel, orgDisplayName)
-	}
-	text := fmt.Sprintf("%s declined the invitation to join %s as %s.", inviteeLabel, orgDisplayName, role)
-	html := fmt.Sprintf(`<p><strong>%s</strong> declined the invitation to join <strong>%s</strong> as <strong>%s</strong>.</p>`,
-		inviteeLabel, orgDisplayName, role)
-	if !toInviter {
-		subject = fmt.Sprintf("You declined the %s workspace invite", orgDisplayName)
-		text = fmt.Sprintf("You declined the invitation to join %s as %s. No further action is needed.", orgDisplayName, role)
-		html = fmt.Sprintf(`<p>You declined the invitation to join <strong>%s</strong> as <strong>%s</strong>.</p>`+
-			`<p>No further action is needed.</p>`, orgDisplayName, role)
-	}
+	subject, text, html := renderOrgInviteDeclinedHTML(orgDisplayName, inviteeLabel, role, toInviter)
 	return m.send(ctx, to, subject, text, html)
 }
 
@@ -96,10 +76,7 @@ func (m *Mailer) SendOrgInviteDeclined(ctx context.Context, to, orgDisplayName, 
 func (m *Mailer) SendOTP(ctx context.Context, to, code string) error {
 	subject := "Your Erebrus verification code"
 	text := fmt.Sprintf("Your Erebrus verification code is %s.\n\nIt expires shortly. If you didn't request this, you can ignore this email.", code)
-	html := fmt.Sprintf(`<p>Your Erebrus verification code is</p>`+
-		`<p style="font-size:24px;font-weight:700;letter-spacing:4px">%s</p>`+
-		`<p>It expires shortly. If you didn't request this, you can ignore this email.</p>`, code)
-	return m.send(ctx, to, subject, text, html)
+	return m.send(ctx, to, subject, text, renderOTPHTML(code))
 }
 
 func (m *Mailer) send(ctx context.Context, to, subject, text, html string) error {
