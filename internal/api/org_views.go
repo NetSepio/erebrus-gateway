@@ -58,8 +58,12 @@ func orgResponse(org *store.Org, privileged bool) gin.H {
 		"created_at":             org.CreatedAt,
 		"updated_at":             org.UpdatedAt,
 	}
-	if privileged {
+	// Members (incl. node_operator / member / viewer) need org id to open the
+	// workspace in clients; owner_user_id stays owner/admin-only.
+	if privileged || org.Role != "" {
 		out["id"] = org.ID
+	}
+	if privileged {
 		out["owner_user_id"] = org.OwnerUserID
 	}
 	if org.Role != "" {
