@@ -224,6 +224,56 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	})
 }
 
+type nodeTokenRefreshReq struct {
+	PeerID string `json:"peer_id"`
+}
+
+// handleNodeTokenRefresh re-issues a node control-plane PASETO when the prior
+// token expired. Authenticated with the node's long-lived node_key bearer.
+func (s *Server) handleNodeTokenRefresh(c *gin.Context) {
+	var req nodeTokenRefreshReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid body")
+		return
+	}
+	peerID := strings.TrimSpace(req.PeerID)
+	if peerID == "" {
+		fail(c, http.StatusBadRequest, "peer_id required")
+		return
+	}
+	nodeKey := strings.TrimSpace(bearer(c))
+	if nodeKey == "" {
+		nodeKey = strings.TrimSpace(c.GetHeader("X-Erebrus-Node-Key"))
+	}
+	if nodeKey == "" {
+		fail(c, http.StatusUnauthorized, "node_key required")
+		return
+	}
+	matches, err := s.store.NodeKeyMatches(c, peerID, nodeKey)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusNotFound, "node not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "node lookup failed")
+		return
+	}
+	if !matches {
+		fail(c, http.StatusUnauthorized, "invalid node_key")
+		return
+	}
+	nodeTok, err := s.tokens.IssueNode(peerID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to issue node token")
+		return
+	}
+	ok(c, http.StatusOK, gin.H{
+		"node_token": nodeTok,
+		"node_id":    peerID,
+		"peer_id":    peerID,
+	})
+}
+
 // handleNodeWS upgrades the node control-plane WebSocket. Node PASETO required
 // in the Authorization header of the upgrade request.
 func (s *Server) handleNodeWS(c *gin.Context) {

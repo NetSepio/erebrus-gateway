@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -73,6 +75,25 @@ func (s *Store) NodeInternalID(ctx context.Context, peerID string) (string, erro
 		return "", ErrNotFound
 	}
 	return id, err
+}
+
+// NodeKeyMatches reports whether the presented key matches the stored node_key.
+func (s *Store) NodeKeyMatches(ctx context.Context, peerID, nodeKey string) (bool, error) {
+	peerID = strings.TrimSpace(peerID)
+	nodeKey = strings.TrimSpace(nodeKey)
+	if peerID == "" || nodeKey == "" {
+		return false, nil
+	}
+	var stored string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(node_key,'') FROM nodes WHERE peer_id = $1`, peerID).Scan(&stored)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, err
+	}
+	return subtle.ConstantTimeCompare([]byte(stored), []byte(nodeKey)) == 1, nil
 }
 
 // NodeAPI returns the gateway-reachable API base URL, node key and status
