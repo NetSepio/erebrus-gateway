@@ -38,7 +38,8 @@ func (s *Server) orgSummaryFor(ctx context.Context, orgID, callerRole string, pr
 		out.Description = profile.Description
 		out.WebsiteURL = profile.WebsiteURL
 	}
-	if privileged || store.IsOrgPrivileged(callerRole) {
+	// Any org member needs org id in node/workspace projections (not only admins).
+	if privileged || callerRole != "" || store.IsOrgPrivileged(callerRole) {
 		out.ID = org.ID
 	}
 	return out
