@@ -20,6 +20,11 @@ const (
 	RoleGatewayCall = "gateway_call"
 )
 
+// DefaultNodeTokenTTL is the lifetime for node control-plane PASETOs. Node tokens
+// must outlive user session tokens — they are refreshed via /nodes/token/refresh
+// when needed, but default to one year rather than the 24h wallet TTL.
+const DefaultNodeTokenTTL = 365 * 24 * time.Hour
+
 // Claims is the PASETO payload. Embeds pvx.RegisteredClaims (exp/iat/nbf) whose
 // Valid() is promoted, so verification checks time-based validity automatically.
 type Claims struct {
@@ -40,8 +45,9 @@ type Manager struct {
 	pk       *pvx.AsymPublicKey
 	pub      ed25519.PublicKey
 	pv4      *pvx.ProtoV4Public
-	signedBy string
-	ttl      time.Duration
+	signedBy   string
+	ttl        time.Duration
+	nodeTTL    time.Duration
 }
 
 // New builds a Manager from a hex-encoded Ed25519 private key (optionally
@@ -66,6 +72,7 @@ func New(hexKey, signedBy string, ttl time.Duration) (*Manager, error) {
 		pv4:      pvx.NewPV4Public(),
 		signedBy: signedBy,
 		ttl:      ttl,
+		nodeTTL:  DefaultNodeTokenTTL,
 	}, nil
 }
 
@@ -79,7 +86,11 @@ func (m *Manager) IssueUser(userID, wallet, chain, role string) (string, error) 
 
 // IssueNode mints a node token for the WS control plane. peer_id is the canonical node id.
 func (m *Manager) IssueNode(peerID string) (string, error) {
-	return m.issue(Claims{NodeID: peerID, PeerID: peerID, Role: RoleNode}, m.ttl)
+	ttl := m.nodeTTL
+	if ttl <= 0 {
+		ttl = DefaultNodeTokenTTL
+	}
+	return m.issue(Claims{NodeID: peerID, PeerID: peerID, Role: RoleNode}, ttl)
 }
 
 // IssueGatewayCall mints a short-lived token for gateway→node private API calls.
@@ -97,21 +108,22 @@ func (m *Manager) PublicKeyHex() string {
 
 func (m *Manager) issue(c Claims, ttl time.Duration) (string, error) {
 	now := time.Now()
-	if ttl <= 0 {
-		ttl = m.ttl
-	}
-	exp := now.Add(ttl)
 	c.SignedBy = m.signedBy
-	c.RegisteredClaims = pvx.RegisteredClaims{
-		Issuer:     m.signedBy,
-		IssuedAt:   &now,
-		NotBefore:  &now,
-		Expiration: &exp,
+	claims := pvx.RegisteredClaims{
+		Issuer:    m.signedBy,
+		IssuedAt:  &now,
+		NotBefore: &now,
 	}
+	if ttl > 0 {
+		exp := now.Add(ttl)
+		claims.Expiration = &exp
+	}
+	c.RegisteredClaims = claims
 	return m.pv4.Sign(m.sk, &c)
 }
 
 // Reconfigure updates issuer footer and TTL for newly minted tokens (admin settings).
+// User/session tokens use ttl; node control-plane tokens keep DefaultNodeTokenTTL.
 func (m *Manager) Reconfigure(signedBy string, ttl time.Duration) {
 	if signedBy != "" {
 		m.signedBy = signedBy

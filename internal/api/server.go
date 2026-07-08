@@ -102,6 +102,7 @@ func (s *Server) Router() *gin.Engine {
 	// node discovery (public) + control plane
 	v2.GET("/nodes", s.handleListNodes)
 	v2.POST("/nodes/register", s.rateLimit("register", s.platform.Snapshot().RateLimitRegisterPerMin), s.handleNodeRegister)
+	v2.POST("/nodes/token/refresh", s.handleNodeTokenRefresh)
 	v2.GET("/nodes/ws", s.handleNodeWS) // auth handled inside (node PASETO)
 
 	// subscriptions: plans are public
