@@ -14,6 +14,13 @@ const orgNodeCols = `id, org_id, node_id, COALESCE(node_name,''), deployment_pro
 	COALESCE(api_public_url,''), last_seen_at, COALESCE(created_by::text,''),
 	created_at, updated_at`
 
+const orgNodeColsJoined = `on2.id, on2.org_id, on2.node_id, COALESCE(on2.node_name,''), on2.deployment_profile, on2.node_type,
+	on2.visibility, on2.managed_by, COALESCE(on2.region,''), COALESCE(on2.zone,''), on2.status,
+	COALESCE(on2.api_public_url,''), on2.last_seen_at, COALESCE(on2.created_by::text,''),
+	on2.created_at, on2.updated_at`
+
+const orgNodeRuntimeCols = `, COALESCE(n.status,''), COALESCE(n.access_mode,''), n.last_heartbeat`
+
 func scanOrgNode(sc interface{ Scan(...any) error }) (*OrgNode, error) {
 	var n OrgNode
 	err := sc.Scan(
@@ -21,6 +28,32 @@ func scanOrgNode(sc interface{ Scan(...any) error }) (*OrgNode, error) {
 		&n.Visibility, &n.ManagedBy, &n.Region, &n.Zone, &n.Status,
 		&n.APIPublicURL, &n.LastSeenAt, &n.CreatedBy, &n.CreatedAt, &n.UpdatedAt,
 	)
+	return &n, err
+}
+
+func scanOrgNodeWithRuntime(sc interface{ Scan(...any) error }) (*OrgNode, error) {
+	var n OrgNode
+	var runtimeStatus, accessMode sql.NullString
+	var lastHeartbeat sql.NullTime
+	err := sc.Scan(
+		&n.ID, &n.OrgID, &n.NodeID, &n.NodeName, &n.DeploymentProfile, &n.NodeType,
+		&n.Visibility, &n.ManagedBy, &n.Region, &n.Zone, &n.Status,
+		&n.APIPublicURL, &n.LastSeenAt, &n.CreatedBy, &n.CreatedAt, &n.UpdatedAt,
+		&runtimeStatus, &accessMode, &lastHeartbeat,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if runtimeStatus.Valid {
+		n.RuntimeStatus = runtimeStatus.String
+	}
+	if accessMode.Valid {
+		n.AccessMode = accessMode.String
+	}
+	if lastHeartbeat.Valid {
+		t := lastHeartbeat.Time
+		n.LastHeartbeat = &t
+	}
 	return &n, err
 }
 
@@ -79,17 +112,21 @@ func (s *Store) GetOrgNode(ctx context.Context, orgID, nodeID string) (*OrgNode,
 	return n, err
 }
 
-// ListOrgNodes returns all org nodes for an org.
+// ListOrgNodes returns all org nodes for an org, including runtime connectivity
+// from the nodes table (runtime_status, access_mode, last_heartbeat).
 func (s *Store) ListOrgNodes(ctx context.Context, orgID string) ([]OrgNode, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+orgNodeCols+` FROM org_nodes WHERE org_id=$1 ORDER BY created_at DESC`, orgID)
+		`SELECT `+orgNodeColsJoined+orgNodeRuntimeCols+`
+		 FROM org_nodes on2
+		 LEFT JOIN nodes n ON n.peer_id = on2.node_id
+		 WHERE on2.org_id=$1 ORDER BY on2.created_at DESC`, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []OrgNode
 	for rows.Next() {
-		n, err := scanOrgNode(rows)
+		n, err := scanOrgNodeWithRuntime(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -142,6 +179,51 @@ func (s *Store) TouchOrgNodeHeartbeat(ctx context.Context, nodeID string, at tim
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE org_nodes SET last_seen_at=$2, status='active', updated_at=now() WHERE node_id=$1`,
 		nodeID, at)
+	return err
+}
+
+// RuntimeToOrgNodeStatus maps runtime connectivity to org control-plane status.
+func RuntimeToOrgNodeStatus(runtimeStatus string) string {
+	switch strings.ToLower(strings.TrimSpace(runtimeStatus)) {
+	case "online":
+		return OrgNodeStatusActive
+	case "draining":
+		return OrgNodeStatusDegraded
+	case "offline", "":
+		return OrgNodeStatusDegraded
+	default:
+		return OrgNodeStatusDegraded
+	}
+}
+
+// SyncOrgNodeStatusFromRuntime aligns org_nodes.status with nodes.status after
+// disconnect or stale marking. Skips nodes manually disabled or in provisioning.
+func (s *Store) SyncOrgNodeStatusFromRuntime(ctx context.Context, peerID, runtimeStatus string) error {
+	status := RuntimeToOrgNodeStatus(runtimeStatus)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE org_nodes SET status=$2, updated_at=now()
+		 WHERE node_id=$1
+		   AND status NOT IN ($3, $4, $5, $6)`,
+		peerID, status,
+		OrgNodeStatusDisabled, OrgNodeStatusError, OrgNodeStatusPending, OrgNodeStatusProvisioning)
+	return err
+}
+
+// SyncAllOrgNodeStatusesFromRuntime bulk-repairs org_nodes.status from nodes.
+func (s *Store) SyncAllOrgNodeStatusesFromRuntime(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE org_nodes on2 SET
+		   status = CASE n.status
+		     WHEN 'online' THEN $1
+		     WHEN 'draining' THEN $2
+		     ELSE $3
+		   END,
+		   updated_at = now()
+		 FROM nodes n
+		 WHERE on2.node_id = n.peer_id
+		   AND on2.status NOT IN ($4, $5, $6, $7)`,
+		OrgNodeStatusActive, OrgNodeStatusDegraded, OrgNodeStatusDegraded,
+		OrgNodeStatusDisabled, OrgNodeStatusError, OrgNodeStatusPending, OrgNodeStatusProvisioning)
 	return err
 }
 

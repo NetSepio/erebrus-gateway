@@ -307,6 +307,9 @@ type OrgNode struct {
 	Region             string     `json:"region,omitempty"`
 	Zone               string     `json:"zone,omitempty"`
 	Status             string     `json:"status"`
+	RuntimeStatus      string     `json:"runtime_status,omitempty"`
+	AccessMode         string     `json:"access_mode,omitempty"`
+	LastHeartbeat      *time.Time `json:"last_heartbeat,omitempty"`
 	APIPublicURL       string     `json:"api_public_url,omitempty"`
 	LastSeenAt         *time.Time `json:"last_seen_at,omitempty"`
 	CreatedBy          string     `json:"created_by,omitempty"`
