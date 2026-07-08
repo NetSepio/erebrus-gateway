@@ -196,7 +196,11 @@ func (s *Store) SetNodeAccessMode(ctx context.Context, ref, mode string) error {
 func (s *Store) SetNodeStatus(ctx context.Context, peerID, status string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET status = $2, updated_at = now() WHERE peer_id = $1`, peerID, status)
-	return err
+	if err != nil {
+		return err
+	}
+	_ = s.SyncOrgNodeStatusFromRuntime(ctx, peerID, status)
+	return nil
 }
 
 // MarkStaleNodesOffline flips nodes with no heartbeat within the window to
@@ -209,6 +213,7 @@ func (s *Store) MarkStaleNodesOffline(ctx context.Context, within time.Duration)
 	if err != nil {
 		return 0, err
 	}
+	_ = s.SyncAllOrgNodeStatusesFromRuntime(ctx)
 	return res.RowsAffected()
 }
 
