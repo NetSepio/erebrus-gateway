@@ -61,14 +61,14 @@ func TestSendOrgInviteUsesBrandedHTML(t *testing.T) {
 	data := OrgInviteEmail{
 		OrgName:     "Acme Corp",
 		InviterName: "Alex",
-		Role:        "Node operator",
+		Role:        "Manager",
 		InviteURL:   "https://erebrus.io/notifications/invite/org-1",
 	}
 	if err := m.SendOrgInvite(context.Background(), "user@example.com", data); err != nil {
 		t.Fatalf("SendOrgInvite: %v", err)
 	}
 	html, _ := body["html"].(string)
-	for _, want := range []string{"Erebrus VPN", "Acme Corp", "Alex", "Node operator", "NetSepio LLC", brandLogoURL} {
+	for _, want := range []string{"Erebrus VPN", "Acme Corp", "Alex", "Manager", "NetSepio LLC", brandLogoURL} {
 		if !contains(html, want) {
 			t.Fatalf("html missing %q: %.200s…", want, html)
 		}

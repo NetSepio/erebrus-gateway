@@ -188,7 +188,7 @@ func humanRole(role string) string {
 	case store.OrgRoleAdmin:
 		return "Admin"
 	case store.OrgRoleNodeOperator:
-		return "Node operator"
+		return "Manager"
 	case store.OrgRoleMember:
 		return "Member"
 	case store.OrgRoleViewer:

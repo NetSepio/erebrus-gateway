@@ -70,6 +70,12 @@ func orgResponse(org *store.Org, privileged bool) gin.H {
 	if org.Role != "" {
 		out["role"] = org.Role
 	}
+	if org.SeatTier != "" {
+		out["seat_tier"] = org.SeatTier
+	}
+	if org.Role != "" {
+		out["has_paid_seat"] = store.MemberHasPaidSeat(org.Role, org.SeatTier)
+	}
 	return out
 }
 

@@ -238,7 +238,8 @@ type Org struct {
 	VerificationStatus    string    `json:"verification_status"`
 	PublicProfileEnabled  bool      `json:"public_profile_enabled"`
 	OwnerUserID           string    `json:"owner_user_id"`
-	Role                  string    `json:"role,omitempty"` // caller's role, when listed for a user
+	Role                  string    `json:"role,omitempty"`      // caller's role, when listed for a user
+	SeatTier              string    `json:"seat_tier,omitempty"` // caller's seat tier, when listed for a user
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }

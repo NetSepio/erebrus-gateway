@@ -51,9 +51,9 @@ func (s *Server) orgPrivileged(c *gin.Context) (role string, ok bool) {
 	return role, true
 }
 
-// orgCanManageNodes allows owners, admins, and node operators to enroll nodes.
+// orgCanManageNodes allows owners, admins, and seated managers to enroll nodes.
 func (s *Server) orgCanManageNodes(c *gin.Context) (role string, ok bool) {
-	role, ok = s.orgMember(c)
+	role, seatTier, ok := s.orgMemberWithSeat(c)
 	if !ok {
 		return "", false
 	}
@@ -61,7 +61,24 @@ func (s *Server) orgCanManageNodes(c *gin.Context) (role string, ok bool) {
 		fail(c, http.StatusForbidden, "node management role required")
 		return "", false
 	}
+	if role == store.OrgRoleNodeOperator && !store.MemberHasPaidSeat(role, seatTier) {
+		fail(c, http.StatusForbidden, "manager role requires a paid seat in this org")
+		return "", false
+	}
 	return role, true
+}
+
+func (s *Server) orgMemberWithSeat(c *gin.Context) (role, seatTier string, ok bool) {
+	role, seatTier, err := s.store.MemberMembership(c, c.Param("id"), userID(c))
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusForbidden, "not a member of this org")
+		return "", "", false
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "membership check failed")
+		return "", "", false
+	}
+	return role, seatTier, true
 }
 
 // ── org management (user-authed) ─────────────────────
@@ -99,7 +116,7 @@ func (s *Server) handleListOrgs(c *gin.Context) {
 }
 
 func (s *Server) handleGetOrg(c *gin.Context) {
-	role, memberOK := s.orgMember(c)
+	role, seatTier, memberOK := s.orgMemberWithSeat(c)
 	if !memberOK {
 		return
 	}
@@ -109,6 +126,7 @@ func (s *Server) handleGetOrg(c *gin.Context) {
 		return
 	}
 	org.Role = role
+	org.SeatTier = seatTier
 	ok(c, http.StatusOK, orgResponse(org, store.IsOrgPrivileged(role)))
 }
 
@@ -239,6 +257,10 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		if ownerID, err := s.store.EmailOwner(c, email); err == nil {
 			m, err := s.store.InviteMember(c, orgID, ownerID, role, req.SeatTier)
 			if err != nil {
+				if strings.Contains(err.Error(), "manager role requires") {
+					fail(c, http.StatusBadRequest, err.Error())
+					return
+				}
 				fail(c, http.StatusInternalServerError, "failed to invite member")
 				return
 			}
@@ -262,6 +284,10 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		}
 		m, err := s.store.InviteMember(c, orgID, u.ID, role, req.SeatTier)
 		if err != nil {
+			if strings.Contains(err.Error(), "manager role requires") {
+				fail(c, http.StatusBadRequest, err.Error())
+				return
+			}
 			fail(c, http.StatusInternalServerError, "failed to invite member")
 			return
 		}
@@ -327,6 +353,10 @@ func (s *Server) handleAddMember(c *gin.Context) {
 		return
 	}
 	if err := s.store.AddMember(c, c.Param("id"), u.ID, role); err != nil {
+		if strings.Contains(err.Error(), "manager role requires") {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		fail(c, http.StatusInternalServerError, "failed to add member")
 		return
 	}
@@ -358,6 +388,9 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 	if member, err := s.store.PatchMember(c, orgID, memberKey, req.Role, req.SeatTier); err == nil {
 		ok(c, http.StatusOK, member)
 		return
+	} else if err != nil && strings.Contains(err.Error(), "manager role requires") {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
 	}
 	if req.SeatTier != "" {
 		fail(c, http.StatusBadRequest, "seat_tier updates require member id")
@@ -378,6 +411,10 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		return
 	}
 	if err := s.store.AddMember(c, orgID, memberKey, role); err != nil {
+		if strings.Contains(err.Error(), "manager role requires") {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		fail(c, http.StatusInternalServerError, "failed to update member")
 		return
 	}
