@@ -43,6 +43,7 @@ var activityActions = map[string]string{
 	"DELETE /api/v2/orgs/:id/nodes/:nodeId/firewall/rules/:ruleId": "org.firewall.rule.delete",
 	"POST /api/v2/orgs/:id/apikeys":                            "apikey.create",
 	"DELETE /api/v2/orgs/:id/apikeys/:keyId": "apikey.revoke",
+	"POST /api/v2/referrals/redeem":          "referral.redeem",
 	"POST /api/v2/rank/claim":                "rank.claim",
 	"POST /api/v2/social/telegram":           "social.verify.telegram",
 	"POST /api/v2/social/x":                  "social.verify.x",

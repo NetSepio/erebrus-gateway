@@ -47,9 +47,11 @@ func (s *Store) GetUser(ctx context.Context, id string) (*User, error) {
 	var chain sql.NullString
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, COALESCE(wallet_address,''), COALESCE(chain,''), role,
-		        COALESCE(email,''), email_verified, COALESCE(name,''), created_at
+		        COALESCE(email,''), email_verified, COALESCE(name,''),
+		        COALESCE(profile_picture,''), created_at
 		 FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.WalletAddress, &chain.String, &u.Role, &u.Email, &u.EmailVerified, &u.Name, &u.CreatedAt)
+		Scan(&u.ID, &u.WalletAddress, &chain.String, &u.Role, &u.Email, &u.EmailVerified, &u.Name,
+			&u.ProfilePicture, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -60,14 +62,27 @@ func (s *Store) GetUser(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// UpdateProfile updates the mutable profile fields. Email is intentionally NOT
-// settable here — it is only linked through the verified OTP flow (auth/email),
-// so a linked email is always proven (no unverified squatting on the UNIQUE col).
-func (s *Store) UpdateProfile(ctx context.Context, id, name string) error {
+// UpdateProfile updates the mutable profile fields; a nil pointer leaves the
+// column untouched (PATCH semantics), an empty string clears it. Email is
+// intentionally NOT settable here — it is only linked through the verified OTP
+// flow (auth/email), so a linked email is always proven (no unverified
+// squatting on the UNIQUE col).
+func (s *Store) UpdateProfile(ctx context.Context, id string, name, profilePicture *string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET name = NULLIF($2,''), updated_at = now() WHERE id = $1`,
-		id, name)
+		`UPDATE users SET
+		   name            = CASE WHEN $2 THEN NULLIF($3,'') ELSE name END,
+		   profile_picture = CASE WHEN $4 THEN NULLIF($5,'') ELSE profile_picture END,
+		   updated_at = now()
+		 WHERE id = $1`,
+		id, name != nil, deref(name), profilePicture != nil, deref(profilePicture))
 	return err
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // CountUsers returns the total user count (admin stats).

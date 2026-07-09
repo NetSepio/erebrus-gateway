@@ -76,6 +76,7 @@ func (s *Server) handleEmailOTPStart(c *gin.Context) {
 type emailVerifyReq struct {
 	Email string `json:"email"`
 	Code  string `json:"code"`
+	Ref   string `json:"ref"` // optional referral code (login flow only; ignored on link)
 }
 
 // handleEmailOTPVerify checks a code and links the email: POST /api/v2/auth/email/verify.

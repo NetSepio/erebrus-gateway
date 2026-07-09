@@ -102,6 +102,8 @@ func (s *Server) handleEmailLoginVerify(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to resolve account")
 		return
 	}
+	// Bind before the bootstrap below so the auto-trial awards referral XP.
+	s.bindReferralCode(c, u.ID, req.Ref)
 	s.finishIdentityLogin(c, u, created, email, "email")
 }
 
@@ -109,6 +111,7 @@ func (s *Server) handleEmailLoginVerify(c *gin.Context) {
 
 type oidcReq struct {
 	IDToken string `json:"id_token"`
+	Ref     string `json:"ref"` // optional referral code (binds once, on first signup)
 }
 
 func (s *Server) handleGoogleAuth(c *gin.Context) { s.oidcLogin(c, "google", s.google) }
@@ -139,6 +142,8 @@ func (s *Server) oidcLogin(c *gin.Context, provider string, v *oauth.Verifier) {
 		fail(c, http.StatusInternalServerError, "failed to resolve account")
 		return
 	}
+	// Bind before the bootstrap below so the auto-trial awards referral XP.
+	s.bindReferralCode(c, u.ID, req.Ref)
 	s.finishIdentityLogin(c, u, created, email, provider)
 }
 

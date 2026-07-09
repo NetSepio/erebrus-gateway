@@ -142,6 +142,7 @@ func (s *Server) Router() *gin.Engine {
 
 		// referrals (social layer): my code, who referred me, recent referees
 		user.GET("/referrals/me", s.handleReferralsMe)
+		user.POST("/referrals/redeem", s.handleReferralRedeem)
 
 		// rank: my XP, tier, claimable balance, breakdown; leaderboard; claim
 		user.GET("/rank/me", s.handleRankMe)

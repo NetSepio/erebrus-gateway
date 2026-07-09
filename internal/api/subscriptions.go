@@ -104,17 +104,21 @@ func (s *Server) handleStartTrial(c *gin.Context) {
 }
 
 // awardReferralXP grants referral XP when the user was referred: +referrer to the
-// referrer, +referee to the referee (weights from config).
+// referrer, +referee to the referee (weights from config). Dedup-keyed per
+// referee, so every path that can complete a referral (trial start, signup
+// binding, late code redemption) may call it without double-awarding.
 func (s *Server) awardReferralXP(c *gin.Context, refereeID string) {
 	referrerID, err := s.store.ReferrerOf(c, refereeID)
 	if err != nil || referrerID == "" {
 		return
 	}
 	plat := s.platform.Snapshot()
-	_ = s.store.AwardXP(c, refereeID, "referral_qualified", plat.XPRefereePoints,
-		map[string]any{"role": "referee", "referrer_id": referrerID})
-	_ = s.store.AwardXP(c, referrerID, "referral_qualified", plat.XPReferrerPoints,
-		map[string]any{"role": "referrer", "referee_id": refereeID})
+	_, _ = s.store.AwardXPOnce(c, refereeID, "referral_qualified", plat.XPRefereePoints,
+		map[string]any{"role": "referee", "referrer_id": referrerID},
+		"referral:"+refereeID+":referee")
+	_, _ = s.store.AwardXPOnce(c, referrerID, "referral_qualified", plat.XPReferrerPoints,
+		map[string]any{"role": "referrer", "referee_id": refereeID},
+		"referral:"+refereeID+":referrer")
 }
 
 // handleNFTRefresh verifies the caller's wallet holds the gating NFT and
