@@ -23,7 +23,10 @@ func (s *Server) handleGetProfile(c *gin.Context) {
 }
 
 type patchProfileReq struct {
-	Name string `json:"name"`
+	// Pointer fields: absent keys leave the column untouched (PATCH semantics).
+	Name *string `json:"name"`
+	// ProfilePicture is the bare IPFS CID of the uploaded avatar ("" clears it).
+	ProfilePicture *string `json:"profile_picture"`
 	// Email is not patchable here — link it via POST /api/v2/auth/email (verified).
 }
 
@@ -34,7 +37,7 @@ func (s *Server) handlePatchProfile(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if err := s.store.UpdateProfile(c, userID(c), req.Name); err != nil {
+	if err := s.store.UpdateProfile(c, userID(c), req.Name, req.ProfilePicture); err != nil {
 		fail(c, http.StatusInternalServerError, "failed to update profile")
 		return
 	}

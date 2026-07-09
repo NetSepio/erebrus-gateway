@@ -98,6 +98,16 @@ func (s *Store) BindReferrer(ctx context.Context, userID, referrerUserID string)
 	return n > 0, nil
 }
 
+// HasQualifiedTrial reports whether the user has started their trial — the
+// action that qualifies a referral for XP.
+func (s *Store) HasQualifiedTrial(ctx context.Context, userID string) (bool, error) {
+	var qualified bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1 AND source = 'trial')`,
+		userID).Scan(&qualified)
+	return qualified, err
+}
+
 // ReferrerOf returns the user's referrer id, or "" when none.
 func (s *Store) ReferrerOf(ctx context.Context, userID string) (string, error) {
 	var ref sql.NullString

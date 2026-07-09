@@ -169,14 +169,16 @@ const (
 // User is a gateway account, keyed by wallet. An optional verified email may be
 // linked for perks/recovery (never required to use the VPN).
 type User struct {
-	ID            string    `json:"id"`
-	WalletAddress string    `json:"wallet_address,omitempty"`
-	Chain         string    `json:"chain,omitempty"`
-	Role          string    `json:"role"`
-	Email         string    `json:"email,omitempty"`
-	EmailVerified bool      `json:"email_verified"`
-	Name          string    `json:"name,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string `json:"id"`
+	WalletAddress string `json:"wallet_address,omitempty"`
+	Chain         string `json:"chain,omitempty"`
+	Role          string `json:"role"`
+	Email         string `json:"email,omitempty"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name,omitempty"`
+	// ProfilePicture is the bare IPFS CID of the avatar (no gateway prefix).
+	ProfilePicture string    `json:"profile_picture,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // Node is a registered VPN node and its latest control-plane snapshot.
