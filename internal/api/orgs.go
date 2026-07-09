@@ -45,13 +45,13 @@ func (s *Server) orgPrivileged(c *gin.Context) (role string, ok bool) {
 		return "", false
 	}
 	if !store.IsOrgPrivileged(role) {
-		fail(c, http.StatusForbidden, "owner or admin role required")
+		fail(c, http.StatusForbidden, "owner role required")
 		return "", false
 	}
 	return role, true
 }
 
-// orgCanManageNodes allows owners, admins, and node operators to enroll nodes.
+// orgCanManageNodes allows owners, admins, and managers to enroll nodes.
 func (s *Server) orgCanManageNodes(c *gin.Context) (role string, ok bool) {
 	role, ok = s.orgMember(c)
 	if !ok {
@@ -62,6 +62,19 @@ func (s *Server) orgCanManageNodes(c *gin.Context) (role string, ok bool) {
 		return "", false
 	}
 	return role, true
+}
+
+func (s *Server) orgMemberWithSeat(c *gin.Context) (role, seatTier string, ok bool) {
+	role, seatTier, err := s.store.MemberMembership(c, c.Param("id"), userID(c))
+	if errors.Is(err, store.ErrNotFound) {
+		fail(c, http.StatusForbidden, "not a member of this org")
+		return "", "", false
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "membership check failed")
+		return "", "", false
+	}
+	return role, seatTier, true
 }
 
 // ── org management (user-authed) ─────────────────────
@@ -99,7 +112,7 @@ func (s *Server) handleListOrgs(c *gin.Context) {
 }
 
 func (s *Server) handleGetOrg(c *gin.Context) {
-	role, memberOK := s.orgMember(c)
+	role, seatTier, memberOK := s.orgMemberWithSeat(c)
 	if !memberOK {
 		return
 	}
@@ -109,6 +122,7 @@ func (s *Server) handleGetOrg(c *gin.Context) {
 		return
 	}
 	org.Role = role
+	org.SeatTier = seatTier
 	ok(c, http.StatusOK, orgResponse(org, store.IsOrgPrivileged(role)))
 }
 
@@ -239,6 +253,10 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		if ownerID, err := s.store.EmailOwner(c, email); err == nil {
 			m, err := s.store.InviteMember(c, orgID, ownerID, role, req.SeatTier)
 			if err != nil {
+				if isManagerSeatErr(err) {
+					fail(c, http.StatusBadRequest, err.Error())
+					return
+				}
 				fail(c, http.StatusInternalServerError, "failed to invite member")
 				return
 			}
@@ -262,6 +280,10 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		}
 		m, err := s.store.InviteMember(c, orgID, u.ID, role, req.SeatTier)
 		if err != nil {
+			if isManagerSeatErr(err) {
+				fail(c, http.StatusBadRequest, err.Error())
+				return
+			}
 			fail(c, http.StatusInternalServerError, "failed to invite member")
 			return
 		}
@@ -327,6 +349,10 @@ func (s *Server) handleAddMember(c *gin.Context) {
 		return
 	}
 	if err := s.store.AddMember(c, c.Param("id"), u.ID, role); err != nil {
+		if isManagerSeatErr(err) {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		fail(c, http.StatusInternalServerError, "failed to add member")
 		return
 	}
@@ -358,6 +384,9 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 	if member, err := s.store.PatchMember(c, orgID, memberKey, req.Role, req.SeatTier); err == nil {
 		ok(c, http.StatusOK, member)
 		return
+	} else if isManagerSeatErr(err) {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
 	}
 	if req.SeatTier != "" {
 		fail(c, http.StatusBadRequest, "seat_tier updates require member id")
@@ -378,6 +407,10 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		return
 	}
 	if err := s.store.AddMember(c, orgID, memberKey, role); err != nil {
+		if isManagerSeatErr(err) {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		fail(c, http.StatusInternalServerError, "failed to update member")
 		return
 	}
@@ -416,7 +449,7 @@ func (s *Server) handleTransferOwnership(c *gin.Context) {
 		return
 	}
 	if err := s.store.TransferOrgOwnership(c, c.Param("id"), userID(c), req.UserID); errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusBadRequest, "target must be an existing admin member")
+		fail(c, http.StatusBadRequest, "target must be an existing manager")
 		return
 	} else if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to transfer ownership")
@@ -619,7 +652,8 @@ func (s *Server) handleOrgListClients(c *gin.Context) {
 }
 
 func (s *Server) handleOrgSelfUsage(c *gin.Context) {
-	okJSON(c, http.StatusOK, s.orgUsagePayload(c, orgID(c), store.OrgRoleAdmin))
+	role, _ := s.store.MemberRole(c, orgID(c), userID(c))
+	okJSON(c, http.StatusOK, s.orgUsagePayload(c, orgID(c), role))
 }
 
 // ── admin org views ──────────────────────────────────
@@ -826,16 +860,22 @@ func (s *Server) handleListSeats(c *gin.Context) {
 	ok(c, http.StatusOK, out)
 }
 
+func isManagerSeatErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "no manager seats") || strings.Contains(msg, "manager requires")
+}
+
 func normalizeMemberRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
-	case store.OrgRoleAdmin:
-		return store.OrgRoleAdmin
 	case store.OrgRoleOwner:
 		return store.OrgRoleOwner
-	case store.OrgRoleNodeOperator:
+	case store.OrgRoleNodeOperator, "manager":
 		return store.OrgRoleNodeOperator
-	case store.OrgRoleViewer:
-		return store.OrgRoleViewer
+	case store.OrgRoleAdmin, store.OrgRoleViewer:
+		return store.OrgRoleMember
 	default:
 		return store.OrgRoleMember
 	}

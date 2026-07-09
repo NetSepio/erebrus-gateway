@@ -279,13 +279,10 @@ func (s *Store) AssignSeat(ctx context.Context, orgID, userID, seatTier string) 
 	if curTier == SeatTierFree && used >= ent.PaidSeatsIncluded {
 		return fmt.Errorf("no paid seats remaining")
 	}
-	// A seat grants manager (admin) access alongside VPN entitlement; the owner's
-	// role is never downgraded by this.
+	// VPN seat only — role stays member unless promoted to manager separately.
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE org_members SET seat_tier=$3,
-		   role = CASE WHEN role='owner' THEN role ELSE 'admin' END,
-		   updated_at=now()
-		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		`UPDATE org_members SET seat_tier=$3, updated_at=now()
+		 WHERE org_id=$1 AND user_id=$2 AND status='active' AND role <> 'owner'`,
 		orgID, userID, seatTier)
 	return err
 }
@@ -326,7 +323,7 @@ func (s *Store) GetOrg(ctx context.Context, id string) (*Org, error) {
 func (s *Store) ListOrgsForUser(ctx context.Context, userID string) ([]Org, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT o.id, o.name, o.slug, o.plan, o.billing_status, o.verification_status,
-		        o.public_profile_enabled, o.owner_user_id, o.created_at, o.updated_at, m.role
+		        o.public_profile_enabled, o.owner_user_id, o.created_at, o.updated_at, m.role, m.seat_tier
 		 FROM orgs o JOIN org_members m ON m.org_id = o.id
 		 WHERE m.user_id = $1 AND m.status = 'active' ORDER BY o.created_at DESC`, userID)
 	if err != nil {
@@ -337,7 +334,7 @@ func (s *Store) ListOrgsForUser(ctx context.Context, userID string) ([]Org, erro
 	for rows.Next() {
 		var o Org
 		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.BillingStatus, &o.VerificationStatus,
-			&o.PublicProfileEnabled, &o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt, &o.Role); err != nil {
+			&o.PublicProfileEnabled, &o.OwnerUserID, &o.CreatedAt, &o.UpdatedAt, &o.Role, &o.SeatTier); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -394,24 +391,35 @@ func (s *Store) UpdateOrg(ctx context.Context, orgID string, in UpdateOrgInput) 
 
 // MemberRole returns the caller's role in an org.
 func (s *Store) MemberRole(ctx context.Context, orgID, userID string) (string, error) {
-	var role string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
-		orgID, userID).Scan(&role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrNotFound
-	}
+	role, _, err := s.MemberMembership(ctx, orgID, userID)
 	return role, err
 }
 
-// IsOrgPrivileged reports whether the role can manage org settings.
+// MemberMembership returns the caller's role and seat tier in an org.
+func (s *Store) MemberMembership(ctx context.Context, orgID, userID string) (role, seatTier string, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT role, seat_tier FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID).Scan(&role, &seatTier)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrNotFound
+	}
+	return role, seatTier, err
+}
+
+// IsOrgPrivileged reports whether the role can manage org settings (owner only).
 func IsOrgPrivileged(role string) bool {
-	return role == OrgRoleOwner || role == OrgRoleAdmin
+	return role == OrgRoleOwner
 }
 
 // CanManageOrgNodes reports whether the role may register and operate org nodes.
 func CanManageOrgNodes(role string) bool {
-	return role == OrgRoleOwner || role == OrgRoleAdmin || role == OrgRoleNodeOperator
+	return role == OrgRoleOwner || role == OrgRoleNodeOperator
+}
+
+// MemberHasPaidSeat reports VPN / shield access: owner, manager, or an assigned seat.
+func MemberHasPaidSeat(role, seatTier string) bool {
+	return role == OrgRoleOwner || role == OrgRoleNodeOperator ||
+		(seatTier != "" && seatTier != SeatTierFree)
 }
 
 // UserHasActiveOrgMembership reports whether the user belongs to any active workspace.
@@ -431,9 +439,65 @@ func (s *Store) UserHasOrgSeat(ctx context.Context, orgID, userID string) (bool,
 		`SELECT EXISTS(
 			SELECT 1 FROM org_members
 			WHERE org_id = $1 AND user_id = $2 AND status = 'active'
-			  AND (role = 'owner' OR seat_tier <> 'free')
+			  AND (role IN ('owner', 'node_operator') OR seat_tier <> 'free')
 		)`, orgID, userID).Scan(&ok)
 	return ok, err
+}
+
+// resolveSeatForRole applies seat_tier when role changes. Manager (node_operator) is a
+// paid seat on the org plan; demoting a manager frees that seat.
+func (s *Store) resolveSeatForRole(ctx context.Context, orgID, newRole, prevRole, seatTier string) (string, error) {
+	if seatTier == "" {
+		seatTier = SeatTierFree
+	}
+	if newRole == OrgRoleNodeOperator {
+		if seatTier != SeatTierFree {
+			return seatTier, nil
+		}
+		return s.allocatePlanSeat(ctx, orgID)
+	}
+	if prevRole == OrgRoleNodeOperator {
+		return SeatTierFree, nil
+	}
+	return seatTier, nil
+}
+
+func (s *Store) allocatePlanSeat(ctx context.Context, orgID string) (string, error) {
+	org, err := s.GetOrg(ctx, orgID)
+	if err != nil {
+		return "", err
+	}
+	planTier, ok := planSeatTierForOrg(org.Plan)
+	if !ok {
+		return "", fmt.Errorf("manager requires a paid plan")
+	}
+	ent, err := s.GetOrgEntitlements(ctx, orgID)
+	if err != nil {
+		return "", err
+	}
+	used, err := s.CountPaidSeatsUsed(ctx, orgID)
+	if err != nil {
+		return "", err
+	}
+	if used >= ent.PaidSeatsIncluded {
+		return "", fmt.Errorf("no manager seats remaining")
+	}
+	return planTier, nil
+}
+
+func planSeatTierForOrg(plan string) (string, bool) {
+	switch plan {
+	case OrgPlanStarter:
+		return SeatTierStarter, true
+	case OrgPlanPro:
+		return SeatTierPro, true
+	case OrgPlanBusiness:
+		return SeatTierBusiness, true
+	case OrgPlanEnterprise:
+		return SeatTierEnterprise, true
+	default:
+		return "", false
+	}
 }
 
 // InviteMember adds a member invitation (active membership with optional seat).
@@ -442,6 +506,14 @@ func (s *Store) InviteMember(ctx context.Context, orgID, userID, role, seatTier 
 	seatTier, err := normalizeSeatTier(seatTier)
 	if err != nil {
 		seatTier = SeatTierFree
+	}
+	var prevRole string
+	_ = s.db.QueryRowContext(ctx,
+		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2`,
+		orgID, userID).Scan(&prevRole)
+	seatTier, err = s.resolveSeatForRole(ctx, orgID, role, prevRole, seatTier)
+	if err != nil {
+		return nil, err
 	}
 	var m Member
 	err = s.db.QueryRowContext(ctx,
@@ -484,6 +556,7 @@ func (s *Store) PatchMember(ctx context.Context, orgID, memberID, role, seatTier
 	if cur.Role == OrgRoleOwner {
 		return nil, fmt.Errorf("cannot change owner role here")
 	}
+	prevRole := cur.Role
 	if role != "" {
 		cur.Role = normalizeOrgRole(role)
 	}
@@ -492,6 +565,10 @@ func (s *Store) PatchMember(ctx context.Context, orgID, memberID, role, seatTier
 		if err != nil {
 			return nil, err
 		}
+	}
+	cur.SeatTier, err = s.resolveSeatForRole(ctx, orgID, cur.Role, prevRole, cur.SeatTier)
+	if err != nil {
+		return nil, err
 	}
 	return s.scanMemberRow(s.db.QueryRowContext(ctx,
 		`UPDATE org_members SET role=$3, seat_tier=$4, updated_at=now()
@@ -524,12 +601,25 @@ func (s *Store) RemoveMemberByID(ctx context.Context, orgID, memberID string) er
 // AddMember adds or updates a member's role.
 func (s *Store) AddMember(ctx context.Context, orgID, userID, role string) error {
 	role = normalizeOrgRole(role)
-	_, err := s.db.ExecContext(ctx,
+	var prevRole, curTier string
+	_ = s.db.QueryRowContext(ctx,
+		`SELECT role, seat_tier FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID).Scan(&prevRole, &curTier)
+	seatTier := curTier
+	if seatTier == "" {
+		seatTier = SeatTierFree
+	}
+	var err error
+	seatTier, err = s.resolveSeatForRole(ctx, orgID, role, prevRole, seatTier)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO org_members (org_id, user_id, role, seat_tier, status)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (org_id, user_id) DO UPDATE SET
-			role = EXCLUDED.role, status = 'active', updated_at = now()`,
-		orgID, userID, role, SeatTierFree, MemberStatusActive)
+			role = EXCLUDED.role, seat_tier = EXCLUDED.seat_tier, status = 'active', updated_at = now()`,
+		orgID, userID, role, seatTier, MemberStatusActive)
 	return err
 }
 
@@ -548,7 +638,7 @@ func (s *Store) RemoveMember(ctx context.Context, orgID, userID string) error {
 	return nil
 }
 
-// TransferOrgOwnership moves ownership to another admin/owner member.
+// TransferOrgOwnership moves ownership to an active manager in the org.
 func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toUserID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -573,17 +663,23 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 	if err != nil {
 		return err
 	}
-	if toRole != OrgRoleAdmin && toRole != OrgRoleOwner {
+	if toRole != OrgRoleNodeOperator {
 		return ErrNotFound
 	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE org_members SET role='admin', updated_at=now() WHERE org_id=$1 AND user_id=$2`,
-		orgID, fromUserID); err != nil {
+	org, err := s.GetOrg(ctx, orgID)
+	if err != nil {
 		return err
 	}
+	managerSeat := ownerSeatTierForPlan(org.Plan)
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE org_members SET role='owner', updated_at=now() WHERE org_id=$1 AND user_id=$2`,
-		orgID, toUserID); err != nil {
+		`UPDATE org_members SET role=$3, seat_tier=$4, updated_at=now() WHERE org_id=$1 AND user_id=$2`,
+		orgID, fromUserID, OrgRoleNodeOperator, managerSeat); err != nil {
+		return err
+	}
+	ownerSeat := ownerSeatTierForPlan(org.Plan)
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE org_members SET role='owner', seat_tier=$3, updated_at=now() WHERE org_id=$1 AND user_id=$2`,
+		orgID, toUserID, ownerSeat); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -746,12 +842,10 @@ func normalizeOrgRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case OrgRoleOwner:
 		return OrgRoleOwner
-	case OrgRoleAdmin:
-		return OrgRoleAdmin
-	case OrgRoleNodeOperator:
+	case OrgRoleNodeOperator, "manager":
 		return OrgRoleNodeOperator
-	case OrgRoleViewer:
-		return OrgRoleViewer
+	case OrgRoleAdmin, OrgRoleViewer:
+		return OrgRoleMember
 	default:
 		return OrgRoleMember
 	}

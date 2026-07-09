@@ -17,7 +17,7 @@ func (s *Server) requireNodeOperator(c *gin.Context) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+	if role != store.OrgRoleOwner && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
 		return "", false
 	}
