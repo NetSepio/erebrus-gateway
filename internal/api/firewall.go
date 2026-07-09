@@ -13,16 +13,12 @@ import (
 )
 
 func (s *Server) requireNodeOperator(c *gin.Context) (string, bool) {
-	role, seatTier, ok := s.orgMemberWithSeat(c)
+	role, ok := s.orgMember(c)
 	if !ok {
 		return "", false
 	}
 	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
-		return "", false
-	}
-	if role == store.OrgRoleNodeOperator && !store.MemberHasPaidSeat(role, seatTier) {
-		fail(c, http.StatusForbidden, "manager role requires a paid seat in this org")
 		return "", false
 	}
 	return role, true

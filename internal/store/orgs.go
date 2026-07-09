@@ -419,14 +419,10 @@ func CanManageOrgNodes(role string) bool {
 	return role == OrgRoleOwner || role == OrgRoleAdmin || role == OrgRoleNodeOperator
 }
 
-// RoleRequiresPaidSeat reports whether assigning the role consumes a paid seat.
-func RoleRequiresPaidSeat(role string) bool {
-	return role == OrgRoleNodeOperator
-}
-
-// MemberHasPaidSeat reports whether the member holds a paid seat (owner always does).
+// MemberHasPaidSeat reports VPN / shield access: owner, manager, or an assigned seat.
 func MemberHasPaidSeat(role, seatTier string) bool {
-	return role == OrgRoleOwner || (seatTier != "" && seatTier != SeatTierFree)
+	return role == OrgRoleOwner || role == OrgRoleNodeOperator ||
+		(seatTier != "" && seatTier != SeatTierFree)
 }
 
 // UserHasActiveOrgMembership reports whether the user belongs to any active workspace.
@@ -446,27 +442,37 @@ func (s *Store) UserHasOrgSeat(ctx context.Context, orgID, userID string) (bool,
 		`SELECT EXISTS(
 			SELECT 1 FROM org_members
 			WHERE org_id = $1 AND user_id = $2 AND status = 'active'
-			  AND (role = 'owner' OR seat_tier <> 'free')
+			  AND (role IN ('owner', 'node_operator') OR seat_tier <> 'free')
 		)`, orgID, userID).Scan(&ok)
 	return ok, err
 }
 
-// EnsureManagerRoleSeat ensures a manager (node_operator) role has a paid seat:
-// reuses an existing paid seat or assigns one when capacity remains.
-func (s *Store) EnsureManagerRoleSeat(ctx context.Context, orgID, role, seatTier string) (string, error) {
-	if !RoleRequiresPaidSeat(role) {
-		return seatTier, nil
-	}
-	seatTier, err := normalizeSeatTier(seatTier)
-	if err != nil {
+// resolveSeatForRole applies seat_tier when role changes. Manager (node_operator) is a
+// paid seat on the org plan; demoting a manager frees that seat.
+func (s *Store) resolveSeatForRole(ctx context.Context, orgID, newRole, prevRole, seatTier string) (string, error) {
+	if seatTier == "" {
 		seatTier = SeatTierFree
 	}
-	if MemberHasPaidSeat("", seatTier) {
-		return seatTier, nil
+	if newRole == OrgRoleNodeOperator {
+		if seatTier != SeatTierFree {
+			return seatTier, nil
+		}
+		return s.allocatePlanSeat(ctx, orgID)
 	}
+	if prevRole == OrgRoleNodeOperator {
+		return SeatTierFree, nil
+	}
+	return seatTier, nil
+}
+
+func (s *Store) allocatePlanSeat(ctx context.Context, orgID string) (string, error) {
 	org, err := s.GetOrg(ctx, orgID)
 	if err != nil {
 		return "", err
+	}
+	planTier, ok := planSeatTierForOrg(org.Plan)
+	if !ok {
+		return "", fmt.Errorf("manager requires a paid plan")
 	}
 	ent, err := s.GetOrgEntitlements(ctx, orgID)
 	if err != nil {
@@ -477,11 +483,7 @@ func (s *Store) EnsureManagerRoleSeat(ctx context.Context, orgID, role, seatTier
 		return "", err
 	}
 	if used >= ent.PaidSeatsIncluded {
-		return "", fmt.Errorf("manager role requires a paid seat — none remaining")
-	}
-	planTier, ok := planSeatTierForOrg(org.Plan)
-	if !ok {
-		return "", fmt.Errorf("manager role requires a paid seat — upgrade the workspace plan")
+		return "", fmt.Errorf("no manager seats remaining")
 	}
 	return planTier, nil
 }
@@ -508,7 +510,11 @@ func (s *Store) InviteMember(ctx context.Context, orgID, userID, role, seatTier 
 	if err != nil {
 		seatTier = SeatTierFree
 	}
-	seatTier, err = s.EnsureManagerRoleSeat(ctx, orgID, role, seatTier)
+	var prevRole string
+	_ = s.db.QueryRowContext(ctx,
+		`SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2`,
+		orgID, userID).Scan(&prevRole)
+	seatTier, err = s.resolveSeatForRole(ctx, orgID, role, prevRole, seatTier)
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +559,7 @@ func (s *Store) PatchMember(ctx context.Context, orgID, memberID, role, seatTier
 	if cur.Role == OrgRoleOwner {
 		return nil, fmt.Errorf("cannot change owner role here")
 	}
+	prevRole := cur.Role
 	if role != "" {
 		cur.Role = normalizeOrgRole(role)
 	}
@@ -562,7 +569,7 @@ func (s *Store) PatchMember(ctx context.Context, orgID, memberID, role, seatTier
 			return nil, err
 		}
 	}
-	cur.SeatTier, err = s.EnsureManagerRoleSeat(ctx, orgID, cur.Role, cur.SeatTier)
+	cur.SeatTier, err = s.resolveSeatForRole(ctx, orgID, cur.Role, prevRole, cur.SeatTier)
 	if err != nil {
 		return nil, err
 	}
@@ -597,16 +604,16 @@ func (s *Store) RemoveMemberByID(ctx context.Context, orgID, memberID string) er
 // AddMember adds or updates a member's role.
 func (s *Store) AddMember(ctx context.Context, orgID, userID, role string) error {
 	role = normalizeOrgRole(role)
-	var curTier string
+	var prevRole, curTier string
 	_ = s.db.QueryRowContext(ctx,
-		`SELECT seat_tier FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
-		orgID, userID).Scan(&curTier)
+		`SELECT role, seat_tier FROM org_members WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		orgID, userID).Scan(&prevRole, &curTier)
 	seatTier := curTier
 	if seatTier == "" {
 		seatTier = SeatTierFree
 	}
 	var err error
-	seatTier, err = s.EnsureManagerRoleSeat(ctx, orgID, role, seatTier)
+	seatTier, err = s.resolveSeatForRole(ctx, orgID, role, prevRole, seatTier)
 	if err != nil {
 		return err
 	}

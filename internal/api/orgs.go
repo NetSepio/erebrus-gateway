@@ -51,18 +51,14 @@ func (s *Server) orgPrivileged(c *gin.Context) (role string, ok bool) {
 	return role, true
 }
 
-// orgCanManageNodes allows owners, admins, and seated managers to enroll nodes.
+// orgCanManageNodes allows owners, admins, and managers to enroll nodes.
 func (s *Server) orgCanManageNodes(c *gin.Context) (role string, ok bool) {
-	role, seatTier, ok := s.orgMemberWithSeat(c)
+	role, ok = s.orgMember(c)
 	if !ok {
 		return "", false
 	}
 	if !store.CanManageOrgNodes(role) {
 		fail(c, http.StatusForbidden, "node management role required")
-		return "", false
-	}
-	if role == store.OrgRoleNodeOperator && !store.MemberHasPaidSeat(role, seatTier) {
-		fail(c, http.StatusForbidden, "manager role requires a paid seat in this org")
 		return "", false
 	}
 	return role, true
@@ -257,7 +253,7 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		if ownerID, err := s.store.EmailOwner(c, email); err == nil {
 			m, err := s.store.InviteMember(c, orgID, ownerID, role, req.SeatTier)
 			if err != nil {
-				if strings.Contains(err.Error(), "manager role requires") {
+				if isManagerSeatErr(err) {
 					fail(c, http.StatusBadRequest, err.Error())
 					return
 				}
@@ -284,7 +280,7 @@ func (s *Server) handleInviteMember(c *gin.Context) {
 		}
 		m, err := s.store.InviteMember(c, orgID, u.ID, role, req.SeatTier)
 		if err != nil {
-			if strings.Contains(err.Error(), "manager role requires") {
+			if isManagerSeatErr(err) {
 				fail(c, http.StatusBadRequest, err.Error())
 				return
 			}
@@ -353,7 +349,7 @@ func (s *Server) handleAddMember(c *gin.Context) {
 		return
 	}
 	if err := s.store.AddMember(c, c.Param("id"), u.ID, role); err != nil {
-		if strings.Contains(err.Error(), "manager role requires") {
+		if isManagerSeatErr(err) {
 			fail(c, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -388,7 +384,7 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 	if member, err := s.store.PatchMember(c, orgID, memberKey, req.Role, req.SeatTier); err == nil {
 		ok(c, http.StatusOK, member)
 		return
-	} else if err != nil && strings.Contains(err.Error(), "manager role requires") {
+	} else if isManagerSeatErr(err) {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -411,7 +407,7 @@ func (s *Server) handlePatchMember(c *gin.Context) {
 		return
 	}
 	if err := s.store.AddMember(c, orgID, memberKey, role); err != nil {
-		if strings.Contains(err.Error(), "manager role requires") {
+		if isManagerSeatErr(err) {
 			fail(c, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -861,6 +857,14 @@ func (s *Server) handleListSeats(c *gin.Context) {
 		out["paid_seats_included"] = ent.PaidSeatsIncluded
 	}
 	ok(c, http.StatusOK, out)
+}
+
+func isManagerSeatErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "no manager seats") || strings.Contains(msg, "manager requires")
 }
 
 func normalizeMemberRole(role string) string {
