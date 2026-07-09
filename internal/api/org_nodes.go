@@ -79,7 +79,7 @@ func (s *Server) handlePatchOrgNode(c *gin.Context) {
 	if !memberOK {
 		return
 	}
-	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+	if role != store.OrgRoleOwner && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
 		return
 	}
@@ -105,7 +105,7 @@ func (s *Server) handleOrgNodeRegister(c *gin.Context) {
 	if !memberOK {
 		return
 	}
-	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+	if role != store.OrgRoleOwner && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
 		return
 	}
@@ -174,7 +174,7 @@ func (s *Server) handlePatchOrgNodeService(c *gin.Context) {
 	if !memberOK {
 		return
 	}
-	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+	if role != store.OrgRoleOwner && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
 		return
 	}
@@ -200,7 +200,7 @@ func (s *Server) handleDeleteOrgNodeService(c *gin.Context) {
 	if !memberOK {
 		return
 	}
-	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+	if role != store.OrgRoleOwner && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
 		return
 	}
@@ -219,7 +219,7 @@ func (s *Server) handleAttachOrgNodeService(c *gin.Context) {
 	if !memberOK {
 		return
 	}
-	if role != store.OrgRoleOwner && role != store.OrgRoleAdmin && role != store.OrgRoleNodeOperator {
+	if role != store.OrgRoleOwner && role != store.OrgRoleNodeOperator {
 		fail(c, http.StatusForbidden, "insufficient role")
 		return
 	}

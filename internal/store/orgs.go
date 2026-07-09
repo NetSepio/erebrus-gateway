@@ -279,13 +279,10 @@ func (s *Store) AssignSeat(ctx context.Context, orgID, userID, seatTier string) 
 	if curTier == SeatTierFree && used >= ent.PaidSeatsIncluded {
 		return fmt.Errorf("no paid seats remaining")
 	}
-	// A seat grants manager (admin) access alongside VPN entitlement; the owner's
-	// role is never downgraded by this.
+	// VPN seat only — role stays member unless promoted to manager separately.
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE org_members SET seat_tier=$3,
-		   role = CASE WHEN role='owner' THEN role ELSE 'admin' END,
-		   updated_at=now()
-		 WHERE org_id=$1 AND user_id=$2 AND status='active'`,
+		`UPDATE org_members SET seat_tier=$3, updated_at=now()
+		 WHERE org_id=$1 AND user_id=$2 AND status='active' AND role <> 'owner'`,
 		orgID, userID, seatTier)
 	return err
 }
@@ -409,14 +406,14 @@ func (s *Store) MemberMembership(ctx context.Context, orgID, userID string) (rol
 	return role, seatTier, err
 }
 
-// IsOrgPrivileged reports whether the role can manage org settings.
+// IsOrgPrivileged reports whether the role can manage org settings (owner only).
 func IsOrgPrivileged(role string) bool {
-	return role == OrgRoleOwner || role == OrgRoleAdmin
+	return role == OrgRoleOwner
 }
 
 // CanManageOrgNodes reports whether the role may register and operate org nodes.
 func CanManageOrgNodes(role string) bool {
-	return role == OrgRoleOwner || role == OrgRoleAdmin || role == OrgRoleNodeOperator
+	return role == OrgRoleOwner || role == OrgRoleNodeOperator
 }
 
 // MemberHasPaidSeat reports VPN / shield access: owner, manager, or an assigned seat.
@@ -641,7 +638,7 @@ func (s *Store) RemoveMember(ctx context.Context, orgID, userID string) error {
 	return nil
 }
 
-// TransferOrgOwnership moves ownership to another admin/owner member.
+// TransferOrgOwnership moves ownership to an active manager in the org.
 func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toUserID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -666,17 +663,23 @@ func (s *Store) TransferOrgOwnership(ctx context.Context, orgID, fromUserID, toU
 	if err != nil {
 		return err
 	}
-	if toRole != OrgRoleAdmin && toRole != OrgRoleOwner {
+	if toRole != OrgRoleNodeOperator {
 		return ErrNotFound
 	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE org_members SET role='admin', updated_at=now() WHERE org_id=$1 AND user_id=$2`,
-		orgID, fromUserID); err != nil {
+	org, err := s.GetOrg(ctx, orgID)
+	if err != nil {
 		return err
 	}
+	managerSeat := ownerSeatTierForPlan(org.Plan)
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE org_members SET role='owner', updated_at=now() WHERE org_id=$1 AND user_id=$2`,
-		orgID, toUserID); err != nil {
+		`UPDATE org_members SET role=$3, seat_tier=$4, updated_at=now() WHERE org_id=$1 AND user_id=$2`,
+		orgID, fromUserID, OrgRoleNodeOperator, managerSeat); err != nil {
+		return err
+	}
+	ownerSeat := ownerSeatTierForPlan(org.Plan)
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE org_members SET role='owner', seat_tier=$3, updated_at=now() WHERE org_id=$1 AND user_id=$2`,
+		orgID, toUserID, ownerSeat); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -839,12 +842,10 @@ func normalizeOrgRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case OrgRoleOwner:
 		return OrgRoleOwner
-	case OrgRoleAdmin:
-		return OrgRoleAdmin
-	case OrgRoleNodeOperator:
+	case OrgRoleNodeOperator, "manager":
 		return OrgRoleNodeOperator
-	case OrgRoleViewer:
-		return OrgRoleViewer
+	case OrgRoleAdmin, OrgRoleViewer:
+		return OrgRoleMember
 	default:
 		return OrgRoleMember
 	}

@@ -185,14 +185,10 @@ func userDisplayLabel(c *gin.Context, s *Server, userID string) string {
 
 func humanRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
-	case store.OrgRoleAdmin:
-		return "Admin"
 	case store.OrgRoleNodeOperator:
 		return "Manager"
-	case store.OrgRoleMember:
+	case store.OrgRoleMember, store.OrgRoleAdmin, store.OrgRoleViewer:
 		return "Member"
-	case store.OrgRoleViewer:
-		return "Viewer"
 	default:
 		if role == "" {
 			return "Member"

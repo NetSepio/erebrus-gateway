@@ -200,11 +200,12 @@ func (s *Store) GetOrgEntitlements(ctx context.Context, orgID string) (*OrgEntit
 	return e, err
 }
 
-// CountPaidSeatsUsed returns members with a non-free seat tier.
+// CountPaidSeatsUsed returns seated members; the owner always occupies one slot.
 func (s *Store) CountPaidSeatsUsed(ctx context.Context, orgID string) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT count(*) FROM org_members
-		 WHERE org_id=$1 AND status='active' AND seat_tier <> 'free'`, orgID).Scan(&n)
+		 WHERE org_id=$1 AND status='active'
+		   AND (role = 'owner' OR seat_tier <> 'free')`, orgID).Scan(&n)
 	return n, err
 }

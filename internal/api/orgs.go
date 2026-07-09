@@ -45,7 +45,7 @@ func (s *Server) orgPrivileged(c *gin.Context) (role string, ok bool) {
 		return "", false
 	}
 	if !store.IsOrgPrivileged(role) {
-		fail(c, http.StatusForbidden, "owner or admin role required")
+		fail(c, http.StatusForbidden, "owner role required")
 		return "", false
 	}
 	return role, true
@@ -449,7 +449,7 @@ func (s *Server) handleTransferOwnership(c *gin.Context) {
 		return
 	}
 	if err := s.store.TransferOrgOwnership(c, c.Param("id"), userID(c), req.UserID); errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusBadRequest, "target must be an existing admin member")
+		fail(c, http.StatusBadRequest, "target must be an existing manager")
 		return
 	} else if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to transfer ownership")
@@ -652,7 +652,8 @@ func (s *Server) handleOrgListClients(c *gin.Context) {
 }
 
 func (s *Server) handleOrgSelfUsage(c *gin.Context) {
-	okJSON(c, http.StatusOK, s.orgUsagePayload(c, orgID(c), store.OrgRoleAdmin))
+	role, _ := s.store.MemberRole(c, orgID(c), userID(c))
+	okJSON(c, http.StatusOK, s.orgUsagePayload(c, orgID(c), role))
 }
 
 // ── admin org views ──────────────────────────────────
@@ -869,14 +870,12 @@ func isManagerSeatErr(err error) bool {
 
 func normalizeMemberRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
-	case store.OrgRoleAdmin:
-		return store.OrgRoleAdmin
 	case store.OrgRoleOwner:
 		return store.OrgRoleOwner
-	case store.OrgRoleNodeOperator:
+	case store.OrgRoleNodeOperator, "manager":
 		return store.OrgRoleNodeOperator
-	case store.OrgRoleViewer:
-		return store.OrgRoleViewer
+	case store.OrgRoleAdmin, store.OrgRoleViewer:
+		return store.OrgRoleMember
 	default:
 		return store.OrgRoleMember
 	}
