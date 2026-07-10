@@ -320,10 +320,8 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 // NormalizeDeploymentProfile returns a valid deployment profile name.
 func NormalizeDeploymentProfile(profile string) string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
-	case DeploymentProfileShield, DeploymentProfileSentinel:
+	case DeploymentProfileShield, DeploymentProfileSentinel, DeploymentProfileStandard:
 		return strings.ToLower(strings.TrimSpace(profile))
-	case DeploymentProfileStandard, deploymentProfileLegacyErebrus:
-		return DeploymentProfileStandard
 	default:
 		return DeploymentProfileStandard
 	}

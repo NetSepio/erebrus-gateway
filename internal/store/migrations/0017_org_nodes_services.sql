@@ -73,7 +73,7 @@ SELECT
     n.org_id,
     n.peer_id,
     n.name,
-    'erebrus',
+    'standard',
     CASE WHEN COALESCE(n.access_mode, 'public') = 'private' THEN 'private' ELSE 'public' END,
     CASE WHEN COALESCE(n.access_mode, 'public') = 'private' THEN 'private_org' ELSE 'public_network' END,
     'org',

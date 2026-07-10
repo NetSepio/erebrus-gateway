@@ -66,8 +66,6 @@ const (
 	DeploymentProfileStandard = "standard"
 	DeploymentProfileShield   = "shield"
 	DeploymentProfileSentinel = "sentinel"
-	// deploymentProfileLegacyErebrus is accepted on ingest only (pre-standard nodes).
-	deploymentProfileLegacyErebrus = "erebrus"
 )
 
 // Org node types.
