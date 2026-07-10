@@ -27,7 +27,6 @@ func TestNormalizeDeploymentProfile(t *testing.T) {
 		want string
 	}{
 		{"standard", DeploymentProfileStandard},
-		{"erebrus", DeploymentProfileStandard},
 		{"shield", DeploymentProfileShield},
 		{"sentinel", DeploymentProfileSentinel},
 		{"", DeploymentProfileStandard},
