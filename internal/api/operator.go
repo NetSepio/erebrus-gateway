@@ -23,11 +23,13 @@ type nodeOperatorView struct {
 	Zone          string          `json:"zone,omitempty"`
 	Status        string          `json:"status"`
 	AccessMode    string          `json:"access_mode"`
-	DeploymentProfile string      `json:"deployment_profile"` // standard | shield | sentinel
-	MinTier       int             `json:"min_tier"`
-	Spec          json.RawMessage `json:"spec"`
-	Org           *orgSummary     `json:"org,omitempty"`
-	Protocols     []string        `json:"protocols"`
+	DeploymentProfile string          `json:"deployment_profile"` // standard | shield | sentinel
+	MinTier           int             `json:"min_tier"`
+	Spec              json.RawMessage `json:"spec"`
+	Capabilities      json.RawMessage `json:"capabilities"`
+	Endpoints         json.RawMessage `json:"endpoints"`
+	Org               *orgSummary     `json:"org,omitempty"`
+	Protocols         []string        `json:"protocols"`
 	LoadPct       float64         `json:"load_pct"`
 	RxBytes       int64           `json:"rx_bytes"`
 	TxBytes       int64           `json:"tx_bytes"`
@@ -42,8 +44,10 @@ func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole
 		NodeID: n.PeerID, PeerID: n.PeerID, DID: n.DID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Name: n.Name, Region: n.Region, Zone: n.Zone, Status: n.Status,
 		AccessMode: n.AccessMode, DeploymentProfile: n.DeploymentProfile, MinTier: n.MinTier, Spec: n.Spec,
-		Org: s.orgSummaryFor(c, n.OrgID, callerRole, privileged),
-		Protocols: n.Protocols, LoadPct: loadPct(n.Load),
+		Capabilities: n.Capabilities,
+		Endpoints:    enrichEndpointsForDiscovery(n.Endpoints, n.IP),
+		Org:          s.orgSummaryFor(c, n.OrgID, callerRole, privileged),
+		Protocols:    n.Protocols, LoadPct: loadPct(n.Load),
 		RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
 		LastHeartbeat: n.LastHeartbeat, CreatedAt: n.CreatedAt,
 	}
