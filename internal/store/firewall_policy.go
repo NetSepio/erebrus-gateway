@@ -135,7 +135,7 @@ func (s *Store) OrgIDForNode(ctx context.Context, peerID string) (string, error)
 // UpdateOrgNodeDeploymentProfile sets deployment_profile when a node reports it in hello.
 func (s *Store) UpdateOrgNodeDeploymentProfile(ctx context.Context, peerID, profile string) error {
 	profile = NormalizeDeploymentProfile(profile)
-	if profile == DeploymentProfileErebrus {
+	if profile == DeploymentProfileStandard {
 		return nil
 	}
 	_, err := s.db.ExecContext(ctx,

@@ -171,7 +171,7 @@ Actions (v2.0):
 
 Optional additive fields (v2.0+):
 
-- `hello.deployment_profile` — `erebrus` | `shield` | `sentinel`
+- `hello.deployment_profile` — `standard` | `shield` | `sentinel` (legacy nodes may send `erebrus`)
 - `hello.services` / `heartbeat.services` — map of service health (`vpn`, `community_firewall`, `erebrus_firewall`)
 
 Unknown actions → `command_result` with `ok=false, error="unknown action"`.

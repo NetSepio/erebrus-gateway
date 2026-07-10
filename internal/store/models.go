@@ -63,9 +63,11 @@ const (
 
 // Deployment profiles.
 const (
-	DeploymentProfileErebrus  = "erebrus"
+	DeploymentProfileStandard = "standard"
 	DeploymentProfileShield   = "shield"
 	DeploymentProfileSentinel = "sentinel"
+	// deploymentProfileLegacyErebrus is accepted on ingest only (pre-standard nodes).
+	deploymentProfileLegacyErebrus = "erebrus"
 )
 
 // Org node types.
@@ -206,7 +208,7 @@ type Node struct {
 	RxBytes       int64           `json:"rx_bytes"`
 	TxBytes       int64           `json:"tx_bytes"`
 	Version       string          `json:"version"`
-	DeploymentProfile string      `json:"deployment_profile"` // erebrus(Standard) | shield | sentinel
+	DeploymentProfile string      `json:"deployment_profile"` // standard | shield | sentinel
 	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
 	LastPeerHandshake *time.Time `json:"last_peer_handshake,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`

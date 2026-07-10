@@ -64,7 +64,7 @@ deploy/               Production docker-compose + OTel collector config
   independent. New orgs start on `basic` with entitlements seeded from
   `org_entitlements`.
 - **Org nodes:** Control-plane records in `org_nodes` (keyed by `peer_id`) with
-  `deployment_profile` (`erebrus` | `shield` | `sentinel`), attached **services**
+  `deployment_profile` (`standard` | `shield` | `sentinel`), attached **services**
   (`org_node_services`), and optional Sentinel **firewall rules**.
 - **Runtime nodes:** Operational VPN rows in `nodes` (internal UUID PK; **`peer_id` is
   the canonical external id** for discovery, org APIs, PASETO claims, WS hub, and

@@ -24,7 +24,7 @@ type NodeRegistration struct {
 	APIBaseURL string
 	NodeKey    string
 	AccessMode         string
-	DeploymentProfile  string // erebrus | shield | sentinel
+	DeploymentProfile  string // standard | shield | sentinel
 }
 
 // RegisterNode inserts (or updates) the node row keyed by peer_id and returns
@@ -242,7 +242,7 @@ const nodeCols = `id, peer_id, did, COALESCE(wallet_address,''), COALESCE(chain,
 	COALESCE(org_id::text,''), COALESCE(access_mode,'public'),
 	COALESCE(min_tier,0), COALESCE(name,''), COALESCE(region,''), COALESCE(zone,''), COALESCE(ip,''), COALESCE(ip_hash,''),
 	spec, capabilities, endpoints, protocols, status, load, speedtest, rx_bytes, tx_bytes,
-	COALESCE(version,''), COALESCE(deployment_profile,'erebrus'), last_heartbeat, last_peer_handshake, created_at`
+	COALESCE(version,''), COALESCE(deployment_profile,'standard'), last_heartbeat, last_peer_handshake, created_at`
 
 func scanNode(sc interface{ Scan(...any) error }) (*Node, error) {
 	var n Node

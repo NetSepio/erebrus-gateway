@@ -20,6 +20,26 @@ func TestRuntimeToOrgNodeStatus(t *testing.T) {
 	}
 }
 
+func TestNormalizeDeploymentProfile(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"standard", DeploymentProfileStandard},
+		{"erebrus", DeploymentProfileStandard},
+		{"shield", DeploymentProfileShield},
+		{"sentinel", DeploymentProfileSentinel},
+		{"", DeploymentProfileStandard},
+		{"unknown", DeploymentProfileStandard},
+	}
+	for _, tc := range cases {
+		if got := NormalizeDeploymentProfile(tc.in); got != tc.want {
+			t.Fatalf("in=%q got %q want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestDeploymentProfileAllowsService(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -27,8 +47,8 @@ func TestDeploymentProfileAllowsService(t *testing.T) {
 		svc     string
 		want    bool
 	}{
-		{DeploymentProfileErebrus, ServiceTypeVPN, true},
-		{DeploymentProfileErebrus, ServiceTypeCommunityFirewall, false},
+		{DeploymentProfileStandard, ServiceTypeVPN, true},
+		{DeploymentProfileStandard, ServiceTypeCommunityFirewall, false},
 		{DeploymentProfileShield, ServiceTypeCommunityFirewall, true},
 		{DeploymentProfileSentinel, ServiceTypeErebrusFirewall, true},
 		{DeploymentProfileSentinel, ServiceTypeCommunityFirewall, false},

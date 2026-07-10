@@ -75,7 +75,7 @@ type OrgNodeInput struct {
 
 // UpsertOrgNode creates or updates the org control-plane node record.
 func (s *Store) UpsertOrgNode(ctx context.Context, in OrgNodeInput) (*OrgNode, error) {
-	in.DeploymentProfile = defaultIfEmpty(in.DeploymentProfile, DeploymentProfileErebrus)
+	in.DeploymentProfile = defaultIfEmpty(in.DeploymentProfile, DeploymentProfileStandard)
 	in.NodeType = defaultIfEmpty(in.NodeType, OrgNodeTypeBYOC)
 	in.Visibility = defaultIfEmpty(in.Visibility, OrgNodeVisibilityPrivateOrg)
 	in.ManagedBy = defaultIfEmpty(in.ManagedBy, OrgNodeManagedByOrg)
@@ -322,8 +322,10 @@ func NormalizeDeploymentProfile(profile string) string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case DeploymentProfileShield, DeploymentProfileSentinel:
 		return strings.ToLower(strings.TrimSpace(profile))
+	case DeploymentProfileStandard, deploymentProfileLegacyErebrus:
+		return DeploymentProfileStandard
 	default:
-		return DeploymentProfileErebrus
+		return DeploymentProfileStandard
 	}
 }
 
@@ -496,7 +498,7 @@ func (s *Store) ListOrgNodeServices(ctx context.Context, orgID, nodeID string) (
 // DeploymentProfileAllowsService reports whether a profile supports a service type.
 func DeploymentProfileAllowsService(profile, serviceType string) bool {
 	switch profile {
-	case DeploymentProfileErebrus:
+	case DeploymentProfileStandard:
 		return serviceType == ServiceTypeVPN
 	case DeploymentProfileShield:
 		return serviceType == ServiceTypeVPN || serviceType == ServiceTypeCommunityFirewall

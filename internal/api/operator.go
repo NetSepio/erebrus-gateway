@@ -23,7 +23,7 @@ type nodeOperatorView struct {
 	Zone          string          `json:"zone,omitempty"`
 	Status        string          `json:"status"`
 	AccessMode    string          `json:"access_mode"`
-	DeploymentProfile string      `json:"deployment_profile"` // erebrus(Standard) | shield | sentinel
+	DeploymentProfile string      `json:"deployment_profile"` // standard | shield | sentinel
 	MinTier       int             `json:"min_tier"`
 	Spec          json.RawMessage `json:"spec"`
 	Org           *orgSummary     `json:"org,omitempty"`
