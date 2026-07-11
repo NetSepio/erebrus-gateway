@@ -172,10 +172,71 @@ Actions (v2.0):
 Optional additive fields (v2.0+):
 
 - `hello.deployment_profile` — `standard` | `shield` | `sentinel`
-- `hello.services` / `heartbeat.services` — map of service health (`vpn`, `community_firewall`, `erebrus_firewall`)
+- `hello.services` / `heartbeat.services` — map of service health (`vpn`, `community_firewall`, `erebrus_firewall`, `drop`)
 
 Unknown actions → `command_result` with `ok=false, error="unknown action"`.
 The node must answer every `command` within 30s or the gateway logs a timeout.
+
+## Drop (Kubo storage) — additive fields (v2.0+)
+
+Drop is an **independent optional service**, not a deployment profile. A node
+that runs a Kubo daemon advertises Drop through additive `hello`/`heartbeat`
+fields. All fields are optional: nodes that do not run Drop omit them and the
+gateway leaves the corresponding pointers `nil` (older nodes remain fully
+compatible). Standard, Shield, and Sentinel profiles may all run Drop.
+
+### `hello.capabilities.drop` (node → gateway)
+
+```json
+{
+  "capabilities": {
+    "app_hosting": false,
+    "wildcard_domain": "",
+    "drop": {
+      "enabled": true,
+      "accepts_public_uploads": true,
+      "webui_available": true
+    }
+  }
+}
+```
+
+- `enabled` — the node runs a Drop/Kubo service at all.
+- `accepts_public_uploads` — the node participates in the **public** storage
+  pool (public quota model). Private-org-only nodes set this `false`.
+- `webui_available` — the node exposes a Kubo WebUI that the gateway may proxy
+  through a short-lived same-origin session. The raw Kubo RPC/WebUI address is
+  never published; it stays on the node's internal Docker network.
+
+### `heartbeat.drop` + `heartbeat.versions.kubo` (node → gateway)
+
+```json
+{
+  "versions": { "node": "2.0.0", "singbox": "1.11.4", "kubo": "0.29.0" },
+  "services": { "vpn": "active", "drop": "active" },
+  "drop": {
+    "state": "active",
+    "kubo_version": "0.29.0",
+    "repo_size_bytes": 734003200,
+    "storage_max_bytes": 53687091200,
+    "num_objects": 1284
+  }
+}
+```
+
+- `drop.state` ∈ `disabled | starting | active | degraded | full | unreachable`.
+  Runtime health (not the mere presence of a capability) determines whether the
+  gateway treats the node as usable for reservations.
+- `services.drop` mirrors the runtime service health used by the org-node
+  service map; it is populated as a `drop` service record on the gateway.
+- `repo_size_bytes` / `storage_max_bytes` / `num_objects` feed capacity
+  accounting. The gateway reserves against `storage_max_bytes` when it is > 0
+  (a 0 max means "unbounded / unknown"). Exact capacity stays in PostgreSQL and
+  in gateway-internal responses; public discovery only exposes a **coarse**
+  bucket (`available | limited | full | unknown`).
+
+The gateway persists the latest Drop capability on `hello` and the latest Drop
+status/Kubo version on each `heartbeat` (`node_drop_status` table).
 
 ## Versioning
 

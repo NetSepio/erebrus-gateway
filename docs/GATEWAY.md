@@ -56,8 +56,17 @@ deploy/               Production docker-compose + OTel collector config
 
 - **Auth:** Reown wallet signature only (`chain ∈ {evm, sol}`). Email links via
   Resend OTP — never a login method.
-- **User entitlements (legacy):** 7-day trial (once), NFT → 30 days direct, rank perks,
-  admin bypass. Per-user; separate from org plans below.
+- **Entitlement (organization-only):** Product/Drop entitlement is derived
+  **solely** from organization membership — the effective tier is the highest
+  active org seat across all active memberships (owners map to the org plan;
+  ordinary members to their `seat_tier`). Personal trials, `ActiveSubscription`,
+  NFT grants, and personal subscription tiers are **no longer** entitlement
+  sources. Every user owns a personal `basic` org (backfilled by migration
+  `0026` for older users; created at first login for new ones), so an
+  authenticated user always resolves to at least Free. Legacy `subscriptions`
+  data is retained for a rollback window; `GET /api/v2/subscriptions`,
+  `…/trial`, and `…/nft/refresh` return organization-derived compatibility
+  responses while the webapp migrates.
 - **Orgs:** Control-plane workspace with plans (`basic` | `starter` | `pro` | `business`
   | `enterprise`), billing status, verification status, and optional public profile.
   Members have a **role** (management) and **seat_tier** (premium access) — these are
@@ -84,6 +93,60 @@ deploy/               Production docker-compose + OTel collector config
   APIs. Actual deploy and runtime sync deferred (see below).
 - **Social layer:** Referrals, XP/tiers, leaderboard, X/Telegram/email verify, perks.
 - **Activity log:** Authenticated mutations logged with IP + device for user visibility.
+- **Drop (Kubo storage):** Independent optional service (not a deployment
+  profile) available on Standard/Shield/Sentinel — see the Drop section below.
+
+---
+
+### Drop (Kubo storage)
+
+Drop lets users store files on Kubo (IPFS) nodes through the gateway. It is an
+**independent optional service** advertised per node over the WS control plane
+(`hello.capabilities.drop`, `heartbeat.drop`, `versions.kubo`,
+`services.drop` — see `docs/ws-protocol.md`), not a fourth deployment profile.
+
+- **Entitlement & quota:** Public storage quota is **per user across all public
+  nodes**, resolved from the highest active org seat: Free `500,000,000`,
+  Starter `1,000,000,000`, Pro `5,000,000,000`, Business `10,000,000,000` bytes
+  (`drop_tier_limits`, seeded by migration `0026`; admins can retune without a
+  redeploy). Enterprise currently mirrors Business — **provisional**, pending a
+  product decision. Private-org storage is governed by org membership and node
+  capacity, not the public per-user quota.
+- **Reservations:** Uploads reserve quota **and** node capacity atomically
+  (row-locked in one transaction) before any bytes move, keyed idempotently by
+  `(owner_user_id, idempotency_key)`. Reserved bytes convert to used bytes on
+  commit and are released on expiry/failure/delete. A background reconciliation
+  pass (`ExpireDropReservations`) releases TTL-expired reservations.
+- **Streaming:** Content streams gateway→node→Kubo (upload) and
+  node→gateway→caller (download) without buffering, via a dedicated
+  `internal/dropclient` with bounded dial/header timeouts and **no**
+  whole-transfer timeout (the short control-plane `internal/nodeclient` is
+  unchanged). Byte limits are enforced; upload bodies are never logged.
+- **Pins & deletion:** One pin row per `(file_id, node_id)`. Duplicate CID
+  references are tolerated; a physical unpin is issued only when the **last**
+  active reference on a node is deleted. Deletion, quota release, and unpin are
+  idempotent, with a compensating unpin if metadata commit fails after a pin.
+- **Security:** Public shares use opaque file ids, never raw CIDs, and enforce
+  `visibility=public` + `status=active`. Private confidentiality relies on
+  **client-side encryption**; the gateway stores only opaque encryption metadata
+  and a versioned, bounded, encrypted **vault** (`drop_crypto_profiles`) — no
+  plaintext key material or recovery secret. Owners/node-operators can inspect
+  metadata and delete but receive **no** decryption keys. Kubo RPC stays private
+  to the node's internal Docker network; the WebUI is reachable only through a
+  short-lived, same-origin gateway proxy session that never reveals the node
+  address. CIDs are validated and response filenames sanitized.
+
+**Deployment ordering:** deploy the node with a running Kubo daemon (private
+RPC on the internal Docker network) **before** relying on Drop APIs — the
+gateway only treats a node as usable once it reports Drop capability on `hello`
+and a healthy runtime `drop.state` on `heartbeat`. No gateway env var enables
+Drop; discovery follows node health. Drop rate limits live in
+`platform_settings` (`rate_limit_drop_write_per_min`,
+`rate_limit_drop_read_per_min`).
+
+Tables (migration `0026_drop.sql`): `drop_tier_limits`, `drop_uploads`,
+`drop_files`, `drop_pins`, `drop_quota_usage`, `node_drop_status`,
+`drop_crypto_profiles`.
 
 ---
 
@@ -221,6 +284,16 @@ Key metrics: `netsepio_erebrus_gateway_requests_total`,
 `netsepio_erebrus_gateway_active_node_sessions`,
 `netsepio_erebrus_gateway_app_events_total`,
 `netsepio_erebrus_gateway_build_info`.
+
+Drop (Kubo storage) metrics — labels are deliberately low-cardinality (fixed
+enumerations only, never per-user/per-file):
+
+- `netsepio_erebrus_gateway_drop_uploads_total{result,scope}`
+- `netsepio_erebrus_gateway_drop_upload_bytes_total{scope}`
+- `netsepio_erebrus_gateway_drop_download_bytes_total{scope}`
+- `netsepio_erebrus_gateway_drop_quota_rejections_total{tier}`
+- `netsepio_erebrus_gateway_drop_node_operations_total{operation,result}`
+- `netsepio_erebrus_gateway_drop_reconciliation_jobs_total{operation,result}`
 
 Clients should send `X-Erebrus-Client: webapp|android|ios|node` for HTTP metrics.
 
