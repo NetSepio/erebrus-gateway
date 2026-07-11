@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// handlePlans lists subscription plans (public). In v2.0 plans describe limits;
-// there is no paid checkout — entitlement comes from the trial or NFT gating.
+// handlePlans lists organization plan limits. Personal subscription, trial, and
+// NFT rows are retained only for compatibility and do not grant access.
 func (s *Server) handlePlans(c *gin.Context) {
 	plans, err := s.store.ListPlans(c)
 	if err != nil {

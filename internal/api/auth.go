@@ -79,7 +79,7 @@ func (s *Server) handleAuthComplete(c *gin.Context) {
 	}
 	// Org invites stay pending until the user accepts them in-app.
 	// Optional referral binding: sets referred_by once (immutable, self-blocked).
-	// Must precede the trial below so the qualifying trial awards referral XP.
+	// Must precede org bootstrap so first-membership qualification awards referral XP.
 	s.bindReferralCode(c, u.ID, req.Ref)
 	s.bootstrapUser(c, u)
 	tok, err := s.tokens.IssueUser(u.ID, u.WalletAddress, u.Chain, u.Role)

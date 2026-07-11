@@ -1,5 +1,5 @@
-// Package nftgate checks whether a wallet owns the gating NFT collection, used
-// as a (free) entitlement source alongside the trial. v2.0 targets Solana
+// Package nftgate checks whether a wallet owns configured NFT collections for
+// legacy reward verification. NFT ownership never grants product entitlement.
 // Metaplex Core (mpl-core) via the DAS searchAssets RPC; an EVM ERC-721
 // balanceOf checker is also provided for future use. Unconfigured or
 // unsupported chains fall back to "disabled".
@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// Checker reports NFT ownership for entitlement.
+// Checker reports NFT ownership for reward verification.
 type Checker interface {
 	// Enabled reports whether NFT gating is configured.
 	Enabled() bool

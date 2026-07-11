@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// NFTGateContract is a chain-specific collection/contract that grants NFT entitlement.
+// NFTGateContract is a chain-specific collection used for legacy reward verification.
 type NFTGateContract struct {
 	ID      string
 	Chain   string

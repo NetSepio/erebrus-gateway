@@ -58,7 +58,8 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 	//   - admin: always.
 	//   - private node: any member of the node's org (membership covers the org's
 	//     own private nodes — no seat needed).
-	//   - public node: a paid organization seat (owner or seat_tier <> free).
+	//   - public node: any active organization membership; the highest
+	//     organization/seat tier controls product limits.
 	if !isAdmin {
 		if node.AccessMode == store.NodeAccessPrivate {
 			member, err := s.store.UserCanProvisionNode(c, node.PeerID, uid)
@@ -77,7 +78,7 @@ func (s *Server) handleProvisionClient(c *gin.Context) {
 				return
 			}
 			if orgPlan == "" {
-				fail(c, http.StatusPaymentRequired, "a paid organization seat is required to use public nodes")
+				fail(c, http.StatusPaymentRequired, "active organization membership is required to use public nodes")
 				return
 			}
 		}
