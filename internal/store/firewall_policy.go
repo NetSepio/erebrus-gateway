@@ -17,13 +17,13 @@ type FirewallSyncRule struct {
 
 // FirewallSyncPayload is sent to nodes via sync_firewall WS command.
 type FirewallSyncPayload struct {
-	OrgID        string             `json:"org_id"`
-	NodeID       string             `json:"node_id"`
-	ServiceKind  string             `json:"service_kind"` // shield | sentinel
-	Rules        []FirewallSyncRule `json:"rules"`
-	Upstreams    []string           `json:"upstreams"`
-	Licensed     bool               `json:"licensed"`
-	ShieldAdmin  string             `json:"shield_admin_url,omitempty"`
+	OrgID       string             `json:"org_id"`
+	NodeID      string             `json:"node_id"`
+	ServiceKind string             `json:"service_kind"` // shield | sentinel
+	Rules       []FirewallSyncRule `json:"rules"`
+	Upstreams   []string           `json:"upstreams"`
+	Licensed    bool               `json:"licensed"`
+	ShieldAdmin string             `json:"shield_admin_url,omitempty"`
 }
 
 // BuildFirewallSyncPayload maps gateway firewall rules to a node sync payload.

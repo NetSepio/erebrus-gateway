@@ -99,12 +99,12 @@ const (
 
 // Service types.
 const (
-	ServiceTypeVPN              = "vpn"
+	ServiceTypeVPN               = "vpn"
 	ServiceTypeCommunityFirewall = "community_firewall"
-	ServiceTypeErebrusFirewall  = "erebrus_firewall"
-	ServiceTypeDrop             = "drop"
-	ServiceTypeAI               = "ai"
-	ServiceTypeCustomApp        = "custom_app"
+	ServiceTypeErebrusFirewall   = "erebrus_firewall"
+	ServiceTypeDrop              = "drop"
+	ServiceTypeAI                = "ai"
+	ServiceTypeCustomApp         = "custom_app"
 )
 
 // Service names.
@@ -116,23 +116,23 @@ const (
 
 // Service providers.
 const (
-	ServiceProviderWireguard     = "wireguard"
-	ServiceProviderAdGuardHome   = "adguard_home"
+	ServiceProviderWireguard      = "wireguard"
+	ServiceProviderAdGuardHome    = "adguard_home"
 	ServiceProviderUnboundErebrus = "unbound_erebrus"
-	ServiceProviderErebrusDrop   = "erebrus_drop"
-	ServiceProviderCustom        = "custom"
+	ServiceProviderErebrusDrop    = "erebrus_drop"
+	ServiceProviderCustom         = "custom"
 )
 
 // Service status.
 const (
-	ServiceStatusPending        = "pending"
-	ServiceStatusProvisioning   = "provisioning"
-	ServiceStatusActive         = "active"
-	ServiceStatusDegraded       = "degraded"
-	ServiceStatusDisabled       = "disabled"
-	ServiceStatusUnlicensed     = "unlicensed"
+	ServiceStatusPending         = "pending"
+	ServiceStatusProvisioning    = "provisioning"
+	ServiceStatusActive          = "active"
+	ServiceStatusDegraded        = "degraded"
+	ServiceStatusDisabled        = "disabled"
+	ServiceStatusUnlicensed      = "unlicensed"
 	ServiceStatusUnsupportedPlan = "unsupported_plan"
-	ServiceStatusError          = "error"
+	ServiceStatusError           = "error"
 )
 
 // Service visibility.
@@ -145,8 +145,8 @@ const (
 // Registration token scopes.
 const (
 	TokenScopeNodeRegistration = "node_registration"
-	TokenScopeFirewallSetup      = "firewall_setup"
-	TokenScopeServiceSetup       = "service_setup"
+	TokenScopeFirewallSetup    = "firewall_setup"
+	TokenScopeServiceSetup     = "service_setup"
 )
 
 // Sentinel license status.
@@ -259,33 +259,33 @@ type User struct {
 
 // Node is a registered VPN node and its latest control-plane snapshot.
 type Node struct {
-	ID            string          `json:"id"`
-	PeerID        string          `json:"peer_id"`
-	DID           string          `json:"did"`
-	WalletAddress string          `json:"wallet_address,omitempty"`
-	Chain         string          `json:"chain,omitempty"` // SOLANA | ETHEREUM (set at enrollment)
-	OrgID         string          `json:"org_id,omitempty"`
-	AccessMode    string          `json:"access_mode"`
-	MinTier       int             `json:"min_tier"`
-	Name          string          `json:"name"`
-	Region        string          `json:"region"`
-	Zone          string          `json:"zone,omitempty"`
-	IP            string          `json:"ip,omitempty"` // never serialized publicly
-	IPHash        string          `json:"ip_hash,omitempty"`
-	Spec          json.RawMessage `json:"spec"`
-	Capabilities  json.RawMessage `json:"capabilities"`
-	Endpoints     json.RawMessage `json:"endpoints"`
-	Protocols     []string        `json:"protocols"`
-	Status        string          `json:"status"`
-	Load          json.RawMessage `json:"load"`
-	Speedtest     json.RawMessage `json:"speedtest"`
-	RxBytes       int64           `json:"rx_bytes"`
-	TxBytes       int64           `json:"tx_bytes"`
-	Version       string          `json:"version"`
-	DeploymentProfile string      `json:"deployment_profile"` // standard | shield | sentinel
-	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
-	LastPeerHandshake *time.Time `json:"last_peer_handshake,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
+	ID                string          `json:"id"`
+	PeerID            string          `json:"peer_id"`
+	DID               string          `json:"did"`
+	WalletAddress     string          `json:"wallet_address,omitempty"`
+	Chain             string          `json:"chain,omitempty"` // SOLANA | ETHEREUM (set at enrollment)
+	OrgID             string          `json:"org_id,omitempty"`
+	AccessMode        string          `json:"access_mode"`
+	MinTier           int             `json:"min_tier"`
+	Name              string          `json:"name"`
+	Region            string          `json:"region"`
+	Zone              string          `json:"zone,omitempty"`
+	IP                string          `json:"ip,omitempty"` // never serialized publicly
+	IPHash            string          `json:"ip_hash,omitempty"`
+	Spec              json.RawMessage `json:"spec"`
+	Capabilities      json.RawMessage `json:"capabilities"`
+	Endpoints         json.RawMessage `json:"endpoints"`
+	Protocols         []string        `json:"protocols"`
+	Status            string          `json:"status"`
+	Load              json.RawMessage `json:"load"`
+	Speedtest         json.RawMessage `json:"speedtest"`
+	RxBytes           int64           `json:"rx_bytes"`
+	TxBytes           int64           `json:"tx_bytes"`
+	Version           string          `json:"version"`
+	DeploymentProfile string          `json:"deployment_profile"` // standard | shield | sentinel
+	LastHeartbeat     *time.Time      `json:"last_heartbeat,omitempty"`
+	LastPeerHandshake *time.Time      `json:"last_peer_handshake,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
 }
 
 // Plan is a subscription tier.
@@ -308,18 +308,18 @@ type Subscription struct {
 
 // Org is a workspace; members and API keys operate within it.
 type Org struct {
-	ID                    string    `json:"id"`
-	Name                  string    `json:"name"`
-	Slug                  string    `json:"slug"`
-	Plan                  string    `json:"plan"`
-	BillingStatus         string    `json:"billing_status"`
-	VerificationStatus    string    `json:"verification_status"`
-	PublicProfileEnabled  bool      `json:"public_profile_enabled"`
-	OwnerUserID           string    `json:"owner_user_id"`
-	Role                  string    `json:"role,omitempty"`      // caller's role, when listed for a user
-	SeatTier              string    `json:"seat_tier,omitempty"` // caller's seat tier, when listed for a user
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	ID                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	Slug                 string    `json:"slug"`
+	Plan                 string    `json:"plan"`
+	BillingStatus        string    `json:"billing_status"`
+	VerificationStatus   string    `json:"verification_status"`
+	PublicProfileEnabled bool      `json:"public_profile_enabled"`
+	OwnerUserID          string    `json:"owner_user_id"`
+	Role                 string    `json:"role,omitempty"`      // caller's role, when listed for a user
+	SeatTier             string    `json:"seat_tier,omitempty"` // caller's seat tier, when listed for a user
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // OrgProfile holds org branding and contact metadata.
@@ -342,21 +342,21 @@ type OrgProfile struct {
 
 // OrgEntitlement is the plan-derived resource limits for an org.
 type OrgEntitlement struct {
-	ID                         string    `json:"id"`
-	OrgID                      string    `json:"org_id"`
-	Plan                       string    `json:"plan"`
-	PaidSeatsIncluded          int       `json:"paid_seats_included"`
-	ManagedVPNNodesIncluded    int       `json:"managed_vpn_nodes_included"`
-	ShieldInstancesIncluded    int       `json:"shield_instances_included"`
-	SentinelLicensesIncluded   int       `json:"sentinel_licenses_included"`
-	PublicNodeAccessTier       string    `json:"public_node_access_tier,omitempty"`
-	APIQuotaMonthly            *int      `json:"api_quota_monthly,omitempty"`
-	BandwidthPolicy            string    `json:"bandwidth_policy,omitempty"`
-	SupportTier                string    `json:"support_tier,omitempty"`
-	AuditLogsEnabled           bool      `json:"audit_logs_enabled"`
-	AdvancedAnalyticsEnabled   bool      `json:"advanced_analytics_enabled"`
-	CreatedAt                  time.Time `json:"created_at"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	ID                       string    `json:"id"`
+	OrgID                    string    `json:"org_id"`
+	Plan                     string    `json:"plan"`
+	PaidSeatsIncluded        int       `json:"paid_seats_included"`
+	ManagedVPNNodesIncluded  int       `json:"managed_vpn_nodes_included"`
+	ShieldInstancesIncluded  int       `json:"shield_instances_included"`
+	SentinelLicensesIncluded int       `json:"sentinel_licenses_included"`
+	PublicNodeAccessTier     string    `json:"public_node_access_tier,omitempty"`
+	APIQuotaMonthly          *int      `json:"api_quota_monthly,omitempty"`
+	BandwidthPolicy          string    `json:"bandwidth_policy,omitempty"`
+	SupportTier              string    `json:"support_tier,omitempty"`
+	AuditLogsEnabled         bool      `json:"audit_logs_enabled"`
+	AdvancedAnalyticsEnabled bool      `json:"advanced_analytics_enabled"`
+	CreatedAt                time.Time `json:"created_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
 }
 
 // Member is a user's membership in an org.
@@ -375,25 +375,25 @@ type Member struct {
 
 // OrgNode is the org control-plane record for a runtime node.
 type OrgNode struct {
-	ID                 string     `json:"id"`
-	OrgID              string     `json:"org_id"`
-	NodeID             string     `json:"node_id"`
-	NodeName           string     `json:"node_name,omitempty"`
-	DeploymentProfile  string     `json:"deployment_profile"`
-	NodeType           string     `json:"node_type"`
-	Visibility         string     `json:"visibility"`
-	ManagedBy          string     `json:"managed_by"`
-	Region             string     `json:"region,omitempty"`
-	Zone               string     `json:"zone,omitempty"`
-	Status             string     `json:"status"`
-	RuntimeStatus      string     `json:"runtime_status,omitempty"`
-	AccessMode         string     `json:"access_mode,omitempty"`
-	LastHeartbeat      *time.Time `json:"last_heartbeat,omitempty"`
-	APIPublicURL       string     `json:"api_public_url,omitempty"`
-	LastSeenAt         *time.Time `json:"last_seen_at,omitempty"`
-	CreatedBy          string     `json:"created_by,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID                string     `json:"id"`
+	OrgID             string     `json:"org_id"`
+	NodeID            string     `json:"node_id"`
+	NodeName          string     `json:"node_name,omitempty"`
+	DeploymentProfile string     `json:"deployment_profile"`
+	NodeType          string     `json:"node_type"`
+	Visibility        string     `json:"visibility"`
+	ManagedBy         string     `json:"managed_by"`
+	Region            string     `json:"region,omitempty"`
+	Zone              string     `json:"zone,omitempty"`
+	Status            string     `json:"status"`
+	RuntimeStatus     string     `json:"runtime_status,omitempty"`
+	AccessMode        string     `json:"access_mode,omitempty"`
+	LastHeartbeat     *time.Time `json:"last_heartbeat,omitempty"`
+	APIPublicURL      string     `json:"api_public_url,omitempty"`
+	LastSeenAt        *time.Time `json:"last_seen_at,omitempty"`
+	CreatedBy         string     `json:"created_by,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 // OrgNodeService is a capability attached to an org node.
@@ -429,13 +429,13 @@ type NodeRegistrationToken struct {
 
 // SentinelLicense tracks per-node Sentinel entitlements.
 type SentinelLicense struct {
-	ID        string     `json:"id"`
-	OrgID     string     `json:"org_id"`
-	NodeID    string     `json:"node_id,omitempty"`
-	Status    string     `json:"status"`
-	Source    string     `json:"source"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID        string    `json:"id"`
+	OrgID     string    `json:"org_id"`
+	NodeID    string    `json:"node_id,omitempty"`
+	Status    string    `json:"status"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // APIKey is an org-scoped credential (the secret is shown only once at creation).
@@ -495,7 +495,7 @@ type DropUpload struct {
 	Status             string          `json:"status"`
 	IdempotencyKey     string          `json:"idempotency_key"`
 	CID                string          `json:"cid,omitempty"`
-	Error             string           `json:"error,omitempty"`
+	Error              string          `json:"error,omitempty"`
 	ExpiresAt          time.Time       `json:"expires_at"`
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`

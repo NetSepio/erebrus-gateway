@@ -9,15 +9,15 @@ import (
 
 // PlanEntitlementTemplate is the entitlement row seeded when an org is assigned a plan.
 type PlanEntitlementTemplate struct {
-	Plan                       string
-	PaidSeatsIncluded          int
-	ManagedVPNNodesIncluded    int
-	ShieldInstancesIncluded    int
-	SentinelLicensesIncluded   int
-	PublicNodeAccessTier       string
-	SupportTier                string
-	AuditLogsEnabled           bool
-	AdvancedAnalyticsEnabled   bool
+	Plan                     string
+	PaidSeatsIncluded        int
+	ManagedVPNNodesIncluded  int
+	ShieldInstancesIncluded  int
+	SentinelLicensesIncluded int
+	PublicNodeAccessTier     string
+	SupportTier              string
+	AuditLogsEnabled         bool
+	AdvancedAnalyticsEnabled bool
 }
 
 // PlanEntitlementTemplates returns the canonical plan → entitlement mapping.
