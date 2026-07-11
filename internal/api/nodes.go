@@ -221,6 +221,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		return
 	}
 	metrics.NodeRegistrationsTotal.WithLabelValues("success", env).Inc()
+	s.cache.DelPrefix(c, "nodes:disco:")
 	ok(c, http.StatusOK, gin.H{
 		"node_token":         nodeTok,
 		"node_id":            peerID,
@@ -378,6 +379,7 @@ func (s *Server) handleAdminSetNodeMinTier(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to set min_tier")
 		return
 	}
+	s.cache.DelPrefix(c, "nodes:disco:")
 	ok(c, http.StatusOK, gin.H{"node_id": c.Param("id"), "min_tier": req.MinTier})
 }
 

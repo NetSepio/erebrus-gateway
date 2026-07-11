@@ -67,6 +67,25 @@ func (c *Cache) Del(ctx context.Context, keys ...string) {
 	_ = c.rdb.Del(ctx, keys...).Err()
 }
 
+// DelPrefix removes all keys matching prefix. No-op when disabled.
+func (c *Cache) DelPrefix(ctx context.Context, prefix string) {
+	if c == nil || c.rdb == nil {
+		return
+	}
+	iter := c.rdb.Scan(ctx, 0, prefix+"*", 100).Iterator()
+	var keys []string
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+		if len(keys) >= 100 {
+			_ = c.rdb.Del(ctx, keys...).Err()
+			keys = keys[:0]
+		}
+	}
+	if len(keys) > 0 {
+		_ = c.rdb.Del(ctx, keys...).Err()
+	}
+}
+
 // Allow is a fixed-window per-key rate limiter (Redis INCR/EXPIRE). It fails
 // OPEN (returns true) when Redis is unavailable or the limit is non-positive, so
 // rate limiting never takes the gateway down.

@@ -285,5 +285,6 @@ func (s *Server) handleNodeHeartbeat(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "heartbeat failed")
 		return
 	}
+	s.cache.DelPrefix(c, "nodes:disco:")
 	c.Status(http.StatusNoContent)
 }
