@@ -171,6 +171,14 @@ func maintenance(ctx context.Context, st *store.Store, platform *config.Platform
 			_ = st.PurgeExpiredEmailOTPs(mctx)
 			_ = st.PurgeOldNodeMetrics(mctx, plat.NodeMetricsRetention)
 			_ = st.AwardOperatorUptimeXP(mctx, plat.XPUptimeDay)
+			// Drop reconciliation: release TTL-expired upload reservations so
+			// their quota/node holds are returned. Idempotent per reservation.
+			if n, err := st.ExpireDropReservations(mctx, 200); err == nil && n > 0 {
+				metrics.DropReconciliationJobsTotal.WithLabelValues("expire_reservations", "ok").Inc()
+				log.Info("expired drop reservations", "count", n)
+			} else if err != nil {
+				metrics.DropReconciliationJobsTotal.WithLabelValues("expire_reservations", "failed").Inc()
+			}
 			cancel()
 		}
 	}

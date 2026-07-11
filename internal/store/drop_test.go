@@ -2,6 +2,44 @@ package store
 
 import "testing"
 
+func TestCoarseCapacity(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		max, repo, reserved int64
+		want                string
+	}{
+		{0, 0, 0, DropCapacityUnknown},        // no advertised bound
+		{1000, 1000, 0, DropCapacityFull},     // exhausted
+		{1000, 950, 0, DropCapacityLimited},   // <10% left
+		{1000, 100, 0, DropCapacityAvailable}, // plenty
+		{1000, 500, 450, DropCapacityLimited}, // reservations count
+		{1000, 900, 200, DropCapacityFull},    // over-committed clamps to full
+	}
+	for _, c := range cases {
+		if got := coarseCapacity(c.max, c.repo, c.reserved); got != c.want {
+			t.Errorf("coarseCapacity(%d,%d,%d)=%q want %q", c.max, c.repo, c.reserved, got, c.want)
+		}
+	}
+}
+
+func TestNormalizeDropState(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"active":      DropStateActive,
+		"DEGRADED":    DropStateDegraded,
+		"full":        DropStateFull,
+		"unreachable": DropStateUnreachable,
+		"starting":    DropStateStarting,
+		"":            DropStateDisabled,
+		"nonsense":    DropStateDisabled,
+	}
+	for in, want := range cases {
+		if got := NormalizeDropState(in); got != want {
+			t.Errorf("NormalizeDropState(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
 func TestNormalizeDropTier(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{

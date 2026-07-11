@@ -28,6 +28,10 @@ type PlatformValues struct {
 
 	RateLimitAuthPerMin     int
 	RateLimitRegisterPerMin int
+	// Drop rate limits: write covers upload create/content; read covers file and
+	// public content retrieval. Per (user or IP) per minute.
+	RateLimitDropWritePerMin int
+	RateLimitDropReadPerMin  int
 
 	// Node capacity gate thresholds.
 	NodeCPUMax            float64
@@ -66,8 +70,10 @@ func DefaultPlatformValues() PlatformValues {
 		XPFreeDaysCost:   500,
 		XPFreeDaysGrant:  7,
 
-		RateLimitAuthPerMin:     30,
-		RateLimitRegisterPerMin: 10,
+		RateLimitAuthPerMin:      30,
+		RateLimitRegisterPerMin:  10,
+		RateLimitDropWritePerMin: 60,
+		RateLimitDropReadPerMin:  120,
 
 		NodeCPUMax:            80.0,
 		NodeCPUSoft:           60.0,

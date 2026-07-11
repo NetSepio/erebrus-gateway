@@ -261,6 +261,44 @@ func (s *Store) GetDropFile(ctx context.Context, fileID string) (*DropFile, erro
 	return f, nil
 }
 
+// SetDropFileVisibility changes a file's visibility (public|private). Only the
+// owner may change it. Returns the updated file or ErrNotFound.
+func (s *Store) SetDropFileVisibility(ctx context.Context, fileID, userID, visibility string) (*DropFile, error) {
+	f := &DropFile{}
+	err := s.db.QueryRowContext(ctx,
+		`UPDATE drop_files SET visibility=$3
+		 WHERE id=$1::uuid AND owner_user_id=$2::uuid AND status=$4
+		 RETURNING `+dropFileCols,
+		fileID, userID, visibility, DropFileActive).Scan(dropFileScan(f)...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// DropUsage is an aggregate storage view for a principal.
+type DropUsage struct {
+	UsedBytes  int64 `json:"used_bytes"`
+	FileCount  int64 `json:"file_count"`
+	QuotaBytes int64 `json:"quota_bytes,omitempty"`
+}
+
+// OrgDropUsage aggregates a private org's active Drop storage (bytes + files).
+func (s *Store) OrgDropUsage(ctx context.Context, orgID string) (*DropUsage, error) {
+	u := &DropUsage{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(sum(size_bytes),0), count(*) FROM drop_files
+		 WHERE org_id=$1::uuid AND status <> $2`, orgID, DropFileDeleted).
+		Scan(&u.UsedBytes, &u.FileCount)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
 // CountActivePinRefs returns how many non-deleted files still reference a CID on
 // a node. Used to decide when a physical unpin is safe.
 func (s *Store) CountActivePinRefs(ctx context.Context, nodeID, cid, excludeFileID string) (int, error) {
