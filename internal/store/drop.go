@@ -197,6 +197,15 @@ func (s *Store) ReserveDropUpload(ctx context.Context, in ReserveDropUploadInput
 			}
 			return existing, nil
 		}
+		// Preserve terminal attempts (including any orphan-pin reconciliation
+		// metadata) while freeing the caller's key for an explicit retry.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE drop_uploads
+			 SET idempotency_key = idempotency_key || ':terminal:' || id::text,
+			     updated_at = now()
+			 WHERE id = $1::uuid`, existing.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Per-file ceiling.

@@ -510,7 +510,7 @@ paths:
                   trial_consumed:
                     {
                       type: boolean,
-                      description: "Whether the user ever started their one trial",
+                      description: "Whether retained legacy data includes a personal trial row",
                     }
                   current_period_end:
                     { type: string, format: date-time, nullable: true }
@@ -775,7 +775,7 @@ paths:
     }
   /api/v2/admin/settings:
     get:
-      summary: List platform_settings (XP, trials, rate limits, auth text, …)
+      summary: List platform_settings (XP, legacy trial values, rate limits, auth text, …)
       responses:
         "200": { description: "{ settings[{key, value, description}] }" }
     patch:

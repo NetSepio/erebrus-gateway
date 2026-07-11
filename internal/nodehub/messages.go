@@ -22,13 +22,13 @@ const (
 
 // Command actions (v2.0).
 const (
-	ActionDrain         = "drain"
-	ActionUndrain       = "undrain"
-	ActionRotateReality = "rotate_reality"
-	ActionResyncPeers   = "resync_peers"
-	ActionSyncApps                = "sync_apps"
-	ActionSyncFirewall            = "sync_firewall"
-	ActionRestartFirewall         = "restart_firewall"
+	ActionDrain                    = "drain"
+	ActionUndrain                  = "undrain"
+	ActionRotateReality            = "rotate_reality"
+	ActionResyncPeers              = "resync_peers"
+	ActionSyncApps                 = "sync_apps"
+	ActionSyncFirewall             = "sync_firewall"
+	ActionRestartFirewall          = "restart_firewall"
 	ActionResetFirewallCredentials = "reset_firewall_credentials"
 	ActionSetFirewallCredentials   = "set_firewall_credentials"
 )
@@ -78,7 +78,7 @@ type DropCapability struct {
 // disabled | starting | active | degraded | full | unreachable.
 type DropStatus struct {
 	State           string `json:"state"`
-	KuboVersion     string `json:"kubo_version,omitempty"`
+	KuboVersion     string `json:"kubo_version"`
 	RepoSizeBytes   int64  `json:"repo_size_bytes"`
 	StorageMaxBytes int64  `json:"storage_max_bytes"`
 	NumObjects      int64  `json:"num_objects"`
@@ -111,14 +111,14 @@ type Hysteria2Endpoint struct {
 
 // Hello is sent by the node on every (re)connect.
 type Hello struct {
-	NodeID             string            `json:"node_id"`
-	Version            string            `json:"version"`
-	Identity           Identity          `json:"identity"`
-	Spec               Spec              `json:"spec"`
-	Capabilities       Capabilities      `json:"capabilities"`
-	Endpoints          Endpoints         `json:"endpoints"`
-	DeploymentProfile  string            `json:"deployment_profile,omitempty"`
-	Services           map[string]string `json:"services,omitempty"`
+	NodeID            string            `json:"node_id"`
+	Version           string            `json:"version"`
+	Identity          Identity          `json:"identity"`
+	Spec              Spec              `json:"spec"`
+	Capabilities      Capabilities      `json:"capabilities"`
+	Endpoints         Endpoints         `json:"endpoints"`
+	DeploymentProfile string            `json:"deployment_profile,omitempty"`
+	Services          map[string]string `json:"services,omitempty"`
 }
 
 // HelloAck is the gateway's response to hello.

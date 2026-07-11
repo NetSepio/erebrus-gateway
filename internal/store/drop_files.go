@@ -265,6 +265,19 @@ func scanDropFileByUpload(ctx context.Context, tx *sql.Tx, uploadID string) (*Dr
 	return f, err
 }
 
+// GetDropFileByUpload returns the committed file for an upload reservation.
+func (s *Store) GetDropFileByUpload(ctx context.Context, uploadID string) (*DropFile, error) {
+	f := &DropFile{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT `+dropFileCols+` FROM drop_files
+		 WHERE upload_id=$1::uuid ORDER BY created_at DESC LIMIT 1`,
+		uploadID).Scan(dropFileScan(f)...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return f, err
+}
+
 // ListDropFilesByUser returns a user's active files, newest first.
 func (s *Store) ListDropFilesByUser(ctx context.Context, userID string) ([]*DropFile, error) {
 	return s.queryDropFiles(ctx,
@@ -417,6 +430,10 @@ func (s *Store) MarkDropFileDeletePending(ctx context.Context, fileID string) (u
 		return false, nil, ErrNotFound
 	}
 	if err != nil {
+		return false, nil, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext($1))`, f.NodeID+"\x00"+f.CID); err != nil {
 		return false, nil, err
 	}
 	if f.Status == DropFileDeleted {

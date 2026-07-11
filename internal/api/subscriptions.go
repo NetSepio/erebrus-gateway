@@ -88,8 +88,8 @@ func (s *Server) handleStartTrial(c *gin.Context) {
 
 // awardReferralXP grants referral XP when the user was referred: +referrer to the
 // referrer, +referee to the referee (weights from config). Dedup-keyed per
-// referee, so every path that can complete a referral (trial start, signup
-// binding, late code redemption) may call it without double-awarding.
+// referee, so every path that can complete a referral (organization bootstrap,
+// signup binding, or late code redemption) may call it without double-awarding.
 func (s *Server) awardReferralXP(c *gin.Context, refereeID string) {
 	referrerID, err := s.store.ReferrerOf(c, refereeID)
 	if err != nil || referrerID == "" {

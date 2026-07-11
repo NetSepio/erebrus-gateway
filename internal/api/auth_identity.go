@@ -102,7 +102,7 @@ func (s *Server) handleEmailLoginVerify(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to resolve account")
 		return
 	}
-	// Bind before the bootstrap below so the auto-trial awards referral XP.
+	// Bind before bootstrap so first-organization qualification awards referral XP.
 	s.bindReferralCode(c, u.ID, req.Ref)
 	s.finishIdentityLogin(c, u, created, email, "email")
 }
@@ -142,7 +142,7 @@ func (s *Server) oidcLogin(c *gin.Context, provider string, v *oauth.Verifier) {
 		fail(c, http.StatusInternalServerError, "failed to resolve account")
 		return
 	}
-	// Bind before the bootstrap below so the auto-trial awards referral XP.
+	// Bind before bootstrap so first-organization qualification awards referral XP.
 	s.bindReferralCode(c, u.ID, req.Ref)
 	s.finishIdentityLogin(c, u, created, email, provider)
 }

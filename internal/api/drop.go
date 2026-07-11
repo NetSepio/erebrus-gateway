@@ -181,6 +181,7 @@ type dropReserveReq struct {
 
 func (s *Server) handleDropReserveUpload(c *gin.Context) {
 	uid := userID(c)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
 	var req dropReserveReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "invalid request body")
@@ -194,8 +195,12 @@ func (s *Server) handleDropReserveUpload(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "node_id and positive size_bytes required")
 		return
 	}
-	if req.IdempotencyKey == "" {
-		fail(c, http.StatusBadRequest, "idempotency_key required")
+	if req.IdempotencyKey == "" || len(req.IdempotencyKey) > 128 {
+		fail(c, http.StatusBadRequest, "idempotency_key must contain 1 to 128 characters")
+		return
+	}
+	if len(req.NodeID) > 128 || len(req.Filename) > 255 || len(req.ContentType) > 255 {
+		fail(c, http.StatusBadRequest, "upload metadata is too long")
 		return
 	}
 
@@ -267,6 +272,10 @@ func (s *Server) handleDropReserveUpload(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "private files require client-side encryption metadata")
 		return
 	}
+	if in.Visibility == store.DropVisibilityPublic && in.Encrypted {
+		fail(c, http.StatusBadRequest, "public files must be uploaded as plaintext")
+		return
+	}
 
 	if !s.revalidateDropNode(c, req.NodeID, scope, true) {
 		return
@@ -306,6 +315,15 @@ func (s *Server) handleDropUploadContent(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load upload")
 		return
 	}
+	if up.Status == store.DropUploadCommitted {
+		f, fileErr := s.store.GetDropFileByUpload(c, uploadID)
+		if fileErr != nil {
+			fail(c, http.StatusInternalServerError, "failed to load committed upload")
+			return
+		}
+		ok(c, http.StatusOK, dropFileView(f, true))
+		return
+	}
 	if up.Status != store.DropUploadReserved && up.Status != store.DropUploadUploading {
 		fail(c, http.StatusConflict, "upload is not accepting content")
 		return
@@ -328,7 +346,9 @@ func (s *Server) handleDropUploadContent(c *gin.Context) {
 	if err != nil {
 		metrics.DropUploadsTotal.WithLabelValues("failed", up.StorageScope).Inc()
 		metrics.DropNodeOperationsTotal.WithLabelValues("upload", "failed").Inc()
-		_ = s.store.ReleaseDropReservation(c, uploadID, store.DropUploadFailed)
+		cleanupCtx, cancel := dropCleanupContext(c)
+		_ = s.store.ReleaseDropReservation(cleanupCtx, uploadID, store.DropUploadFailed)
+		cancel()
 		if errors.Is(err, dropclient.ErrByteLimitExceeded) {
 			fail(c, http.StatusRequestEntityTooLarge, "upload exceeds declared size")
 			return
@@ -340,7 +360,9 @@ func (s *Server) handleDropUploadContent(c *gin.Context) {
 
 	if !validCID(res.CID) {
 		metrics.DropUploadsTotal.WithLabelValues("failed", up.StorageScope).Inc()
-		_ = s.store.ReleaseDropReservation(c, uploadID, store.DropUploadFailed)
+		cleanupCtx, cancel := dropCleanupContext(c)
+		_ = s.store.ReleaseDropReservation(cleanupCtx, uploadID, store.DropUploadFailed)
+		cancel()
 		fail(c, http.StatusBadGateway, "node returned invalid cid")
 		return
 	}
@@ -350,7 +372,9 @@ func (s *Server) handleDropUploadContent(c *gin.Context) {
 		// Metadata commit failed after the node pinned the object. Persist a
 		// cleanup job; reconciliation checks shared-CID references before unpin.
 		metrics.DropUploadsTotal.WithLabelValues("failed", up.StorageScope).Inc()
-		_ = s.store.FailDropUploadWithOrphanPin(c, uploadID, res.CID, "metadata commit failed")
+		cleanupCtx, cancel := dropCleanupContext(c)
+		_ = s.store.FailDropUploadWithOrphanPin(cleanupCtx, uploadID, res.CID, "metadata commit failed")
+		cancel()
 		fail(c, http.StatusInternalServerError, "failed to finalize upload")
 		return
 	}
@@ -358,6 +382,10 @@ func (s *Server) handleDropUploadContent(c *gin.Context) {
 	metrics.DropUploadsTotal.WithLabelValues("ok", up.StorageScope).Inc()
 	metrics.DropUploadBytesTotal.WithLabelValues(up.StorageScope).Add(float64(f.SizeBytes))
 	ok(c, http.StatusOK, dropFileView(f, true))
+}
+
+func dropCleanupContext(c *gin.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Second)
 }
 
 func (s *Server) handleDropUploadStatus(c *gin.Context) {
@@ -415,6 +443,20 @@ func (s *Server) handleDropPatchFile(c *gin.Context) {
 	}
 	if req.Visibility != store.DropVisibilityPublic && req.Visibility != store.DropVisibilityPrivate {
 		fail(c, http.StatusBadRequest, "visibility must be public or private")
+		return
+	}
+	current, err := s.store.GetDropFile(c, c.Param("fileId"))
+	if errors.Is(err, store.ErrNotFound) || (err == nil && current.OwnerUserID != userID(c)) {
+		fail(c, http.StatusNotFound, "file not found")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load file")
+		return
+	}
+	if req.Visibility == store.DropVisibilityPublic &&
+		(current.StorageScope == store.DropScopePrivateOrg || current.Encrypted) {
+		fail(c, http.StatusBadRequest, "encrypted or private-node files cannot be made public")
 		return
 	}
 	f, err := s.store.SetDropFileVisibility(c, c.Param("fileId"), userID(c), req.Visibility)
@@ -562,6 +604,7 @@ func (s *Server) handleDropGetVault(c *gin.Context) {
 }
 
 func (s *Server) handleDropPutVault(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	var req struct {
 		Version    int    `json:"version"`
 		KDF        string `json:"kdf"`
@@ -639,7 +682,8 @@ func (s *Server) loadPublicDropFile(c *gin.Context) (*store.DropFile, bool) {
 		fail(c, http.StatusInternalServerError, "failed to load file")
 		return nil, false
 	}
-	if f.Visibility != store.DropVisibilityPublic || f.Status != store.DropFileActive {
+	if f.Visibility != store.DropVisibilityPublic || f.StorageScope != store.DropScopePublic ||
+		f.Encrypted || f.Status != store.DropFileActive {
 		fail(c, http.StatusNotFound, "not found")
 		return nil, false
 	}

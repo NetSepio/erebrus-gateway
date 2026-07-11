@@ -172,9 +172,11 @@ The same file is used by the gateway container (`env_file`) and compose variable
 | `MANAGED_NODE_DEFAULT_REGION`, `MANAGED_NODE_DEFAULT_IMAGE`, `SENTINEL_IMAGE` | Managed-node defaults (DB reservation today) |
 | `EREBRUS_PUBLIC_BASE_URL`, `GATEWAY_PUBLIC_BASE_URL` | URLs embedded in generated installer/config (node repo) |
 
-Gating collections are in **`nft_gate_contracts`** (migration `0012`): IslandDAO + Erebrus Free Trial NFT on Solana; more chains/addresses can be inserted later.
+NFT verification collections are in **`nft_gate_contracts`** (migration `0012`):
+IslandDAO + the historical Erebrus Free Trial NFT on Solana. Verification may
+award social XP but never grants product access.
 
-Product tunables (XP weights, trial length, rate limits, PASETO TTL) live in
+Product tunables (XP weights, retained legacy trial values, rate limits, PASETO TTL) live in
 **`platform_settings`** (DB, migration `0009`) — editable via
 `PATCH /api/v2/admin/settings` without redeploy.
 
@@ -352,7 +354,7 @@ Applied automatically on startup (`internal/store/migrations/`):
 | 0009 | Platform settings (DB-backed config) |
 | 0010 | Remove payments scaffolding |
 | 0011 | Org node model (`enrollment_secret`, `node_key`, drop `owner_user_id`, public/private `access_mode`) |
-| 0012 | `nft_gate_contracts` (Solana gating collections; IslandDAO + Erebrus Free Trial NFT) |
+| 0012 | `nft_gate_contracts` (Solana NFT verification collections; no product entitlement) |
 | 0013 | Node `zone` field |
 | 0014 | `last_peer_handshake` on nodes |
 | 0015 | Node wallet `chain` at enrollment |
@@ -372,7 +374,7 @@ Items intentionally stubbed or split across gateway + node repos. Implement afte
 |------|---------------|-------------------|
 | ~~**Node ID duality**~~ | **Fixed:** `peer_id` is canonical in APIs, tokens, WS hub, and discovery; internal UUID retained for DB FKs only | Node installer + `hello` should send `peer_id` as `node_id` (see `ws-protocol.md`) |
 | **Public node access tier** | Stored in `org_entitlements.public_node_access_tier` | Wire into discovery/VPN gating (replace or combine with XP `min_tier`) |
-| **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning should check org seat, not only user trial/NFT |
+| **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning checks organization membership and seats, never legacy personal trial/NFT rows |
 | ~~**Firewall runtime**~~ | **Fixed:** `/firewall/sync` pushes rules via WS `sync_firewall`; restart/reset-credentials dispatch WS commands | Node proxies to Sentinel API / Shield admin |
 | **Sentinel unlicensed** | `ReconcileUnlicensedSentinel` helper exists | Call when node reports Sentinel without license; surface user message |
 | **Managed provisioning** | DB rows with `managed_by=erebrus`, status `pending`/`provisioning` | SSH/cloud deploy using `NODE_PROVISION_SSH_*` and image env vars |
@@ -482,7 +484,7 @@ go build ./... && go vet ./... && go test ./...
 | Nodes | `GET /nodes`, `POST /nodes/register`, `POST /nodes/:id/heartbeat`, `GET /nodes/ws` |
 | VPN | `/vpn/clients`, `/vpn/clients/:id/config` |
 | Account | `/account/profile`, `/account/activity` |
-| Subs | `/subscriptions/*`, `/subscriptions/trial` |
+| Legacy subscription compatibility | `/subscriptions/*`, `/subscriptions/trial` (organization-derived; no grants) |
 | Social | `/referrals/me`, `/rank/*`, `/leaderboard`, `/social/*`, `/perks/*` |
 | Orgs | `/orgs`, `/orgs/:id/entitlements`, `/orgs/:id/profile`, `/orgs/:id/seats`, `/orgs/:id/nodes`, `/orgs/:id/nodes/:nodeId/firewall/*` |
 | Public | `/public/orgs/:slug` |
