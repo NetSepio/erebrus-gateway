@@ -187,7 +187,7 @@ func humanRole(role string) string {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case store.OrgRoleNodeOperator:
 		return "Manager"
-	case store.OrgRoleMember, store.OrgRoleAdmin, store.OrgRoleViewer:
+	case store.OrgRoleMember:
 		return "Member"
 	default:
 		if role == "" {

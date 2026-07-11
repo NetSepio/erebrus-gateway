@@ -157,9 +157,9 @@ type UpdateFirewallRuleInput struct {
 	Enabled *bool
 }
 
-// UpdateFirewallRule patches a firewall rule.
-func (s *Store) UpdateFirewallRule(ctx context.Context, orgID, ruleID string, in UpdateFirewallRuleInput) (*FirewallRule, error) {
-	cur, err := s.getFirewallRule(ctx, orgID, ruleID)
+// UpdateFirewallRule patches a firewall rule scoped to a node.
+func (s *Store) UpdateFirewallRule(ctx context.Context, orgID, nodeID, ruleID string, in UpdateFirewallRuleInput) (*FirewallRule, error) {
+	cur, err := s.getFirewallRule(ctx, orgID, nodeID, ruleID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,16 +177,16 @@ func (s *Store) UpdateFirewallRule(ctx context.Context, orgID, ruleID string, in
 		enabled = *in.Enabled
 	}
 	return scanFirewallRule(s.db.QueryRowContext(ctx,
-		`UPDATE firewall_rules SET target=$3, action=$4, scope=$5, enabled=$6, updated_at=now()
-		 WHERE id=$1 AND org_id=$2
+		`UPDATE firewall_rules SET target=$4, action=$5, scope=$6, enabled=$7, updated_at=now()
+		 WHERE id=$1 AND org_id=$2 AND node_id=$3
 		 RETURNING `+firewallRuleCols,
-		ruleID, orgID, target, action, scope, enabled))
+		ruleID, orgID, nodeID, target, action, scope, enabled))
 }
 
-// DeleteFirewallRule removes a rule.
-func (s *Store) DeleteFirewallRule(ctx context.Context, orgID, ruleID string) error {
+// DeleteFirewallRule removes a rule scoped to a node.
+func (s *Store) DeleteFirewallRule(ctx context.Context, orgID, nodeID, ruleID string) error {
 	res, err := s.db.ExecContext(ctx,
-		`DELETE FROM firewall_rules WHERE id=$1 AND org_id=$2`, ruleID, orgID)
+		`DELETE FROM firewall_rules WHERE id=$1 AND org_id=$2 AND node_id=$3`, ruleID, orgID, nodeID)
 	if err != nil {
 		return err
 	}
@@ -196,9 +196,9 @@ func (s *Store) DeleteFirewallRule(ctx context.Context, orgID, ruleID string) er
 	return nil
 }
 
-func (s *Store) getFirewallRule(ctx context.Context, orgID, ruleID string) (*FirewallRule, error) {
+func (s *Store) getFirewallRule(ctx context.Context, orgID, nodeID, ruleID string) (*FirewallRule, error) {
 	r, err := scanFirewallRule(s.db.QueryRowContext(ctx,
-		`SELECT `+firewallRuleCols+` FROM firewall_rules WHERE id=$1 AND org_id=$2`, ruleID, orgID))
+		`SELECT `+firewallRuleCols+` FROM firewall_rules WHERE id=$1 AND org_id=$2 AND node_id=$3`, ruleID, orgID, nodeID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

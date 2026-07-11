@@ -32,10 +32,8 @@ const (
 // Org member roles.
 const (
 	OrgRoleOwner        = "owner"
-	OrgRoleAdmin        = "admin"
 	OrgRoleNodeOperator = "node_operator"
 	OrgRoleMember       = "member"
-	OrgRoleViewer       = "viewer"
 )
 
 // Seat tiers (premium access entitlement; separate from management role).
@@ -342,6 +340,7 @@ type OrgNodeService struct {
 type NodeRegistrationToken struct {
 	ID        string     `json:"id"`
 	OrgID     string     `json:"org_id"`
+	PeerID    string     `json:"peer_id,omitempty"`
 	Scopes    []string   `json:"scopes"`
 	ExpiresAt time.Time  `json:"expires_at"`
 	CreatedBy string     `json:"created_by"`

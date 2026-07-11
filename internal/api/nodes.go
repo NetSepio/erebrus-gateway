@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/NetSepio/gateway/internal/metrics"
-	"github.com/NetSepio/gateway/internal/secrets"
+	"github.com/NetSepio/gateway/internal/nodehub"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
 	"github.com/NetSepio/gateway/internal/wallet"
@@ -30,30 +30,30 @@ type nodePublic struct {
 	Zone          string          `json:"zone,omitempty"`
 	Status        string          `json:"status"`
 	AccessMode    string          `json:"access_mode"`
+	DeploymentProfile string      `json:"deployment_profile"`
 	MinTier       int             `json:"min_tier"`
 	Protocols     []string        `json:"protocols"`
 	Capabilities  json.RawMessage `json:"capabilities"`
 	Endpoints     json.RawMessage `json:"endpoints"`
-	Speedtest     json.RawMessage `json:"speedtest"`
-	LoadPct       float64         `json:"load_pct"`
 	IPHash        string          `json:"ip_hash,omitempty"`
 	Version       string          `json:"version,omitempty"`
+	LoadPct       float64         `json:"load_pct"`
 	RxBytes       int64           `json:"rx_bytes,omitempty"`
 	TxBytes       int64           `json:"tx_bytes,omitempty"`
+	Speedtest     json.RawMessage `json:"speedtest,omitempty"`
 	LastHeartbeat     *time.Time  `json:"last_heartbeat,omitempty"`
 	LastPeerHandshake *time.Time  `json:"last_peer_handshake,omitempty"`
-	CreatedAt         time.Time   `json:"created_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at,omitempty"`
 	Org               *orgSummary `json:"org,omitempty"`
 }
 
 func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
 	return nodePublic{
 		NodeID: n.PeerID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
-		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, MinTier: n.MinTier,
+		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, DeploymentProfile: n.DeploymentProfile, MinTier: n.MinTier,
 		Protocols: n.Protocols, Capabilities: n.Capabilities,
-		Endpoints: enrichEndpointsForDiscovery(n.Endpoints, n.IP), Speedtest: n.Speedtest,
-		LoadPct: loadPct(n.Load), IPHash: n.IPHash, Version: n.Version,
-		RxBytes: n.RxBytes, TxBytes: n.TxBytes,
+		Endpoints: n.Endpoints, IPHash: n.IPHash, Version: n.Version,
+		LoadPct: loadPct(n.Load), RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
 		LastHeartbeat: n.LastHeartbeat, LastPeerHandshake: n.LastPeerHandshake, CreatedAt: n.CreatedAt,
 		Org: org,
 	}
@@ -122,7 +122,7 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "registration_token required")
 		return
 	}
-	resolvedOrgID, regTokenID, _, err := s.store.LookupNodeRegistrationToken(c, token, store.TokenScopeNodeRegistration)
+	resolvedOrgID, regTokenID, tokenPeerID, _, err := s.store.LookupNodeRegistrationToken(c, token, store.TokenScopeNodeRegistration)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusUnauthorized, "invalid registration token")
 		return
@@ -137,6 +137,10 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 		peerID := strings.TrimSpace(req.PeerID)
 		if peerID == "" {
 			fail(c, http.StatusBadRequest, "peer_id required")
+			return
+		}
+		if tokenPeerID != "" && tokenPeerID != peerID {
+			fail(c, http.StatusUnauthorized, "registration token is bound to another node")
 			return
 		}
 		flowID := uuid.NewString()
@@ -184,13 +188,6 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 	_ = s.store.DeleteFlowID(c, req.FlowID)
 
 	nodeKey := strings.TrimSpace(req.NodeKey)
-	if nodeKey == "" {
-		nodeKey, err = secrets.NewNodeKey()
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "failed to mint node key")
-			return
-		}
-	}
 	access := req.AccessMode
 	if access != store.NodeAccessPrivate {
 		access = store.NodeAccessPublic
@@ -198,14 +195,23 @@ func (s *Server) handleNodeRegister(c *gin.Context) {
 
 	env := s.cfg.Environment
 	peerID := strings.TrimSpace(req.PeerID)
-	if _, err := s.store.RegisterOrgNodeFromRuntime(c, resolvedOrgID, regTokenID, store.NodeRegistration{
+	if tokenPeerID != "" && tokenPeerID != peerID {
+		fail(c, http.StatusUnauthorized, "registration token is bound to another node")
+		return
+	}
+	peerID, nodeKey, err = s.store.RegisterOrgNodeFromRuntime(c, resolvedOrgID, regTokenID, store.NodeRegistration{
 		PeerID: peerID, DID: req.DID, Wallet: req.WalletAddress, Chain: nodeChain,
 		OrgID: resolvedOrgID, Name: req.Name, Region: req.Region, Zone: req.Zone,
 		APIBaseURL: req.APIBaseURL, NodeKey: nodeKey, AccessMode: access,
 		DeploymentProfile: req.DeploymentProfile,
-	}); err != nil {
+	})
+	if err != nil {
 		metrics.NodeRegistrationsTotal.WithLabelValues("failed", env).Inc()
-		fail(c, http.StatusInternalServerError, "failed to register node")
+		if errors.Is(err, store.ErrConflict) {
+			fail(c, http.StatusUnauthorized, "node already registered or invalid node_key")
+		} else {
+			fail(c, http.StatusInternalServerError, "failed to register node")
+		}
 		return
 	}
 	nodeTok, err := s.tokens.IssueNode(peerID)
@@ -312,11 +318,28 @@ type nodeCommandReq struct {
 	Args   json.RawMessage `json:"args"`
 }
 
+// allowedNodeCommandActions restricts the actions an admin may send to a node.
+var allowedNodeCommandActions = map[string]bool{
+	nodehub.ActionDrain:                true,
+	nodehub.ActionUndrain:              true,
+	nodehub.ActionRotateReality:        true,
+	nodehub.ActionResyncPeers:          true,
+	nodehub.ActionSyncApps:             true,
+	nodehub.ActionSyncFirewall:         true,
+	nodehub.ActionRestartFirewall:      true,
+	nodehub.ActionResetFirewallCredentials: true,
+	nodehub.ActionSetFirewallCredentials:   true,
+}
+
 // handleAdminNodeCommand dispatches a control command to a connected node.
 func (s *Server) handleAdminNodeCommand(c *gin.Context) {
 	var req nodeCommandReq
 	if err := c.ShouldBindJSON(&req); err != nil || req.Action == "" {
 		fail(c, http.StatusBadRequest, "action required")
+		return
+	}
+	if !allowedNodeCommandActions[req.Action] {
+		fail(c, http.StatusBadRequest, "invalid action")
 		return
 	}
 	reqID := uuid.NewString()
@@ -358,51 +381,44 @@ func (s *Server) handleAdminSetNodeMinTier(c *gin.Context) {
 	ok(c, http.StatusOK, gin.H{"node_id": c.Param("id"), "min_tier": req.MinTier})
 }
 
-// enrichEndpointsForDiscovery adds the dial host under wireguard.host so clients
-// can measure phone→node RTT without exposing a separate top-level IP field.
+// enrichEndpointsForDiscovery injects a wireguard host from the node's IP if the
+// node did not advertise one. Used for operator-facing views (not public discovery).
 func enrichEndpointsForDiscovery(raw json.RawMessage, ip string) json.RawMessage {
-	host := strings.TrimSpace(ip)
-	if host == "" {
+	if strings.TrimSpace(ip) == "" {
 		return raw
 	}
-	if len(raw) == 0 {
-		out, err := json.Marshal(map[string]any{"wireguard": map[string]any{"host": host}})
-		if err != nil {
-			return raw
+	m := make(map[string]any)
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &m); err != nil {
+			m = make(map[string]any)
 		}
-		return out
 	}
-	var eps map[string]any
-	if err := json.Unmarshal(raw, &eps); err != nil {
-		return raw
+	wg, _ := m["wireguard"].(map[string]any)
+	if wg == nil {
+		wg = make(map[string]any)
+		m["wireguard"] = wg
 	}
-	wg, ok := eps["wireguard"].(map[string]any)
-	if !ok {
-		wg = map[string]any{}
+	if _, ok := wg["host"]; !ok {
+		wg["host"] = ip
 	}
-	if existing, _ := wg["host"].(string); strings.TrimSpace(existing) == "" {
-		wg["host"] = host
-		eps["wireguard"] = wg
-	}
-	out, err := json.Marshal(eps)
+	out, err := json.Marshal(m)
 	if err != nil {
 		return raw
 	}
 	return out
 }
 
-// loadPct derives a coarse 0-100 load indicator from a node's load JSON.
-func loadPct(raw json.RawMessage) float64 {
-	if len(raw) == 0 {
+// loadPct returns the node's CPU load percentage from its heartbeat payload.
+func loadPct(load json.RawMessage) float64 {
+	if len(load) == 0 {
 		return 0
 	}
 	var l struct {
 		CPUPct float64 `json:"cpu_pct"`
-		MemPct float64 `json:"mem_pct"`
 	}
-	_ = json.Unmarshal(raw, &l)
-	if l.MemPct > l.CPUPct {
-		return l.MemPct
+	if err := json.Unmarshal(load, &l); err != nil {
+		return 0
 	}
 	return l.CPUPct
 }
+

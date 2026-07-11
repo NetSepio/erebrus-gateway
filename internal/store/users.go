@@ -9,6 +9,9 @@ import (
 // ErrNotFound is returned when a row does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrConflict is returned when a requested operation conflicts with existing state (e.g., node already registered to another org or wrong key).
+var ErrConflict = errors.New("conflict")
+
 // UpsertUserByWallet returns the user for a wallet, creating it on first login.
 // The configured admin wallet is granted role=admin on creation.
 func (s *Store) UpsertUserByWallet(ctx context.Context, wallet, chain, adminWallet string) (*User, error) {
@@ -20,7 +23,7 @@ func (s *Store) UpsertUserByWallet(ctx context.Context, wallet, chain, adminWall
 	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO users (wallet_address, chain, role)
 		 VALUES ($1, $2, $3)
-		 ON CONFLICT (wallet_address) DO UPDATE SET updated_at = now()
+		 ON CONFLICT (wallet_address) DO UPDATE SET role = EXCLUDED.role, updated_at = now()
 		 RETURNING id, wallet_address, chain, role, COALESCE(email,''), email_verified, COALESCE(name,''), created_at`,
 		wallet, chain, role).
 		Scan(&u.ID, &u.WalletAddress, &u.Chain, &u.Role, &u.Email, &u.EmailVerified, &u.Name, &u.CreatedAt)

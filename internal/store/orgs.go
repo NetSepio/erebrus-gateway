@@ -844,8 +844,6 @@ func normalizeOrgRole(role string) string {
 		return OrgRoleOwner
 	case OrgRoleNodeOperator, "manager":
 		return OrgRoleNodeOperator
-	case OrgRoleAdmin, OrgRoleViewer:
-		return OrgRoleMember
 	default:
 		return OrgRoleMember
 	}
