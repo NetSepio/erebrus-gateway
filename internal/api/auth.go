@@ -92,17 +92,14 @@ func (s *Server) handleAuthComplete(c *gin.Context) {
 }
 
 // bootstrapUser runs the shared first-login bootstrap for any identity (wallet,
-// email, Google, Apple): ensure the user owns a personal basic-plan org and, when
-// it was just created, grant the automatic 7-day VPN trial. Best-effort — login
-// proceeds even if this fails, and the one-trial-per-user index makes a re-grant
-// a no-op.
+// email, Google, Apple): ensure the user owns a personal basic-plan org. Product
+// entitlement is organization-only, so no personal trial is granted here; the
+// basic org resolves to the Free tier. Creating the org is the referral-
+// qualifying action. Best-effort — login proceeds even if this fails.
 func (s *Server) bootstrapUser(c *gin.Context, u *store.User) {
 	if _, created, _ := s.store.EnsurePersonalOrg(c, u.ID, u.WalletAddress); created {
 		s.logActivity(c, u.ID, "org.create", "")
-		if _, err := s.store.StartTrial(c, u.ID, "pro", s.platform.Snapshot().TrialPeriod); err == nil {
-			s.awardReferralXP(c, u.ID)
-			s.logActivity(c, u.ID, "subscription.trial", "")
-		}
+		s.awardReferralXP(c, u.ID)
 	}
 }
 

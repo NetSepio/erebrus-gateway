@@ -21,7 +21,7 @@ func TestMigrationsEmbedded(t *testing.T) {
 		}
 	}
 
-	want := []string{"0001_init.sql", "0002_orgs_entitlement.sql", "0003_email_auth.sql", "0004_node_metrics.sql", "0005_referrals_xp.sql", "0006_xp_claims.sql", "0007_social_perks.sql", "0008_activity_log.sql", "0009_platform_settings.sql", "0010_remove_payments.sql", "0011_org_node_model.sql", "0012_nft_gate_contracts.sql", "0013_node_zone.sql", "0014_node_peer_handshake.sql", "0015_node_chain.sql", "0016_org_plan_model.sql", "0017_org_nodes_services.sql", "0018_firewall_rules.sql", "0019_org_invites.sql", "0020_email_login_otps.sql", "0021_node_deployment_profile.sql", "0022_node_firewall_credentials.sql", "0023_user_profile_picture.sql", "0024_registration_token_peer_id.sql", "0025_node_capacity.sql"}
+	want := []string{"0001_init.sql", "0002_orgs_entitlement.sql", "0003_email_auth.sql", "0004_node_metrics.sql", "0005_referrals_xp.sql", "0006_xp_claims.sql", "0007_social_perks.sql", "0008_activity_log.sql", "0009_platform_settings.sql", "0010_remove_payments.sql", "0011_org_node_model.sql", "0012_nft_gate_contracts.sql", "0013_node_zone.sql", "0014_node_peer_handshake.sql", "0015_node_chain.sql", "0016_org_plan_model.sql", "0017_org_nodes_services.sql", "0018_firewall_rules.sql", "0019_org_invites.sql", "0020_email_login_otps.sql", "0021_node_deployment_profile.sql", "0022_node_firewall_credentials.sql", "0023_user_profile_picture.sql", "0024_registration_token_peer_id.sql", "0025_node_capacity.sql", "0026_drop.sql"}
 	if len(names) != len(want) {
 		t.Fatalf("migration files = %v, want %v", names, want)
 	}
@@ -47,6 +47,14 @@ func TestMigrationsEmbedded(t *testing.T) {
 	for _, token := range []string{"platform_settings", "xp_referrer_points", "trial_period"} {
 		if !strings.Contains(string(body), token) {
 			t.Fatalf("0009_platform_settings.sql missing %q", token)
+		}
+	}
+
+	// Drop schema must actually be in 0026.
+	body, _ = migrationsFS.ReadFile("migrations/0026_drop.sql")
+	for _, token := range []string{"drop_tier_limits", "drop_uploads", "drop_files", "drop_pins", "drop_quota_usage", "node_drop_status", "drop_crypto_profiles"} {
+		if !strings.Contains(string(body), token) {
+			t.Fatalf("0026_drop.sql missing %q", token)
 		}
 	}
 }

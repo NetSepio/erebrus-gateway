@@ -164,6 +164,84 @@ const (
 	SentinelLicenseEnterpriseCustom = "enterprise_custom"
 )
 
+// Drop storage scope.
+const (
+	DropScopePublic     = "public"
+	DropScopePrivateOrg = "private_org"
+)
+
+// Drop file visibility.
+const (
+	DropVisibilityPublic  = "public"
+	DropVisibilityPrivate = "private"
+)
+
+// Drop upload lifecycle status.
+const (
+	DropUploadReserved  = "reserved"
+	DropUploadUploading = "uploading"
+	DropUploadCommitted = "committed"
+	DropUploadFailed    = "failed"
+	DropUploadExpired   = "expired"
+)
+
+// Drop file status.
+const (
+	DropFileActive        = "active"
+	DropFileDeletePending = "delete_pending"
+	DropFileDeleted       = "deleted"
+	DropFileUnavailable   = "unavailable"
+)
+
+// Drop pin status.
+const (
+	DropPinPinning      = "pinning"
+	DropPinPinned       = "pinned"
+	DropPinUnpinPending = "unpin_pending"
+	DropPinUnpinned     = "unpinned"
+	DropPinError        = "error"
+)
+
+// Node Drop runtime state (mirrors the node capability/status contract).
+const (
+	DropStateDisabled    = "disabled"
+	DropStateStarting    = "starting"
+	DropStateActive      = "active"
+	DropStateDegraded    = "degraded"
+	DropStateFull        = "full"
+	DropStateUnreachable = "unreachable"
+)
+
+// Drop effective tiers. These share names with org plans/seat tiers, but are a
+// distinct concept: the public Drop quota bucket resolved from the highest
+// active organization seat.
+const (
+	DropTierFree       = "free"
+	DropTierStarter    = "starter"
+	DropTierPro        = "pro"
+	DropTierBusiness   = "business"
+	DropTierEnterprise = "enterprise"
+)
+
+// Drop quota principal types. v1 charges public quota per user; a generic
+// principal leaves room for future organization-level quotas.
+const (
+	DropPrincipalUser = "user"
+	DropPrincipalOrg  = "org"
+)
+
+// Canonical public Drop quota policy (decimal bytes), seeded into
+// drop_tier_limits. Enterprise has no default until product review.
+const (
+	DropQuotaFreeBytes     int64 = 500_000_000
+	DropQuotaStarterBytes  int64 = 1_000_000_000
+	DropQuotaProBytes      int64 = 5_000_000_000
+	DropQuotaBusinessBytes int64 = 10_000_000_000
+	// DropMaxFileBytes is the initial per-file ceiling (1 GB) applied to every
+	// tier; larger/resumable uploads are a follow-up.
+	DropMaxFileBytes int64 = 1_000_000_000
+)
+
 // User is a gateway account, keyed by wallet. An optional verified email may be
 // linked for perks/recovery (never required to use the VPN).
 type User struct {
@@ -385,4 +463,111 @@ type Client struct {
 	TxBytes       int64      `json:"tx_bytes"`
 	LastHandshake *time.Time `json:"last_handshake,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// DropTierLimit is the public Drop quota policy for one effective tier. Kept in
+// a table (not handlers) so limits can be tuned by admins without a code change.
+type DropTierLimit struct {
+	Tier               string    `json:"tier"`
+	PublicStorageBytes int64     `json:"public_storage_bytes"`
+	MaxFileBytes       int64     `json:"max_file_bytes"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+// DropUpload is a short-lived reservation + idempotency record for one logical
+// upload, from initialization through commit/expiry.
+type DropUpload struct {
+	ID                 string          `json:"id"`
+	OwnerUserID        string          `json:"owner_user_id"`
+	OrgID              string          `json:"org_id,omitempty"`             // private storage owner
+	EntitlementOrgID   string          `json:"entitlement_org_id,omitempty"` // provenance of the effective tier
+	NodeID             string          `json:"node_id"`
+	StorageScope       string          `json:"storage_scope"`
+	Visibility         string          `json:"visibility"`
+	Filename           string          `json:"filename"`
+	ContentType        string          `json:"content_type"`
+	DeclaredSizeBytes  int64           `json:"declared_size_bytes"`
+	ReservedBytes      int64           `json:"reserved_bytes"`
+	SHA256             string          `json:"sha256,omitempty"`
+	Encrypted          bool            `json:"encrypted"`
+	EncryptionMetadata json.RawMessage `json:"encryption_metadata,omitempty"`
+	Status             string          `json:"status"`
+	IdempotencyKey     string          `json:"idempotency_key"`
+	CID                string          `json:"cid,omitempty"`
+	Error             string           `json:"error,omitempty"`
+	ExpiresAt          time.Time       `json:"expires_at"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+}
+
+// DropFile is the user-visible logical file backed by one or more physical pins.
+type DropFile struct {
+	ID                 string          `json:"id"`
+	UploadID           string          `json:"upload_id,omitempty"`
+	OwnerUserID        string          `json:"owner_user_id"`
+	OrgID              string          `json:"org_id,omitempty"`
+	EntitlementOrgID   string          `json:"entitlement_org_id,omitempty"`
+	NodeID             string          `json:"node_id"`
+	StorageScope       string          `json:"storage_scope"`
+	CID                string          `json:"cid"`
+	Filename           string          `json:"filename"`
+	ContentType        string          `json:"content_type"`
+	SizeBytes          int64           `json:"size_bytes"`
+	Visibility         string          `json:"visibility"`
+	Encrypted          bool            `json:"encrypted"`
+	EncryptionMetadata json.RawMessage `json:"encryption_metadata,omitempty"`
+	Status             string          `json:"status"`
+	CreatedAt          time.Time       `json:"created_at"`
+	DeletedAt          *time.Time      `json:"deleted_at,omitempty"`
+}
+
+// DropPin is the physical pin state on one node, designed for future replication.
+type DropPin struct {
+	ID        string     `json:"id"`
+	FileID    string     `json:"file_id"`
+	NodeID    string     `json:"node_id"`
+	CID       string     `json:"cid"`
+	Status    string     `json:"status"`
+	LastError string     `json:"last_error,omitempty"`
+	PinnedAt  *time.Time `json:"pinned_at,omitempty"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// DropQuotaUsage is an atomically maintained per-principal counter.
+type DropQuotaUsage struct {
+	PrincipalType string    `json:"principal_type"`
+	PrincipalID   string    `json:"principal_id"`
+	UsedBytes     int64     `json:"used_bytes"`
+	ReservedBytes int64     `json:"reserved_bytes"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// NodeDropStatus is the latest gateway-internal Drop status for a node. Exact
+// capacity lives here (PostgreSQL), never as Prometheus labels.
+type NodeDropStatus struct {
+	NodeID               string     `json:"node_id"`
+	Enabled              bool       `json:"enabled"`
+	AcceptsPublicUploads bool       `json:"accepts_public_uploads"`
+	WebUIAvailable       bool       `json:"webui_available"`
+	State                string     `json:"state"`
+	KuboVersion          string     `json:"kubo_version,omitempty"`
+	RepoSizeBytes        int64      `json:"repo_size_bytes"`
+	StorageMaxBytes      int64      `json:"storage_max_bytes"`
+	NumObjects           int64      `json:"num_objects"`
+	ReservedBytes        int64      `json:"reserved_bytes"`
+	LastReportedAt       *time.Time `json:"last_reported_at,omitempty"`
+}
+
+// DropCryptoProfile stores only the encrypted backup and public metadata of a
+// user's client-side Drop vault. The gateway never receives the recovery secret
+// or the plaintext vault.
+type DropCryptoProfile struct {
+	UserID         string          `json:"user_id"`
+	Version        int             `json:"version"`
+	PublicKey      string          `json:"public_key,omitempty"`
+	EncryptedVault string          `json:"encrypted_vault"`
+	KDFMetadata    json.RawMessage `json:"kdf_metadata,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
