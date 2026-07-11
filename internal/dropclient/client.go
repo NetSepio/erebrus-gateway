@@ -95,9 +95,14 @@ func (c *Client) Status(ctx context.Context, baseURL, token, nodeKey string) (*S
 
 // PutUploadContent streams the upload body to the node and returns the resulting
 // CID. The body is read straight from src (no buffering) and capped at maxBytes.
-func (c *Client) PutUploadContent(ctx context.Context, baseURL, token, nodeKey, uploadID string, src io.Reader, size, maxBytes int64) (*UploadResult, error) {
+func (c *Client) PutUploadContent(ctx context.Context, baseURL, token, nodeKey, uploadID, sha256 string, src io.Reader, size, maxBytes int64) (*UploadResult, error) {
 	limited := &limitReader{r: src, remaining: maxBytes}
-	resp, err := c.doStream(ctx, http.MethodPut, baseURL, "/api/v2/drop/uploads/"+uploadID, token, nodeKey, limited, size)
+	headers := http.Header{}
+	headers.Set("X-Erebrus-Declared-Size", fmt.Sprintf("%d", size))
+	if sha256 != "" {
+		headers.Set("X-Erebrus-SHA256", sha256)
+	}
+	resp, err := c.doStream(ctx, http.MethodPut, baseURL, "/api/v2/drop/uploads/"+uploadID, token, nodeKey, limited, size, headers)
 	if err != nil {
 		if errors.Is(limited.err, ErrByteLimitExceeded) {
 			return nil, ErrByteLimitExceeded
@@ -170,10 +175,10 @@ var errNotFound = errors.New("drop object not found")
 func ErrNotFound(err error) bool { return errors.Is(err, errNotFound) }
 
 func (c *Client) do(ctx context.Context, method, baseURL, path, token, nodeKey string, body io.Reader) (*http.Response, error) {
-	return c.doStream(ctx, method, baseURL, path, token, nodeKey, body, -1)
+	return c.doStream(ctx, method, baseURL, path, token, nodeKey, body, -1, nil)
 }
 
-func (c *Client) doStream(ctx context.Context, method, baseURL, path, token, nodeKey string, body io.Reader, size int64) (*http.Response, error) {
+func (c *Client) doStream(ctx context.Context, method, baseURL, path, token, nodeKey string, body io.Reader, size int64, headers http.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(baseURL, "/")+path, body)
 	if err != nil {
 		return nil, err
@@ -189,6 +194,11 @@ func (c *Client) doStream(ctx context.Context, method, baseURL, path, token, nod
 	}
 	if body != nil && method != http.MethodGet {
 		req.Header.Set("Content-Type", "application/octet-stream")
+	}
+	for key, values := range headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
 	}
 	return c.http.Do(req)
 }
@@ -243,8 +253,13 @@ type limitReadCloser struct {
 }
 
 func (l *limitReadCloser) Read(p []byte) (int, error) {
-	if l.remaining <= 0 {
-		return 0, ErrByteLimitExceeded
+	if l.remaining == 0 {
+		var one [1]byte
+		n, err := l.rc.Read(one[:])
+		if n > 0 {
+			return 0, ErrByteLimitExceeded
+		}
+		return 0, err
 	}
 	if int64(len(p)) > l.remaining {
 		p = p[:l.remaining]

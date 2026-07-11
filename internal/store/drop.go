@@ -84,7 +84,7 @@ func (s *Store) ResolveDropEntitlement(ctx context.Context, userID string) (*Dro
 		 JOIN orgs o ON o.id = m.org_id
 		 CROSS JOIN LATERAL (
 		     SELECT CASE
-		         WHEN m.role = 'owner' THEN CASE o.plan
+		         WHEN m.role IN ('owner','node_operator') THEN CASE o.plan
 		             WHEN 'starter' THEN 'starter'
 		             WHEN 'pro' THEN 'pro'
 		             WHEN 'business' THEN 'business'
@@ -265,19 +265,21 @@ func (s *Store) ReserveDropUpload(ctx context.Context, in ReserveDropUploadInput
 // its advertised capacity is known. Rejects nodes that are not accepting uploads.
 func reserveNodeCapacityTx(ctx context.Context, tx *sql.Tx, nodeID, scope string, size int64) error {
 	var enabled, acceptsPublic bool
-	var state string
+	var state, nodeStatus string
 	var storageMax, repoSize, reserved int64
 	err := tx.QueryRowContext(ctx,
-		`SELECT enabled, accepts_public_uploads, state, storage_max_bytes, repo_size_bytes, reserved_bytes
-		 FROM node_drop_status WHERE node_id = $1 FOR UPDATE`, nodeID).
-		Scan(&enabled, &acceptsPublic, &state, &storageMax, &repoSize, &reserved)
+		`SELECT d.enabled, d.accepts_public_uploads, d.state, d.storage_max_bytes,
+		        d.repo_size_bytes, d.reserved_bytes, n.status
+		 FROM node_drop_status d JOIN nodes n ON n.peer_id = d.node_id
+		 WHERE d.node_id = $1 FOR UPDATE OF d`, nodeID).
+		Scan(&enabled, &acceptsPublic, &state, &storageMax, &repoSize, &reserved, &nodeStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrDropNodeUnavailable
 	}
 	if err != nil {
 		return err
 	}
-	if !enabled || (state != DropStateActive && state != DropStateDegraded) {
+	if !enabled || state != DropStateActive || nodeStatus != "online" {
 		return ErrDropNodeUnavailable
 	}
 	if scope == DropScopePublic && !acceptsPublic {

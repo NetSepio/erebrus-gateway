@@ -3,7 +3,7 @@
 -- Adds Drop persistence and moves product entitlement to organization
 -- membership only. Legacy personal `subscriptions` rows are intentionally
 -- retained (not dropped) so a rollback window is available while the webapp
--- migrates; nothing here reads them at runtime anymore.
+-- migrates; entitlement resolution never reads them at runtime.
 
 -- ── entitlement backfill ─────────────────────────────
 -- Every account is expected to own a personal basic organization so the

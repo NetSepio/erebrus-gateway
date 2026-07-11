@@ -17,8 +17,8 @@ import (
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
 	"github.com/gin-contrib/cors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Server holds the gateway's API dependencies.
@@ -72,7 +72,7 @@ func (s *Server) Router() *gin.Engine {
 	corsCfg := cors.DefaultConfig()
 	corsCfg.AllowOrigins = splitCSV(s.cfg.AllowedOrigin)
 	corsCfg.AllowHeaders = []string{"Origin", "Content-Type", "Authorization", "X-Api-Key", "X-Erebrus-Client"}
-	corsCfg.AllowMethods = []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"}
+	corsCfg.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsCfg))
 
 	r.GET("/healthz", s.handleHealthz)
@@ -117,6 +117,7 @@ func (s *Server) Router() *gin.Engine {
 	// Drop: opaque public share (no auth; visibility + status enforced). Rate
 	// limited per IP. The file id is an unguessable opaque handle, never the CID.
 	v2.GET("/drop/public/:fileId", s.rateLimit("drop_public", s.platform.Snapshot().RateLimitDropReadPerMin), s.handleDropPublicGet)
+	v2.GET("/drop/public/:fileId/content", s.rateLimit("drop_public_content", s.platform.Snapshot().RateLimitDropReadPerMin), s.handleDropPublicContent)
 	// Drop: short-lived same-origin WebUI proxy. The session id is validated
 	// inside; the raw node/Kubo address is never exposed to the caller.
 	v2.Any("/drop/webui/:sessionId/*proxyPath", s.handleDropWebUIProxy)
@@ -169,7 +170,8 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/perks", s.handleListPerks)
 		user.GET("/perks/me", s.handleMyPerks)
 
-		// entitlement: trial + NFT gating only (no money in v2.0)
+		// Legacy compatibility routes. Responses are organization-derived; trial
+		// and NFT refreshes never grant product access.
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)
 		user.POST("/subscriptions/nft/refresh", s.handleNFTRefresh)

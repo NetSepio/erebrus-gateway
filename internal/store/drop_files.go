@@ -155,6 +155,58 @@ func (s *Store) ReleaseDropReservation(ctx context.Context, uploadID, status str
 	return tx.Commit()
 }
 
+// FailDropUploadWithOrphanPin releases an upload reservation and records the
+// node/CID pair for durable compensating-unpin reconciliation.
+func (s *Store) FailDropUploadWithOrphanPin(ctx context.Context, uploadID, cid, message string) error {
+	if err := s.ReleaseDropReservation(ctx, uploadID, DropUploadFailed); err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE drop_uploads SET cid=NULLIF($2,''), error=$3, updated_at=now()
+		 WHERE id=$1::uuid AND status=$4`,
+		uploadID, cid, message, DropUploadFailed)
+	return err
+}
+
+// PendingDropOrphanPin is an upload that pinned content before metadata commit.
+type PendingDropOrphanPin struct {
+	UploadID string
+	NodeID   string
+	CID      string
+}
+
+func (s *Store) ListPendingDropOrphanPins(ctx context.Context, limit int) ([]PendingDropOrphanPin, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id::text, node_id, cid
+		 FROM drop_uploads
+		 WHERE status=$1 AND COALESCE(cid,'') <> ''
+		 ORDER BY updated_at ASC
+		 LIMIT $2`, DropUploadFailed, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PendingDropOrphanPin
+	for rows.Next() {
+		var job PendingDropOrphanPin
+		if err := rows.Scan(&job.UploadID, &job.NodeID, &job.CID); err != nil {
+			return nil, err
+		}
+		out = append(out, job)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ClearDropUploadOrphanPin(ctx context.Context, uploadID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE drop_uploads SET cid=NULL, updated_at=now()
+		 WHERE id=$1::uuid AND status=$2`, uploadID, DropUploadFailed)
+	return err
+}
+
 // ExpireDropReservations releases reservations whose TTL has elapsed. Returns the
 // number released. Safe to run repeatedly (idempotent per reservation).
 func (s *Store) ExpireDropReservations(ctx context.Context, limit int) (int, error) {
@@ -305,9 +357,47 @@ func (s *Store) CountActivePinRefs(ctx context.Context, nodeID, cid, excludeFile
 	var n int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT count(*) FROM drop_files
-		 WHERE node_id=$1 AND cid=$2 AND status <> $3 AND id <> COALESCE(NULLIF($4,'')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
-		nodeID, cid, DropFileDeleted, excludeFileID).Scan(&n)
+		 WHERE node_id=$1 AND cid=$2 AND status=$3 AND id <> COALESCE(NULLIF($4,'')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+		nodeID, cid, DropFileActive, excludeFileID).Scan(&n)
 	return n, err
+}
+
+// PendingDropUnpin is a durable delete job. The file remains delete_pending
+// until its final physical pin is removed or another active reference makes an
+// unpin unnecessary.
+type PendingDropUnpin struct {
+	FileID string
+	NodeID string
+	CID    string
+}
+
+// ListPendingDropUnpins returns delete jobs that may be retried after node or
+// gateway failures.
+func (s *Store) ListPendingDropUnpins(ctx context.Context, limit int) ([]PendingDropUnpin, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT f.id::text, f.node_id, f.cid
+		 FROM drop_files f
+		 JOIN drop_pins p ON p.file_id = f.id
+		 WHERE f.status=$1 AND p.status IN ($2,$3)
+		 ORDER BY p.updated_at ASC
+		 LIMIT $4`,
+		DropFileDeletePending, DropPinUnpinPending, DropPinError, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PendingDropUnpin
+	for rows.Next() {
+		var job PendingDropUnpin
+		if err := rows.Scan(&job.FileID, &job.NodeID, &job.CID); err != nil {
+			return nil, err
+		}
+		out = append(out, job)
+	}
+	return out, rows.Err()
 }
 
 // MarkDropFileDeletePending flags a file for deletion, releases its quota, and
@@ -329,8 +419,19 @@ func (s *Store) MarkDropFileDeletePending(ctx context.Context, fileID string) (u
 	if err != nil {
 		return false, nil, err
 	}
-	if f.Status == DropFileDeleted || f.Status == DropFileDeletePending {
-		return false, f, tx.Commit() // already releasing/released
+	if f.Status == DropFileDeleted {
+		return false, f, tx.Commit()
+	}
+	if f.Status == DropFileDeletePending {
+		var pinStatus string
+		err := tx.QueryRowContext(ctx,
+			`SELECT status FROM drop_pins WHERE file_id=$1::uuid`, f.ID).Scan(&pinStatus)
+		if errors.Is(err, sql.ErrNoRows) {
+			pinStatus = DropPinUnpinned
+		} else if err != nil {
+			return false, nil, err
+		}
+		return pinStatus == DropPinUnpinPending || pinStatus == DropPinError, f, tx.Commit()
 	}
 
 	// Release quota once, at the transition out of active.
@@ -420,6 +521,9 @@ func (s *Store) PutDropCryptoProfile(ctx context.Context, userID, publicKey, enc
 	}
 	defer tx.Rollback() //nolint:errcheck
 
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, userID); err != nil {
+		return nil, err
+	}
 	var current int
 	err = tx.QueryRowContext(ctx,
 		`SELECT version FROM drop_crypto_profiles WHERE user_id=$1::uuid FOR UPDATE`, userID).Scan(&current)

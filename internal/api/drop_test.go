@@ -36,3 +36,20 @@ func TestContentDispositionSanitizes(t *testing.T) {
 		t.Errorf("expected fallback filename, got %q", d)
 	}
 }
+
+func TestNormalizeDropScope(t *testing.T) {
+	for input, want := range map[string]string{
+		"":            "public",
+		"public":      "public",
+		"private":     "private_org",
+		"private_org": "private_org",
+	} {
+		got, ok := normalizeDropScope(input)
+		if !ok || got != want {
+			t.Fatalf("normalizeDropScope(%q) = %q, %v", input, got, ok)
+		}
+	}
+	if _, ok := normalizeDropScope("invalid"); ok {
+		t.Fatal("invalid scope accepted")
+	}
+}

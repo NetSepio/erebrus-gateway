@@ -101,10 +101,13 @@ const (
 // capacity — only eligibility and a coarse capacity bucket are exposed.
 type DropNodeInfo struct {
 	NodeID               string `json:"node_id"` // peer id
+	OrgID                string `json:"org_id,omitempty"`
 	Name                 string `json:"name"`
 	Region               string `json:"region"`
 	AccessMode           string `json:"access_mode"`
 	DeploymentProfile    string `json:"deployment_profile"`
+	Online               bool   `json:"online"`
+	AcceptingUploads     bool   `json:"accepting_uploads"`
 	State                string `json:"state"`
 	AcceptsPublicUploads bool   `json:"accepts_public_uploads"`
 	WebUIAvailable       bool   `json:"webui_available"`
@@ -133,11 +136,12 @@ func coarseCapacity(storageMax, repoSize, reserved int64) string {
 func (s *Store) ListDropNodes(ctx context.Context, scope, orgID string) ([]*DropNodeInfo, error) {
 	var q string
 	var args []any
-	base := `SELECT n.peer_id, COALESCE(n.name,''), COALESCE(n.region,''), COALESCE(n.access_mode,'public'),
-	        COALESCE(n.deployment_profile,'standard'), d.state, d.accepts_public_uploads, d.webui_available,
+	base := `SELECT n.peer_id, COALESCE(n.org_id::text,''), COALESCE(n.name,''), COALESCE(n.region,''),
+	        COALESCE(n.access_mode,'public'), COALESCE(n.deployment_profile,'standard'),
+	        n.status = 'online', d.state, d.accepts_public_uploads, d.webui_available,
 	        d.storage_max_bytes, d.repo_size_bytes, d.reserved_bytes
 	 FROM node_drop_status d JOIN nodes n ON n.peer_id = d.node_id
-	 WHERE d.enabled = true AND d.state IN ('active','degraded') `
+	 WHERE d.enabled = true AND d.state IN ('active','degraded','full') `
 	switch scope {
 	case DropScopePrivateOrg:
 		q = base + `AND n.org_id = $1::uuid ORDER BY n.region, n.name`
@@ -155,11 +159,13 @@ func (s *Store) ListDropNodes(ctx context.Context, scope, orgID string) ([]*Drop
 	for rows.Next() {
 		n := &DropNodeInfo{}
 		var storageMax, repoSize, reserved int64
-		if err := rows.Scan(&n.NodeID, &n.Name, &n.Region, &n.AccessMode, &n.DeploymentProfile,
-			&n.State, &n.AcceptsPublicUploads, &n.WebUIAvailable, &storageMax, &repoSize, &reserved); err != nil {
+		if err := rows.Scan(&n.NodeID, &n.OrgID, &n.Name, &n.Region, &n.AccessMode, &n.DeploymentProfile,
+			&n.Online, &n.State, &n.AcceptsPublicUploads, &n.WebUIAvailable, &storageMax, &repoSize, &reserved); err != nil {
 			return nil, err
 		}
 		n.Capacity = coarseCapacity(storageMax, repoSize, reserved)
+		n.AcceptingUploads = n.Online && n.State == DropStateActive && n.Capacity != DropCapacityFull &&
+			(scope == DropScopePrivateOrg || n.AcceptsPublicUploads)
 		out = append(out, n)
 	}
 	return out, rows.Err()

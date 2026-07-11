@@ -17,11 +17,12 @@ import (
 	"time"
 
 	"github.com/NetSepio/gateway/internal/api"
-	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/cache"
 	"github.com/NetSepio/gateway/internal/config"
+	"github.com/NetSepio/gateway/internal/dropclient"
 	"github.com/NetSepio/gateway/internal/identity"
 	"github.com/NetSepio/gateway/internal/mailer"
+	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/nftgate"
 	"github.com/NetSepio/gateway/internal/nodehub"
 	"github.com/NetSepio/gateway/internal/store"
@@ -115,7 +116,7 @@ func run(log *slog.Logger) error {
 	}
 
 	// Background maintenance: flip stale nodes offline, purge expired challenges.
-	go maintenance(ctx, st, platformLive, log)
+	go maintenance(ctx, st, platformLive, tokens, dropclient.New(), log)
 
 	// HTTP server.
 	srv := &http.Server{
@@ -154,7 +155,7 @@ func resolvePasetoKey(cfg *config.Config, log *slog.Logger) (string, error) {
 
 // maintenance periodically marks unresponsive nodes offline, purges stale data,
 // and awards operator-uptime XP (idempotent per node per UTC day).
-func maintenance(ctx context.Context, st *store.Store, platform *config.PlatformSettings, log *slog.Logger) {
+func maintenance(ctx context.Context, st *store.Store, platform *config.PlatformSettings, tokens *token.Manager, drop *dropclient.Client, log *slog.Logger) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -179,7 +180,59 @@ func maintenance(ctx context.Context, st *store.Store, platform *config.Platform
 			} else if err != nil {
 				metrics.DropReconciliationJobsTotal.WithLabelValues("expire_reservations", "failed").Inc()
 			}
+			reconcileDropPins(mctx, st, tokens, drop)
 			cancel()
 		}
 	}
+}
+
+func reconcileDropPins(ctx context.Context, st *store.Store, tokens *token.Manager, drop *dropclient.Client) {
+	unpin := func(nodeID, cid string) bool {
+		baseURL, nodeKey, _, err := st.NodeAPI(ctx, nodeID)
+		if err != nil || baseURL == "" {
+			return false
+		}
+		tok, err := tokens.IssueGatewayCall(nodeID, dropclient.PurposeUnpin)
+		if err != nil {
+			return false
+		}
+		if err := drop.Unpin(ctx, baseURL, tok, nodeKey, cid); err != nil {
+			metrics.DropNodeOperationsTotal.WithLabelValues("unpin", "failed").Inc()
+			return false
+		}
+		metrics.DropNodeOperationsTotal.WithLabelValues("unpin", "ok").Inc()
+		return true
+	}
+
+	jobs, err := st.ListPendingDropUnpins(ctx, 20)
+	if err != nil {
+		metrics.DropReconciliationJobsTotal.WithLabelValues("unpin_files", "failed").Inc()
+	} else {
+		for _, job := range jobs {
+			refs, err := st.CountActivePinRefs(ctx, job.NodeID, job.CID, job.FileID)
+			if err != nil {
+				continue
+			}
+			if refs > 0 || unpin(job.NodeID, job.CID) {
+				_ = st.FinalizeDropFileDeletion(ctx, job.FileID, true)
+			}
+		}
+		metrics.DropReconciliationJobsTotal.WithLabelValues("unpin_files", "ok").Inc()
+	}
+
+	orphans, err := st.ListPendingDropOrphanPins(ctx, 20)
+	if err != nil {
+		metrics.DropReconciliationJobsTotal.WithLabelValues("unpin_orphans", "failed").Inc()
+		return
+	}
+	for _, job := range orphans {
+		refs, err := st.CountActivePinRefs(ctx, job.NodeID, job.CID, "")
+		if err != nil {
+			continue
+		}
+		if refs > 0 || unpin(job.NodeID, job.CID) {
+			_ = st.ClearDropUploadOrphanPin(ctx, job.UploadID)
+		}
+	}
+	metrics.DropReconciliationJobsTotal.WithLabelValues("unpin_orphans", "ok").Inc()
 }
