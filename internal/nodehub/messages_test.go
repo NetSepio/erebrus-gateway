@@ -112,3 +112,82 @@ func TestHeartbeatAndUsageRoundTrip(t *testing.T) {
 		t.Errorf("usage peers wrong: %+v", gotUR.Peers)
 	}
 }
+
+// canonicalDropHello carries the additive Drop capability block. Older nodes
+// omit "drop" entirely, so this must remain optional.
+const canonicalDropHello = `{
+  "type": "hello",
+  "data": {
+    "node_id": "9d3b0d5e-3a3c-4b9e-9a31-0c5a9f0e6c11",
+    "version": "2.0.0",
+    "identity": { "peer_id": "12D3Koo", "did": "did:erebrus:12D3Koo", "ip_hash": "abc" },
+    "spec": { "cpu": "4 vCPU", "mem_mb": 8192, "region": "SG", "ip": "203.0.113.10" },
+    "capabilities": {
+      "app_hosting": false, "wildcard_domain": "",
+      "drop": { "enabled": true, "accepts_public_uploads": true, "webui_available": true }
+    },
+    "endpoints": {
+      "wireguard": { "port": 51820, "public_key": "k" },
+      "vless_reality": { "port": 8443, "public_key": "p", "short_ids": ["a"], "sni": "s" },
+      "hysteria2": { "port": 4443, "obfs": "" }
+    },
+    "services": { "drop": "active" }
+  }
+}`
+
+func TestParseDropHelloCapability(t *testing.T) {
+	var env Envelope
+	if err := json.Unmarshal([]byte(canonicalDropHello), &env); err != nil {
+		t.Fatalf("envelope: %v", err)
+	}
+	var h Hello
+	if err := json.Unmarshal(env.Data, &h); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+	if h.Capabilities.Drop == nil {
+		t.Fatal("expected drop capability")
+	}
+	if !h.Capabilities.Drop.Enabled || !h.Capabilities.Drop.AcceptsPublicUploads || !h.Capabilities.Drop.WebUIAvailable {
+		t.Errorf("drop capability = %+v", h.Capabilities.Drop)
+	}
+	if h.Services["drop"] != "active" {
+		t.Errorf("services.drop = %q", h.Services["drop"])
+	}
+
+	// A hello without a drop block must leave Drop nil (backward compatible).
+	var legacy Hello
+	if err := json.Unmarshal([]byte(`{"node_id":"x","capabilities":{"app_hosting":false,"wildcard_domain":""}}`), &legacy); err != nil {
+		t.Fatalf("legacy hello: %v", err)
+	}
+	if legacy.Capabilities.Drop != nil {
+		t.Error("legacy hello must not synthesize a drop capability")
+	}
+}
+
+func TestDropHeartbeatRoundTrip(t *testing.T) {
+	hb := Heartbeat{
+		TS: 1765584000, Status: "online",
+		Versions: map[string]string{"node": "2.0.0", "kubo": "0.29.0"},
+		Services: map[string]string{"drop": "active"},
+		Drop: &DropStatus{
+			State: "active", KuboVersion: "0.29.0",
+			RepoSizeBytes: 12345, StorageMaxBytes: 10_000_000_000, NumObjects: 17,
+		},
+	}
+	frame, err := wrap(TypeHeartbeat, hb)
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	var env Envelope
+	_ = json.Unmarshal(frame, &env)
+	var got Heartbeat
+	if err := json.Unmarshal(env.Data, &got); err != nil {
+		t.Fatalf("heartbeat: %v", err)
+	}
+	if got.Drop == nil || got.Drop.State != "active" || got.Drop.NumObjects != 17 {
+		t.Errorf("drop status lost: %+v", got.Drop)
+	}
+	if got.Versions["kubo"] != "0.29.0" {
+		t.Errorf("versions.kubo = %q", got.Versions["kubo"])
+	}
+}

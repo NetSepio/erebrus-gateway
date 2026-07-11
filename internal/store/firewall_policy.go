@@ -101,6 +101,7 @@ func (s *Store) UpdateNodeServicesFromReport(ctx context.Context, peerID string,
 		{"erebrus_firewall", ServiceTypeErebrusFirewall},
 		{"shield", ServiceTypeCommunityFirewall},
 		{"sentinel", ServiceTypeErebrusFirewall},
+		{"drop", ServiceTypeDrop},
 	}
 	for _, m := range mappings {
 		raw, ok := services[m.key]

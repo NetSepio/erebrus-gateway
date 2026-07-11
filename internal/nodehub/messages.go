@@ -57,9 +57,31 @@ type Spec struct {
 
 // Capabilities advertises optional node features.
 type Capabilities struct {
-	AccessMode     string `json:"access_mode,omitempty"` // private | shared | public
-	AppHosting     bool   `json:"app_hosting"`
-	WildcardDomain string `json:"wildcard_domain"`
+	AccessMode     string          `json:"access_mode,omitempty"` // private | shared | public
+	AppHosting     bool            `json:"app_hosting"`
+	WildcardDomain string          `json:"wildcard_domain"`
+	Drop           *DropCapability `json:"drop,omitempty"` // additive; absent on non-Drop nodes
+}
+
+// DropCapability advertises a node's optional Drop (Kubo storage) support. It is
+// additive and omitted entirely by nodes that do not run Drop, so older nodes
+// remain contract-compatible. Mirrors the erebrus node contract exactly.
+type DropCapability struct {
+	Enabled              bool `json:"enabled"`
+	AcceptsPublicUploads bool `json:"accepts_public_uploads"`
+	WebUIAvailable       bool `json:"webui_available"`
+}
+
+// DropStatus is the node's Drop runtime health and capacity, reported in each
+// heartbeat. Additive and omitted by non-Drop nodes. Mirrors the erebrus node
+// contract exactly. State is one of:
+// disabled | starting | active | degraded | full | unreachable.
+type DropStatus struct {
+	State           string `json:"state"`
+	KuboVersion     string `json:"kubo_version,omitempty"`
+	RepoSizeBytes   int64  `json:"repo_size_bytes"`
+	StorageMaxBytes int64  `json:"storage_max_bytes"`
+	NumObjects      int64  `json:"num_objects"`
 }
 
 // Endpoints describes the connection endpoints clients dial.
@@ -130,8 +152,9 @@ type Heartbeat struct {
 	Status    string            `json:"status"` // online | draining
 	Load      Load              `json:"load"`
 	Speedtest Speedtest         `json:"speedtest"`
-	Versions  map[string]string `json:"versions"`
+	Versions  map[string]string `json:"versions"` // may carry "kubo" on Drop nodes
 	Services  map[string]string `json:"services,omitempty"`
+	Drop      *DropStatus       `json:"drop,omitempty"` // additive; absent on non-Drop nodes
 }
 
 // PeerUsage is one client's traffic delta in a usage_report.
