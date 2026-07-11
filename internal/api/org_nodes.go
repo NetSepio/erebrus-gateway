@@ -15,6 +15,7 @@ func (s *Server) handleCreateNodeRegistrationToken(c *gin.Context) {
 		return
 	}
 	var req struct {
+		PeerID    string    `json:"peer_id"`
 		Scopes    []string  `json:"scopes"`
 		ExpiresAt time.Time `json:"expires_at"`
 		TTLHours  int       `json:"ttl_hours"`
@@ -35,7 +36,7 @@ func (s *Server) handleCreateNodeRegistrationToken(c *gin.Context) {
 		}
 		expiresAt = time.Now().Add(time.Duration(hours) * time.Hour)
 	}
-	plain, tok, err := s.store.CreateNodeRegistrationToken(c, c.Param("id"), userID(c), scopes, expiresAt)
+	plain, tok, err := s.store.CreateNodeRegistrationToken(c, c.Param("id"), userID(c), strings.TrimSpace(req.PeerID), scopes, expiresAt)
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -136,7 +137,7 @@ func (s *Server) handleOrgNodeRegister(c *gin.Context) {
 		return
 	}
 	orgID := c.Param("id")
-	resolvedOrg, tokenID, _, err := s.store.LookupNodeRegistrationToken(c, token, store.TokenScopeNodeRegistration)
+	resolvedOrg, tokenID, tokenPeerID, _, err := s.store.LookupNodeRegistrationToken(c, token, store.TokenScopeNodeRegistration)
 	if errors.Is(err, store.ErrNotFound) || resolvedOrg != orgID {
 		fail(c, http.StatusUnauthorized, "invalid registration token")
 		return
@@ -145,16 +146,24 @@ func (s *Server) handleOrgNodeRegister(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "token lookup failed")
 		return
 	}
-	runtimeID, err := s.store.RegisterOrgNodeFromRuntime(c, orgID, tokenID, store.NodeRegistration{
-		PeerID: req.PeerID, DID: req.DID, Wallet: req.WalletAddress, Chain: req.Chain,
+	if tokenPeerID != "" && tokenPeerID != strings.TrimSpace(req.PeerID) {
+		fail(c, http.StatusUnauthorized, "registration token is bound to another node")
+		return
+	}
+	runtimeID, nodeKey, err := s.store.RegisterOrgNodeFromRuntime(c, orgID, tokenID, store.NodeRegistration{
+		PeerID: strings.TrimSpace(req.PeerID), DID: req.DID, Wallet: req.WalletAddress, Chain: req.Chain,
 		Name: req.Name, Region: req.Region, Zone: req.Zone, APIBaseURL: req.APIBaseURL,
 		NodeKey: req.NodeKey, AccessMode: req.AccessMode,
 	})
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to register node")
+		if errors.Is(err, store.ErrConflict) {
+			fail(c, http.StatusConflict, "node already registered or invalid node_key")
+		} else {
+			fail(c, http.StatusInternalServerError, "failed to register node")
+		}
 		return
 	}
-	ok(c, http.StatusCreated, gin.H{"runtime_node_id": runtimeID, "node_id": req.PeerID})
+	ok(c, http.StatusCreated, gin.H{"runtime_node_id": runtimeID, "node_id": req.PeerID, "node_key": nodeKey})
 }
 
 func (s *Server) handleListOrgNodeServices(c *gin.Context) {

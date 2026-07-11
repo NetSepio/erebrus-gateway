@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/NetSepio/gateway/internal/secrets"
 )
 
 const orgNodeCols = `id, org_id, node_id, COALESCE(node_name,''), deployment_profile, node_type,
@@ -228,10 +231,12 @@ func (s *Store) SyncAllOrgNodeStatusesFromRuntime(ctx context.Context) error {
 }
 
 // RegisterOrgNodeFromRuntime registers a runtime node under an org using a registration token.
-func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID string, r NodeRegistration) (string, error) {
+// It rejects attempts to overwrite an existing node unless the caller presents the current node_key
+// and the node already belongs to the same org.
+func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID string, r NodeRegistration) (peerID, nodeKey string, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -242,53 +247,143 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 		visibility = OrgNodeVisibilityPublicNetwork
 	}
 
-	var runtimeID string
 	access := r.AccessMode
 	if access != NodeAccessPrivate {
 		access = NodeAccessPublic
 	}
+
+	nodeKey = strings.TrimSpace(r.NodeKey)
+
+	// Verify existing node ownership and key.
+	var storedNodeKey, storedOrgID string
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO nodes (peer_id, did, wallet_address, chain, org_id, name, region, zone, api_base_url, node_key, access_mode, deployment_profile)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11, $12)
-		 ON CONFLICT (peer_id) DO UPDATE SET
-		   did = EXCLUDED.did,
-		   wallet_address = COALESCE(NULLIF(EXCLUDED.wallet_address,''), nodes.wallet_address),
-		   chain = COALESCE(NULLIF(EXCLUDED.chain,''), nodes.chain),
-		   org_id = EXCLUDED.org_id,
-		   name = COALESCE(NULLIF(EXCLUDED.name,''), nodes.name),
-		   region = COALESCE(NULLIF(EXCLUDED.region,''), nodes.region),
-		   zone = COALESCE(NULLIF(EXCLUDED.zone,''), nodes.zone),
-		   api_base_url = COALESCE(NULLIF(EXCLUDED.api_base_url,''), nodes.api_base_url),
-		   node_key = COALESCE(NULLIF(EXCLUDED.node_key,''), nodes.node_key),
-		   access_mode = EXCLUDED.access_mode,
-		   deployment_profile = EXCLUDED.deployment_profile,
-		   updated_at = now()
-		 RETURNING id`,
-		r.PeerID, r.DID, r.Wallet, r.Chain, orgID, r.Name, r.Region, r.Zone, r.APIBaseURL, r.NodeKey, access,
-		NormalizeDeploymentProfile(r.DeploymentProfile)).Scan(&runtimeID)
-	if err != nil {
-		return "", err
+		`SELECT COALESCE(node_key,''), COALESCE(org_id::text,'') FROM nodes WHERE peer_id = $1 FOR UPDATE`,
+		r.PeerID).Scan(&storedNodeKey, &storedOrgID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", "", err
+	}
+	existingNode := !errors.Is(err, sql.ErrNoRows)
+
+	if existingNode {
+		if storedOrgID != orgID {
+			return "", "", ErrConflict
+		}
+		if storedNodeKey != "" {
+			if nodeKey == "" {
+				return "", "", ErrConflict
+			}
+			if subtle.ConstantTimeCompare([]byte(storedNodeKey), []byte(nodeKey)) != 1 {
+				return "", "", ErrConflict
+			}
+		} else {
+			if nodeKey == "" {
+				nodeKey, err = secrets.NewNodeKey()
+				if err != nil {
+					return "", "", err
+				}
+			}
+		}
+	} else {
+		if nodeKey == "" {
+			nodeKey, err = secrets.NewNodeKey()
+			if err != nil {
+				return "", "", err
+			}
+		}
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO org_nodes (
-			org_id, node_id, node_name, deployment_profile, node_type, visibility,
-			managed_by, region, zone, status, api_public_url
-		) VALUES ($1,$2,NULLIF($3,''),$4,$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''))
-		ON CONFLICT (node_id) DO UPDATE SET
-			org_id = EXCLUDED.org_id,
-			node_name = COALESCE(NULLIF(EXCLUDED.node_name,''), org_nodes.node_name),
-			deployment_profile = COALESCE(NULLIF(EXCLUDED.deployment_profile,''), org_nodes.deployment_profile),
-			node_type = EXCLUDED.node_type,
-			visibility = EXCLUDED.visibility,
-			region = COALESCE(NULLIF(EXCLUDED.region,''), org_nodes.region),
-			zone = COALESCE(NULLIF(EXCLUDED.zone,''), org_nodes.zone),
-			status = EXCLUDED.status,
-			api_public_url = COALESCE(NULLIF(EXCLUDED.api_public_url,''), org_nodes.api_public_url),
-			updated_at = now()`,
-		orgID, r.PeerID, r.Name, NormalizeDeploymentProfile(r.DeploymentProfile), nodeType, visibility,
-		OrgNodeManagedByOrg, r.Region, r.Zone, OrgNodeStatusActive, r.APIBaseURL); err != nil {
-		return "", err
+	var runtimeID string
+	if existingNode {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE nodes SET
+				did = $2,
+				wallet_address = COALESCE(NULLIF($3,''), wallet_address),
+				chain = COALESCE(NULLIF($4,''), chain),
+				org_id = $5::uuid,
+				name = COALESCE(NULLIF($6,''), name),
+				region = COALESCE(NULLIF($7,''), region),
+				zone = COALESCE(NULLIF($8,''), zone),
+				api_base_url = COALESCE(NULLIF($9,''), api_base_url),
+				node_key = $10,
+				access_mode = $11,
+				deployment_profile = $12,
+				updated_at = now()
+			 WHERE peer_id = $1 AND COALESCE(org_id::text,'') = $5`,
+			r.PeerID, r.DID, r.Wallet, r.Chain, orgID, r.Name, r.Region, r.Zone, r.APIBaseURL, nodeKey, access,
+			NormalizeDeploymentProfile(r.DeploymentProfile))
+		if err != nil {
+			return "", "", err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return "", "", ErrConflict
+		}
+	} else {
+		err = tx.QueryRowContext(ctx,
+			`INSERT INTO nodes (peer_id, did, wallet_address, chain, org_id, name, region, zone, api_base_url, node_key, access_mode, deployment_profile)
+			 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11, $12)
+			 RETURNING id`,
+			r.PeerID, r.DID, r.Wallet, r.Chain, orgID, r.Name, r.Region, r.Zone, r.APIBaseURL, nodeKey, access,
+			NormalizeDeploymentProfile(r.DeploymentProfile)).Scan(&runtimeID)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	// Verify existing org-node ownership and upsert.
+	var storedOrgNodeOrgID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT COALESCE(org_id::text,'') FROM org_nodes WHERE node_id = $1 FOR UPDATE`,
+		r.PeerID).Scan(&storedOrgNodeOrgID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", "", err
+	}
+	existingOrgNode := !errors.Is(err, sql.ErrNoRows)
+
+	if existingOrgNode {
+		if storedOrgNodeOrgID != orgID {
+			return "", "", ErrConflict
+		}
+		res, err := tx.ExecContext(ctx,
+			`UPDATE org_nodes SET
+				node_name = COALESCE(NULLIF($2,''), node_name),
+				deployment_profile = COALESCE(NULLIF($3,''), deployment_profile),
+				node_type = $4,
+				visibility = $5,
+				region = COALESCE(NULLIF($6,''), region),
+				zone = COALESCE(NULLIF($7,''), zone),
+				status = $8,
+				api_public_url = COALESCE(NULLIF($9,''), api_public_url),
+				updated_at = now()
+			 WHERE node_id = $1 AND org_id = $10`,
+			r.PeerID, r.Name, NormalizeDeploymentProfile(r.DeploymentProfile), nodeType, visibility,
+			r.Region, r.Zone, OrgNodeStatusActive, r.APIBaseURL, orgID)
+		if err != nil {
+			return "", "", err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return "", "", ErrConflict
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO org_nodes (
+				org_id, node_id, node_name, deployment_profile, node_type, visibility,
+				managed_by, region, zone, status, api_public_url
+			) VALUES ($1,$2,NULLIF($3,''),$4,$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''))
+			ON CONFLICT (node_id) DO UPDATE SET
+				node_name = COALESCE(NULLIF(EXCLUDED.node_name,''), org_nodes.node_name),
+				deployment_profile = COALESCE(NULLIF(EXCLUDED.deployment_profile,''), org_nodes.deployment_profile),
+				node_type = EXCLUDED.node_type,
+				visibility = EXCLUDED.visibility,
+				region = COALESCE(NULLIF(EXCLUDED.region,''), org_nodes.region),
+				zone = COALESCE(NULLIF(EXCLUDED.zone,''), org_nodes.zone),
+				status = EXCLUDED.status,
+				api_public_url = COALESCE(NULLIF(EXCLUDED.api_public_url,''), org_nodes.api_public_url),
+				updated_at = now()
+			 WHERE org_nodes.org_id = EXCLUDED.org_id`,
+			orgID, r.PeerID, r.Name, NormalizeDeploymentProfile(r.DeploymentProfile), nodeType, visibility,
+			OrgNodeManagedByOrg, r.Region, r.Zone, OrgNodeStatusActive, r.APIBaseURL); err != nil {
+			return "", "", err
+		}
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -299,22 +394,22 @@ func (s *Store) RegisterOrgNodeFromRuntime(ctx context.Context, orgID, tokenID s
 			service_status = EXCLUDED.service_status, updated_at = now()`,
 		orgID, r.PeerID, ServiceTypeVPN, ServiceNameErebrus, ServiceProviderWireguard,
 		ServiceStatusActive, ServiceVisibilityOrgOnly); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE node_registration_tokens SET used_at=now() WHERE id=$1 AND used_at IS NULL`, tokenID); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	profile := NormalizeDeploymentProfile(r.DeploymentProfile)
 	if err := tx.Commit(); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := s.attachProfileServices(ctx, orgID, r.PeerID, profile); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return r.PeerID, nil
+	return r.PeerID, nodeKey, nil
 }
 
 // NormalizeDeploymentProfile returns a valid deployment profile name.

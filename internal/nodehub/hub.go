@@ -24,8 +24,8 @@ const (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 4096,
-	// Auth is via PASETO bearer, not cookies, so cross-origin is acceptable.
-	CheckOrigin: func(*http.Request) bool { return true },
+	// Use the default same-origin policy. Auth is via PASETO, but there is no
+	// benefit to allowing arbitrary origins to open the WebSocket.
 }
 
 // Hub tracks live node connections and persists their control-plane reports.

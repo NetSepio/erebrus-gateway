@@ -19,8 +19,11 @@ func hashRegistrationToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// Maximum lifetime of a node registration token (7 days).
+const maxRegistrationTokenTTL = 7 * 24 * time.Hour
+
 // CreateNodeRegistrationToken mints a scoped registration token for an org.
-func (s *Store) CreateNodeRegistrationToken(ctx context.Context, orgID, createdBy string, scopes []string, expiresAt time.Time) (plain string, tok *NodeRegistrationToken, err error) {
+func (s *Store) CreateNodeRegistrationToken(ctx context.Context, orgID, createdBy, peerID string, scopes []string, expiresAt time.Time) (plain string, tok *NodeRegistrationToken, err error) {
 	if len(scopes) == 0 {
 		return "", nil, fmt.Errorf("at least one scope is required")
 	}
@@ -29,8 +32,12 @@ func (s *Store) CreateNodeRegistrationToken(ctx context.Context, orgID, createdB
 			return "", nil, fmt.Errorf("invalid scope: %s", sc)
 		}
 	}
-	if !expiresAt.After(time.Now()) {
+	now := time.Now()
+	if !expiresAt.After(now) {
 		return "", nil, fmt.Errorf("expires_at must be in the future")
+	}
+	if maxExpiresAt := now.Add(maxRegistrationTokenTTL); expiresAt.After(maxExpiresAt) {
+		expiresAt = maxExpiresAt
 	}
 	plain, err = secrets.NewNodeRegistrationToken()
 	if err != nil {
@@ -39,46 +46,46 @@ func (s *Store) CreateNodeRegistrationToken(ctx context.Context, orgID, createdB
 	hash := hashRegistrationToken(plain)
 	var t NodeRegistrationToken
 	err = s.db.QueryRowContext(ctx,
-		`INSERT INTO node_registration_tokens (org_id, token_hash, scopes, expires_at, created_by)
-		 VALUES ($1, $2, $3, $4, $5)
-		 RETURNING id, org_id, scopes, expires_at, created_by, used_at, revoked_at, created_at`,
-		orgID, hash, pq.Array(scopes), expiresAt, createdBy).
-		Scan(&t.ID, &t.OrgID, pq.Array(&t.Scopes), &t.ExpiresAt, &t.CreatedBy, &t.UsedAt, &t.RevokedAt, &t.CreatedAt)
+		`INSERT INTO node_registration_tokens (org_id, token_hash, scopes, expires_at, peer_id, created_by)
+		 VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,'')::uuid)
+		 RETURNING id, org_id, peer_id, scopes, expires_at, created_by, used_at, revoked_at, created_at`,
+		orgID, hash, pq.Array(scopes), expiresAt, peerID, createdBy).
+		Scan(&t.ID, &t.OrgID, &t.PeerID, pq.Array(&t.Scopes), &t.ExpiresAt, &t.CreatedBy, &t.UsedAt, &t.RevokedAt, &t.CreatedAt)
 	if err != nil {
 		return "", nil, err
 	}
 	return plain, &t, nil
 }
 
-// LookupNodeRegistrationToken resolves a presented token to its org and scopes.
-func (s *Store) LookupNodeRegistrationToken(ctx context.Context, token string, requiredScope string) (orgID, tokenID string, scopes []string, err error) {
+// LookupNodeRegistrationToken resolves a presented token to its org, optional peer, and scopes.
+func (s *Store) LookupNodeRegistrationToken(ctx context.Context, token, requiredScope string) (orgID, tokenID, peerID string, scopes []string, err error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return "", "", nil, ErrNotFound
+		return "", "", "", nil, ErrNotFound
 	}
 	hash := hashRegistrationToken(token)
 	var expiresAt time.Time
 	var usedAt, revokedAt sql.NullTime
 	err = s.db.QueryRowContext(ctx,
-		`SELECT id, org_id, scopes, expires_at, used_at, revoked_at
+		`SELECT id, org_id, peer_id, scopes, expires_at, used_at, revoked_at
 		 FROM node_registration_tokens WHERE token_hash=$1`, hash).
-		Scan(&tokenID, &orgID, pq.Array(&scopes), &expiresAt, &usedAt, &revokedAt)
+		Scan(&tokenID, &orgID, &peerID, pq.Array(&scopes), &expiresAt, &usedAt, &revokedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", nil, ErrNotFound
+		return "", "", "", nil, ErrNotFound
 	}
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 	if revokedAt.Valid {
-		return "", "", nil, ErrNotFound
+		return "", "", "", nil, ErrNotFound
 	}
 	if time.Now().After(expiresAt) {
-		return "", "", nil, ErrNotFound
+		return "", "", "", nil, ErrNotFound
 	}
 	if requiredScope != "" && !scopeAllowed(scopes, requiredScope) {
-		return "", "", nil, ErrNotFound
+		return "", "", "", nil, ErrNotFound
 	}
-	return orgID, tokenID, scopes, nil
+	return orgID, tokenID, peerID, scopes, nil
 }
 
 // MarkNodeRegistrationTokenUsed records token consumption.

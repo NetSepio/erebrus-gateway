@@ -133,7 +133,6 @@ func (s *Server) handlePatchOrg(c *gin.Context) {
 	var req struct {
 		Name                 *string `json:"name"`
 		Slug                 *string `json:"slug"`
-		BillingStatus        *string `json:"billing_status"`
 		PublicProfileEnabled *bool   `json:"public_profile_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -142,7 +141,7 @@ func (s *Server) handlePatchOrg(c *gin.Context) {
 	}
 	org, err := s.store.UpdateOrg(c, c.Param("id"), store.UpdateOrgInput{
 		Name: req.Name, Slug: req.Slug,
-		BillingStatus: req.BillingStatus, PublicProfileEnabled: req.PublicProfileEnabled,
+		PublicProfileEnabled: req.PublicProfileEnabled,
 	})
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to update org")
@@ -874,7 +873,7 @@ func normalizeMemberRole(role string) string {
 		return store.OrgRoleOwner
 	case store.OrgRoleNodeOperator, "manager":
 		return store.OrgRoleNodeOperator
-	case store.OrgRoleAdmin, store.OrgRoleViewer:
+	case store.OrgRoleMember:
 		return store.OrgRoleMember
 	default:
 		return store.OrgRoleMember

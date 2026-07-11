@@ -224,7 +224,7 @@ func (s *Server) handlePatchFirewallRule(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid body")
 		return
 	}
-	rule, err := s.store.UpdateFirewallRule(c, c.Param("id"), c.Param("ruleId"), req)
+	rule, err := s.store.UpdateFirewallRule(c, c.Param("id"), c.Param("nodeId"), c.Param("ruleId"), req)
 	if errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "rule not found")
 		return
@@ -240,7 +240,7 @@ func (s *Server) handleDeleteFirewallRule(c *gin.Context) {
 	if _, ok := s.requireNodeOperator(c); !ok {
 		return
 	}
-	if err := s.store.DeleteFirewallRule(c, c.Param("id"), c.Param("ruleId")); errors.Is(err, store.ErrNotFound) {
+	if err := s.store.DeleteFirewallRule(c, c.Param("id"), c.Param("nodeId"), c.Param("ruleId")); errors.Is(err, store.ErrNotFound) {
 		fail(c, http.StatusNotFound, "rule not found")
 		return
 	} else if err != nil {

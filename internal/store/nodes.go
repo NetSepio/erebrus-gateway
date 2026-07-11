@@ -27,34 +27,6 @@ type NodeRegistration struct {
 	DeploymentProfile  string // standard | shield | sentinel
 }
 
-// RegisterNode inserts (or updates) the node row keyed by peer_id and returns
-// the node id. Called from the HTTPS enrollment flow.
-func (s *Store) RegisterNode(ctx context.Context, r NodeRegistration) (string, error) {
-	access := r.AccessMode
-	if access != NodeAccessPrivate {
-		access = NodeAccessPublic
-	}
-	var id string
-	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO nodes (peer_id, did, wallet_address, chain, org_id, name, region, zone, api_base_url, node_key, access_mode)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,''), NULLIF($7,''), NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11)
-		 ON CONFLICT (peer_id) DO UPDATE SET
-		   did = EXCLUDED.did,
-		   wallet_address = COALESCE(NULLIF(EXCLUDED.wallet_address,''), nodes.wallet_address),
-		   chain = COALESCE(NULLIF(EXCLUDED.chain,''), nodes.chain),
-		   org_id = EXCLUDED.org_id,
-		   name = COALESCE(NULLIF(EXCLUDED.name,''), nodes.name),
-		   region = COALESCE(NULLIF(EXCLUDED.region,''), nodes.region),
-		   zone = COALESCE(NULLIF(EXCLUDED.zone,''), nodes.zone),
-		   api_base_url = COALESCE(NULLIF(EXCLUDED.api_base_url,''), nodes.api_base_url),
-		   node_key = COALESCE(NULLIF(EXCLUDED.node_key,''), nodes.node_key),
-		   access_mode = EXCLUDED.access_mode,
-		   updated_at = now()
-		 RETURNING id`,
-		r.PeerID, r.DID, r.Wallet, r.Chain, r.OrgID, r.Name, r.Region, r.Zone, r.APIBaseURL, r.NodeKey, access).Scan(&id)
-	return id, err
-}
-
 // ResolvePeerID verifies a node exists and returns its peer_id.
 func (s *Store) ResolvePeerID(ctx context.Context, peerID string) (string, error) {
 	var id string
@@ -99,19 +71,15 @@ func (s *Store) NodeKeyMatches(ctx context.Context, peerID, nodeKey string) (boo
 // NodeAPI returns the gateway-reachable API base URL, node key and status
 // for a node, used when proxying provisioning calls.
 func (s *Store) NodeAPI(ctx context.Context, ref string) (baseURL, nodeKey, status string, err error) {
-	var ip string
 	err = s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(api_base_url,''), COALESCE(node_key,''), status, COALESCE(ip,'')
+		`SELECT COALESCE(api_base_url,''), COALESCE(node_key,''), status
 		 FROM nodes WHERE peer_id = $1`, ref).
-		Scan(&baseURL, &nodeKey, &status, &ip)
+		Scan(&baseURL, &nodeKey, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", "", ErrNotFound
 	}
 	if err != nil {
 		return "", "", "", err
-	}
-	if baseURL == "" && ip != "" {
-		baseURL = "http://" + ip + ":9080"
 	}
 	return
 }
@@ -145,12 +113,7 @@ func (s *Store) ApplyHello(ctx context.Context, h HelloUpdate) error {
 		   zone = COALESCE(NULLIF($6,''), zone),
 		   access_mode = COALESCE(NULLIF($7,''), access_mode),
 		   spec = $8::jsonb, capabilities = $9::jsonb, endpoints = $10::jsonb,
-		   protocols = $11, status = 'online', last_heartbeat = now(), updated_at = now(),
-		   api_base_url = CASE
-		     WHEN COALESCE(api_base_url,'') = '' AND NULLIF($2,'') IS NOT NULL
-		     THEN 'http://' || $2 || ':9080'
-		     ELSE api_base_url
-		   END
+		   protocols = $11, status = 'online', last_heartbeat = now(), updated_at = now()
 		 WHERE peer_id = $1`,
 		h.PeerID, h.IP, h.IPHash, h.Version, h.Region, h.Zone, access,
 		string(h.Spec), string(h.Capabilities), string(h.Endpoints), pq.Array(h.Protocols))
