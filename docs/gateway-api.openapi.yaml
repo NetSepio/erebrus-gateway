@@ -281,7 +281,8 @@ paths:
       summary: My referral code, who referred me, and recent referees
       description: >
         Code is short + shareable (allocated on first access). The qualifying
-        action is a referee's first trial start (referrer +100 XP, referee +25).
+        action is the referee joining their first active organization (the
+        personal basic organization created at first login qualifies).
       responses:
         "200":
           description: Referral summary
@@ -310,7 +311,7 @@ paths:
                         qualified:
                           {
                             type: boolean,
-                            description: "Referee has started their trial",
+                            description: "Referee has an active organization membership",
                           }
                         joined_at: { type: string, format: date-time }
 
@@ -339,8 +340,8 @@ paths:
                     { type: object, additionalProperties: { type: integer } }
   /api/v2/rank/claim:
     post:
-      summary: Spend claimable XP on a reward
-      description: "v2.0 reward: free_days (XP_FREE_DAYS_COST → XP_FREE_DAYS_GRANT days, source='rank', stacked on the current period). Logged with IP + device."
+      summary: Deprecated personal entitlement reward endpoint
+      description: Personal free-day rewards are retired because product access is organization-only.
       requestBody:
         required: true
         content:
@@ -352,9 +353,8 @@ paths:
                 properties: { reward: { type: string, enum: [free_days] } },
               }
       responses:
-        "200": { description: "{ reward, xp_spent, days, subscription }" }
-        "400": { description: Unknown reward }
-        "409": { description: Not enough claimable XP }
+        "400": { description: Invalid request }
+        "410": { description: Personal entitlement rewards are retired }
   /api/v2/leaderboard:
     get:
       summary: Top users by XP or referrals (Redis-cached) + my rank
@@ -443,7 +443,8 @@ paths:
     post:
       summary: Provision a VPN client on a node
       description: |
-        Requires entitlement (active subscription/trial, or org API key).
+        Requires active organization membership; owners/node operators inherit
+        the organization plan and members use their assigned seat tier.
         Flow: pending row committed → PUT node /api/v2/peers/{uuid} (10s
         timeout, 2 retries, idempotent) → active. Returns the full credential
         bundle: WireGuard conf (with REPLACE_WITH_PRIVATE_KEY placeholder),
@@ -482,7 +483,7 @@ paths:
           "404": { description: Not found },
         }
 
-  # ───────────────────────── subscriptions (trial + NFT; no payments yet) ─────
+  # ───────────────────────── legacy subscription compatibility ────────────────
   /api/v2/subscriptions/plans:
     get:
       {
@@ -492,7 +493,8 @@ paths:
       }
   /api/v2/subscriptions:
     get:
-      summary: My subscription + entitlement state
+      summary: Organization-derived compatibility entitlement state
+      description: Personal trial, subscription, and NFT records do not authorize product access.
       responses:
         "200":
           description: Entitlement snapshot
@@ -503,12 +505,7 @@ paths:
                 properties:
                   status: { type: string, enum: [active, expired, none] }
                   entitled: { type: boolean }
-                  source:
-                    {
-                      type: string,
-                      enum: [trial, nft, admin, rank],
-                      description: "What grants the entitlement",
-                    }
+                  source: { type: string, enum: [org, admin] }
                   plan_id: { type: string }
                   trial_consumed:
                     {
@@ -525,22 +522,21 @@ paths:
   /api/v2/subscriptions/trial:
     post:
       {
-        summary: "Start the one-time free trial (7 days, plan 'pro')",
+        summary: "Deprecated trial compatibility endpoint",
+        description: "Does not create a personal trial; returns the caller's organization-derived entitlement.",
         responses:
           {
-            "201": { description: Trial active },
-            "409": { description: Already used },
+            "200": { description: Organization-derived entitlement },
           },
       }
   /api/v2/subscriptions/nft/refresh:
     post:
-      summary: Verify the gating NFT and grant/refresh a 30-day entitlement
+      summary: Verify the gating NFT for legacy rewards compatibility
       description: >
-        Grants 30 days directly regardless of trial state (a mid-trial user is
-        upgraded, since the 30d NFT entitlement outlasts the 7d trial).
-        Refreshable while held; one per user.
+        NFT ownership may drive XP/reward compatibility but never grants product
+        access; organization membership and seat tiers are authoritative.
       responses:
-        "200": { description: NFT entitlement granted/refreshed }
+        "200": { description: NFT ownership verified }
         "400": { description: No wallet on account }
         "403": { description: Wallet does not hold the required NFT }
         "502": { description: NFT ownership check failed }
@@ -816,10 +812,10 @@ paths:
         Kubo RPC URLs, credentials, or exact capacity. `capacity` is one of
         `available | limited | full | unknown`.
       parameters:
-        - { name: scope, in: query, schema: { type: string, enum: [public, private_org], default: public } }
-        - { name: org_id, in: query, schema: { type: string }, description: "required when scope=private_org" }
+        - { name: scope, in: query, schema: { type: string, enum: [public, private], default: public } }
+        - { name: org_id, in: query, schema: { type: string }, description: "required when scope=private" }
       responses:
-        "200": { description: "{ scope, nodes[{node_id, name, region, access_mode, deployment_profile, state, accepts_public_uploads, webui_available, capacity}] }" }
+        "200": { description: "{ scope, nodes[{node_id, org_id?, name, region, access_mode, deployment_profile, online, state, accepting_uploads, webui_available, capacity}] }" }
         "403": { description: Not a member of the org }
   /api/v2/drop/uploads:
     post:
@@ -834,21 +830,21 @@ paths:
           application/json:
             schema:
               type: object
-              required: [node_id, size, idempotency_key]
+              required: [node_id, scope, size_bytes, idempotency_key]
               properties:
                 node_id: { type: string }
-                scope: { type: string, enum: [public, private_org], default: public }
+                scope: { type: string, enum: [public, private], default: public }
                 visibility: { type: string, enum: [public, private], default: private }
                 filename: { type: string }
                 content_type: { type: string }
-                size: { type: integer, description: declared byte length of the content that will be PUT }
-                sha256: { type: string }
+                size_bytes: { type: integer, description: declared byte length of the content that will be PUT }
+                sha256: { type: string, pattern: "^[A-Fa-f0-9]{64}$", description: SHA-256 of the uploaded body }
                 encrypted: { type: boolean }
                 encryption_metadata: { type: object, description: opaque to the gateway }
-                org_id: { type: string, description: "required for scope=private_org" }
+                org_id: { type: string, description: "required for scope=private" }
                 idempotency_key: { type: string }
       responses:
-        "201": { description: "{ id, node_id, scope, visibility, filename, declared_size_bytes, status, expires_at }" }
+        "201": { description: "{ id, upload_id, node_id, scope, visibility, filename, size_bytes, declared_size_bytes, status, expires_at }" }
         "409": { description: Storage quota exceeded }
         "413": { description: File exceeds per-file ceiling }
         "507": { description: Node storage capacity exhausted }
@@ -860,7 +856,8 @@ paths:
         Streams the request body straight to the node without buffering, capped
         at the reserved size. On success the gateway pins, records the logical
         file, and converts the reservation into used bytes (idempotent). On a
-        post-pin metadata failure the gateway issues a compensating unpin.
+        post-pin metadata failure creates a durable orphan-pin reconciliation
+        job that checks shared-CID references before unpinning.
       parameters:
         - { name: upload_id, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -878,7 +875,7 @@ paths:
       parameters:
         - { name: upload_id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: "{ id, status, cid?, expires_at, … }" }
+        "200": { description: "{ id, upload_id, status, cid?, expires_at, … }" }
         "404": { description: Not found }
   /api/v2/drop/files:
     get:
@@ -913,6 +910,7 @@ paths:
         - { name: file_id, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: "{ status: deleted, unpinned }" }
+        "202": { description: "{ status: delete_pending, unpinned: false }" }
         "403": { description: Not allowed }
   /api/v2/drop/files/{file_id}/content:
     get:
@@ -933,37 +931,48 @@ paths:
         "200": { description: "{ tier, entitlement_org_id, public_quota_bytes, max_file_bytes, used_bytes, reserved_bytes, available_bytes }" }
   /api/v2/drop/crypto/vault:
     get:
-      summary: Fetch the caller's encrypted Drop vault (opaque; version 0 when absent)
-      responses: { "200": { description: "{ user_id, version, public_key, encrypted_vault, kdf_metadata }" } }
+      summary: Fetch the caller's opaque encrypted Drop vault
+      responses: { "200": { description: "{ version, kdf, iterations, salt, iv, ciphertext } or null" } }
     put:
       summary: Store the caller's encrypted Drop vault (optimistic-version guarded)
       description: |
         The vault is encrypted client-side and opaque to the gateway; no
         plaintext key material or recovery secret is ever stored. Bounded in
-        size. `expected_version` must match the current version (0 for first
-        write); a mismatch returns 409.
+        size. Concurrent writes are optimistic-version guarded by the stored
+        profile version.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [encrypted_vault, expected_version]
+              required: [version, kdf, iterations, salt, iv, ciphertext]
               properties:
-                public_key: { type: string }
-                encrypted_vault: { type: string }
-                kdf_metadata: { type: object }
-                expected_version: { type: integer }
+                version: { type: integer, minimum: 1 }
+                kdf: { type: string, example: PBKDF2-SHA256 }
+                iterations: { type: integer, minimum: 1 }
+                salt: { type: string }
+                iv: { type: string }
+                ciphertext: { type: string }
       responses:
         "200": { description: stored vault }
         "409": { description: Version conflict }
         "413": { description: Vault too large }
   /api/v2/drop/public/{file_id}:
     get:
-      summary: Opaque public share (no auth)
+      summary: Opaque public share metadata (no auth)
       description: |
-        Serves a file only when its visibility is `public` and status `active`.
+        Serves metadata only when visibility is `public` and status is active.
         The path uses the file's opaque id — never a raw CID. Rate limited per IP.
+      security: []
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: public file metadata }
+        "404": { description: Not found / not public }
+  /api/v2/drop/public/{file_id}/content:
+    get:
+      summary: Stream opaque public share content (no auth)
       security: []
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }
@@ -972,7 +981,8 @@ paths:
         "404": { description: Not found / not public }
   /api/v2/orgs/{org_id}/drop/files:
     get:
-      summary: Private-org Drop files (metadata only; no decryption keys)
+      summary: Private-org Drop files
+      description: Ordinary members see only their own files; owners/node-operators may inspect all metadata but never receive another user's encryption metadata.
       parameters:
         - { name: org_id, in: path, required: true, schema: { type: string } }
       responses:

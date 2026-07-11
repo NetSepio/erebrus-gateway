@@ -48,7 +48,7 @@ internal/middleware/  HTTP metrics middleware
 internal/config/      Env config + platform_settings loader
 internal/token/       PASETO (user / node / admin)
 internal/wallet/      EVM + Solana signature verify
-internal/nftgate/     NFT entitlement check (optional)
+internal/nftgate/     Legacy NFT reward verification (optional)
 deploy/               Production docker-compose + OTel collector config
 ```
 
@@ -58,8 +58,8 @@ deploy/               Production docker-compose + OTel collector config
   Resend OTP — never a login method.
 - **Entitlement (organization-only):** Product/Drop entitlement is derived
   **solely** from organization membership — the effective tier is the highest
-  active org seat across all active memberships (owners map to the org plan;
-  ordinary members to their `seat_tier`). Personal trials, `ActiveSubscription`,
+  active org seat across all active memberships (owners and node operators map
+  to the org plan; ordinary members to their `seat_tier`). Personal trials, `ActiveSubscription`,
   NFT grants, and personal subscription tiers are **no longer** entitlement
   sources. Every user owns a personal `basic` org (backfilled by migration
   `0026` for older users; created at first login for new ones), so an
@@ -125,7 +125,8 @@ Drop lets users store files on Kubo (IPFS) nodes through the gateway. It is an
 - **Pins & deletion:** One pin row per `(file_id, node_id)`. Duplicate CID
   references are tolerated; a physical unpin is issued only when the **last**
   active reference on a node is deleted. Deletion, quota release, and unpin are
-  idempotent, with a compensating unpin if metadata commit fails after a pin.
+  idempotent. Failed physical unpins and pins created before a metadata-commit
+  failure are persisted and retried by reconciliation after shared-CID checks.
 - **Security:** Public shares use opaque file ids, never raw CIDs, and enforce
   `visibility=public` + `status=active`. Private confidentiality relies on
   **client-side encryption**; the gateway stores only opaque encryption metadata
@@ -423,10 +424,10 @@ go build ./... && go vet ./... && go test ./...
 
 ### S3 — Entitlements
 
-- [ ] Trial ≈ 7d (`trial_period` in platform_settings); second trial → 409
-- [ ] No trial → provision **402**; with trial → succeeds
-- [ ] NFT refresh → 30d `source:nft` (when `nft_gate_contracts` + `SOLANA_RPC_URL` set)
-- [ ] Admin bypass works; `/payments*` → 404
+- [ ] Missing users are backfilled into a personal basic organization
+- [ ] Free/Starter/Pro/Business resolve from active organization plan/seat data
+- [ ] Personal trials, subscriptions, NFT rows, and rank grants never authorize product access
+- [ ] Legacy subscription routes return compatibility data only; `/payments*` → 404
 
 ### S4 — Operator layer
 
@@ -439,12 +440,12 @@ go build ./... && go vet ./... && go test ./...
 ### S5 — Referrals
 
 - [ ] Migration `0005`; `GET /referrals/me` returns stable code
-- [ ] `ref` on signup binds referrer; first trial → referral XP once
+- [ ] `ref` on signup binds referrer; first active org membership → referral XP once
 
 ### S6 — XP / tiers / leaderboard
 
 - [ ] Migration `0006`; tiers from `xp_earned`; `GET /rank/me`, `GET /leaderboard`
-- [ ] `POST /rank/claim` spends XP → `source:rank` entitlement
+- [ ] `POST /rank/claim` returns 410 and never creates personal entitlement
 - [ ] Drivers idempotent: email, NFT monthly, operator uptime
 
 ### S7 — Social + perks + tier pools
