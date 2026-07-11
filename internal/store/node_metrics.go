@@ -9,26 +9,28 @@ import (
 
 // NodeMetricPoint is one downsampled time-series sample for a node.
 type NodeMetricPoint struct {
-	Bucket        time.Time `json:"bucket"`
-	WGPeers       int       `json:"wg_peers"`
-	ProxySessions int       `json:"proxy_sessions"`
-	RxBytes       int64     `json:"rx_bytes"`
-	TxBytes       int64     `json:"tx_bytes"`
-	CPUPct        float64   `json:"cpu_pct"`
-	MemPct        float64   `json:"mem_pct"`
+	Bucket          time.Time `json:"bucket"`
+	WGPeers         int       `json:"wg_peers"`
+	WGPeersConnected int      `json:"wg_peers_connected"`
+	ProxySessions   int       `json:"proxy_sessions"`
+	RxBytes         int64     `json:"rx_bytes"`
+	TxBytes         int64     `json:"tx_bytes"`
+	CPUPct          float64   `json:"cpu_pct"`
+	MemPct          float64   `json:"mem_pct"`
 }
 
 // RecordNodeMetrics upserts the per-minute rollup for a node from a heartbeat.
 func (s *Store) RecordNodeMetrics(ctx context.Context, nodeID string, bucket time.Time,
-	wgPeers, proxySessions int, rx, tx int64, cpu, mem float64) error {
+	wgPeers, wgPeersConnected, proxySessions int, rx, tx int64, cpu, mem float64) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO node_metrics (node_id, bucket, wg_peers, proxy_sessions, rx_bytes, tx_bytes, cpu_pct, mem_pct)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`INSERT INTO node_metrics (node_id, bucket, wg_peers, wg_peers_connected, proxy_sessions, rx_bytes, tx_bytes, cpu_pct, mem_pct)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (node_id, bucket) DO UPDATE SET
-		   wg_peers = EXCLUDED.wg_peers, proxy_sessions = EXCLUDED.proxy_sessions,
+		   wg_peers = EXCLUDED.wg_peers, wg_peers_connected = EXCLUDED.wg_peers_connected,
+		   proxy_sessions = EXCLUDED.proxy_sessions,
 		   rx_bytes = EXCLUDED.rx_bytes, tx_bytes = EXCLUDED.tx_bytes,
 		   cpu_pct = EXCLUDED.cpu_pct, mem_pct = EXCLUDED.mem_pct`,
-		nodeID, bucket.UTC().Truncate(time.Minute), wgPeers, proxySessions, rx, tx, cpu, mem)
+		nodeID, bucket.UTC().Truncate(time.Minute), wgPeers, wgPeersConnected, proxySessions, rx, tx, cpu, mem)
 	return err
 }
 
@@ -40,7 +42,7 @@ func (s *Store) NodeMetrics(ctx context.Context, nodeID string, since time.Time,
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT to_timestamp(floor(extract(epoch FROM bucket)/$3)*$3) AS b,
-		        max(wg_peers), max(proxy_sessions), max(rx_bytes), max(tx_bytes),
+		        max(wg_peers), max(wg_peers_connected), max(proxy_sessions), max(rx_bytes), max(tx_bytes),
 		        avg(cpu_pct), avg(mem_pct)
 		 FROM node_metrics
 		 WHERE node_id = $1 AND bucket >= $2
@@ -52,7 +54,7 @@ func (s *Store) NodeMetrics(ctx context.Context, nodeID string, since time.Time,
 	out := []NodeMetricPoint{}
 	for rows.Next() {
 		var p NodeMetricPoint
-		if err := rows.Scan(&p.Bucket, &p.WGPeers, &p.ProxySessions, &p.RxBytes, &p.TxBytes, &p.CPUPct, &p.MemPct); err != nil {
+		if err := rows.Scan(&p.Bucket, &p.WGPeers, &p.WGPeersConnected, &p.ProxySessions, &p.RxBytes, &p.TxBytes, &p.CPUPct, &p.MemPct); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

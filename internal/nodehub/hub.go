@@ -278,7 +278,7 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 	// Time-series rollup for operator charts (per-minute bucket, last write wins).
 	if internalID, err := c.hub.store.NodeInternalID(ctx, c.peerID); err == nil {
 		if err := c.hub.store.RecordNodeMetrics(ctx, internalID, time.Now(),
-			hb.Load.WGPeers, hb.Load.ProxySessions, hb.Load.RxBytes, hb.Load.TxBytes,
+			hb.Load.WGPeersRegistered, hb.Load.WGPeersConnected, hb.Load.ProxySessions, hb.Load.RxBytes, hb.Load.TxBytes,
 			hb.Load.CPUPct, hb.Load.MemPct); err != nil {
 			c.hub.log.Warn("record node metrics failed", "peer_id", c.peerID, "err", err)
 		}

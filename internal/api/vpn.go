@@ -170,6 +170,15 @@ func (s *Server) doProvision(c *gin.Context, uid, org, nodeID, name, wgPub, wgPS
 		clientID = existing.ID
 		_ = s.store.DeletePendingClientsByUserNodeWGKey(c, uid, internalID, wgPub, clientID)
 	} else {
+		// Capacity gate: reject new clients on a full node. Reconnects (existing
+		// row above) are always allowed.
+		cfg := s.platform.Snapshot()
+		load := parseLoad(node.Load)
+		if !acceptingClients(cfg, load.Registered, load.Connected, load.CPUPct) {
+			recordVPN("failed")
+			fail(c, http.StatusServiceUnavailable, "node is at capacity — try another node")
+			return
+		}
 		var err error
 		clientID, err = s.store.CreateClient(c, uid, org, internalID, name, wgPub)
 		if err != nil {
