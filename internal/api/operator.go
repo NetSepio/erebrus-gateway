@@ -144,6 +144,7 @@ func (s *Server) handlePatchOperatorNode(c *gin.Context) {
 			return
 		}
 	}
+	s.cache.DelPrefix(c, "nodes:disco:")
 	updated, err := s.store.GetNode(c, nodeID)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to reload node")

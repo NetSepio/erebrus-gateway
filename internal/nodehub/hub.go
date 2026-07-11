@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NetSepio/gateway/internal/cache"
 	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/gorilla/websocket"
@@ -31,6 +32,7 @@ var upgrader = websocket.Upgrader{
 // Hub tracks live node connections and persists their control-plane reports.
 type Hub struct {
 	store       *store.Store
+	cache       *cache.Cache
 	log         *slog.Logger
 	environment string
 
@@ -40,7 +42,7 @@ type Hub struct {
 }
 
 // New constructs a Hub.
-func New(st *store.Store, log *slog.Logger, environment string) *Hub {
+func New(st *store.Store, c *cache.Cache, log *slog.Logger, environment string) *Hub {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -48,7 +50,7 @@ func New(st *store.Store, log *slog.Logger, environment string) *Hub {
 		environment = "dev"
 	}
 	return &Hub{
-		store: st, log: log, environment: environment,
+		store: st, cache: c, log: log, environment: environment,
 		conns: map[string]*conn{}, regionCounts: map[string]int{},
 	}
 }
@@ -111,6 +113,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, peerID string) {
 	}
 	h.mu.Unlock()
 	_ = h.store.SetNodeStatus(context.Background(), peerID, "offline")
+	h.cache.DelPrefix(context.Background(), "nodes:disco:")
 	h.log.Info("node disconnected", "peer_id", peerID)
 }
 
@@ -264,6 +267,7 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 		metrics.NodeHeartbeatsTotal.WithLabelValues("failed", c.hub.environment).Inc()
 		return
 	}
+	c.hub.cache.DelPrefix(ctx, "nodes:disco:")
 	_ = c.hub.store.TouchOrgNodeHeartbeat(ctx, c.peerID, time.Now())
 	if len(hb.Services) > 0 {
 		if err := c.hub.store.UpdateNodeServicesFromReport(ctx, c.peerID, hb.Services); err != nil {

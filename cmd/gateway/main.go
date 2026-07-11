@@ -87,7 +87,7 @@ func run(log *slog.Logger) error {
 	metrics.SetGatewayInfo(cfg.Environment, version.Version, version.Tag)
 
 	// Node control-plane hub.
-	hub := nodehub.New(st, log, cfg.Environment)
+	hub := nodehub.New(st, c, log, cfg.Environment)
 
 	// NFT entitlement gate — contracts from DB; Solana RPC from env.
 	nftContracts, err := st.ListNFTGateContracts(ctx)
