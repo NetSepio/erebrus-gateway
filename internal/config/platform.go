@@ -29,6 +29,12 @@ type PlatformValues struct {
 	RateLimitAuthPerMin     int
 	RateLimitRegisterPerMin int
 
+	// Node capacity gate thresholds.
+	NodeCPUMax            float64
+	NodeCPUSoft           float64
+	NodePeerRatioMax      float64
+	NodePeerConnectedSoft int
+
 	PasetoExpiration    time.Duration
 	PasetoSignedBy      string
 	AuthEULA            string
@@ -62,6 +68,11 @@ func DefaultPlatformValues() PlatformValues {
 
 		RateLimitAuthPerMin:     30,
 		RateLimitRegisterPerMin: 10,
+
+		NodeCPUMax:            80.0,
+		NodeCPUSoft:           60.0,
+		NodePeerRatioMax:      0.9,
+		NodePeerConnectedSoft: 80,
 
 		PasetoExpiration:    24 * time.Hour,
 		PasetoSignedBy:      "Erebrus",
@@ -214,6 +225,31 @@ func ParsePlatformSettings(raw map[string]string) (PlatformValues, error) {
 		s.XAPIBaseURL = v
 	}
 
+	if v, ok := raw["node_cpu_max"]; ok {
+		s.NodeCPUMax, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return s, fmt.Errorf("node_cpu_max: %w", err)
+		}
+	}
+	if v, ok := raw["node_cpu_soft"]; ok {
+		s.NodeCPUSoft, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return s, fmt.Errorf("node_cpu_soft: %w", err)
+		}
+	}
+	if v, ok := raw["node_peer_ratio_max"]; ok {
+		s.NodePeerRatioMax, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return s, fmt.Errorf("node_peer_ratio_max: %w", err)
+		}
+	}
+	if v, ok := raw["node_peer_connected_soft"]; ok {
+		s.NodePeerConnectedSoft, err = strconv.Atoi(v)
+		if err != nil {
+			return s, fmt.Errorf("node_peer_connected_soft: %w", err)
+		}
+	}
+
 	return s, nil
 }
 
@@ -231,6 +267,7 @@ var KnownPlatformKeys = []string{
 	"xp_uptime_day", "xp_tier_thresholds", "xp_social_verified",
 	"xp_free_days_cost", "xp_free_days_grant",
 	"rate_limit_auth_per_min", "rate_limit_register_per_min",
+	"node_cpu_max", "node_cpu_soft", "node_peer_ratio_max", "node_peer_connected_soft",
 	"paseto_expiration", "paseto_signed_by", "auth_eula",
 	"magic_link_expiration", "x_api_base_url",
 }

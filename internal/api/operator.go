@@ -31,15 +31,20 @@ type nodeOperatorView struct {
 	Org               *orgSummary     `json:"org,omitempty"`
 	Protocols         []string        `json:"protocols"`
 	LoadPct       float64         `json:"load_pct"`
+	WGPeersRegistered int         `json:"wg_peers_registered"`
+	WGPeersConnected  int         `json:"wg_peers_connected"`
+	AcceptingClients  bool        `json:"accepting_clients"`
 	RxBytes       int64           `json:"rx_bytes"`
 	TxBytes       int64           `json:"tx_bytes"`
 	Speedtest     json.RawMessage `json:"speedtest"`
 	LastHeartbeat *time.Time      `json:"last_heartbeat,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
+	CreatedAt     time.Time      `json:"created_at"`
 }
 
 func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole string) nodeOperatorView {
 	privileged := store.IsOrgPrivileged(callerRole)
+	cfg := s.platform.Snapshot()
+	load := parseLoad(n.Load)
 	return nodeOperatorView{
 		NodeID: n.PeerID, PeerID: n.PeerID, DID: n.DID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Name: n.Name, Region: n.Region, Zone: n.Zone, Status: n.Status,
@@ -47,7 +52,9 @@ func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole
 		Capabilities: n.Capabilities,
 		Endpoints:    enrichEndpointsForDiscovery(n.Endpoints, n.IP),
 		Org:          s.orgSummaryFor(c, n.OrgID, callerRole, privileged),
-		Protocols:    n.Protocols, LoadPct: loadPct(n.Load),
+		Protocols:    n.Protocols, LoadPct: load.CPUPct,
+		WGPeersRegistered: load.Registered, WGPeersConnected: load.Connected,
+		AcceptingClients: acceptingClients(cfg, load.Registered, load.Connected, load.CPUPct),
 		RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
 		LastHeartbeat: n.LastHeartbeat, CreatedAt: n.CreatedAt,
 	}

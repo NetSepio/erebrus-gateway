@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetSepio/gateway/internal/config"
 	"github.com/NetSepio/gateway/internal/metrics"
 	"github.com/NetSepio/gateway/internal/nodehub"
 	"github.com/NetSepio/gateway/internal/store"
@@ -38,6 +39,9 @@ type nodePublic struct {
 	IPHash        string          `json:"ip_hash,omitempty"`
 	Version       string          `json:"version,omitempty"`
 	LoadPct       float64         `json:"load_pct"`
+	WGPeersRegistered int         `json:"wg_peers_registered"`
+	WGPeersConnected  int         `json:"wg_peers_connected"`
+	AcceptingClients  bool        `json:"accepting_clients"`
 	RxBytes       int64           `json:"rx_bytes,omitempty"`
 	TxBytes       int64           `json:"tx_bytes,omitempty"`
 	Speedtest     json.RawMessage `json:"speedtest,omitempty"`
@@ -47,13 +51,16 @@ type nodePublic struct {
 	Org               *orgSummary `json:"org,omitempty"`
 }
 
-func nodePublicFrom(n *store.Node, org *orgSummary) nodePublic {
+func nodePublicFrom(n *store.Node, org *orgSummary, cfg config.PlatformValues) nodePublic {
+	load := parseLoad(n.Load)
 	return nodePublic{
 		NodeID: n.PeerID, Name: n.Name, DID: n.DID, PeerID: n.PeerID, WalletAddress: n.WalletAddress, Chain: n.Chain,
 		Region: n.Region, Zone: n.Zone, Status: n.Status, AccessMode: n.AccessMode, DeploymentProfile: n.DeploymentProfile, MinTier: n.MinTier,
 		Protocols: n.Protocols, Capabilities: n.Capabilities,
 		Endpoints: n.Endpoints, IPHash: n.IPHash, Version: n.Version,
-		LoadPct: loadPct(n.Load), RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
+		LoadPct: load.CPUPct, WGPeersRegistered: load.Registered, WGPeersConnected: load.Connected,
+		AcceptingClients: acceptingClients(cfg, load.Registered, load.Connected, load.CPUPct),
+		RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
 		LastHeartbeat: n.LastHeartbeat, LastPeerHandshake: n.LastPeerHandshake, CreatedAt: n.CreatedAt,
 		Org: org,
 	}
@@ -78,9 +85,10 @@ func (s *Server) handleListNodes(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to list nodes")
 		return
 	}
+	cfg := s.platform.Snapshot()
 	out := make([]nodePublic, 0, len(nodes))
 	for _, n := range nodes {
-		out = append(out, nodePublicFrom(n, s.orgSummaryFor(c, n.OrgID, "", false)))
+		out = append(out, nodePublicFrom(n, s.orgSummaryFor(c, n.OrgID, "", false), cfg))
 	}
 	_ = s.cache.SetJSON(c, key, out, 10*time.Second)
 	ok(c, http.StatusOK, out)
@@ -410,17 +418,53 @@ func enrichEndpointsForDiscovery(raw json.RawMessage, ip string) json.RawMessage
 	return out
 }
 
-// loadPct returns the node's CPU load percentage from its heartbeat payload.
-func loadPct(load json.RawMessage) float64 {
+type parsedLoad struct {
+	CPUPct     float64
+	Registered int
+	Connected  int
+}
+
+func parseLoad(load json.RawMessage) parsedLoad {
 	if len(load) == 0 {
-		return 0
+		return parsedLoad{}
 	}
 	var l struct {
-		CPUPct float64 `json:"cpu_pct"`
+		CPUPct            float64 `json:"cpu_pct"`
+		WGPeersRegistered int     `json:"wg_peers_registered"`
+		WGPeersConnected  int     `json:"wg_peers_connected"`
+		WGPeers           int     `json:"wg_peers"` // legacy field from old nodes
 	}
 	if err := json.Unmarshal(load, &l); err != nil {
-		return 0
+		return parsedLoad{}
 	}
-	return l.CPUPct
+	registered := l.WGPeersRegistered
+	if registered == 0 && l.WGPeers > 0 {
+		registered = l.WGPeers
+	}
+	// Missing wg_peers_connected defaults to 0 per business decision: the node
+	// reports the actual count, and legacy/empty values represent no connected peers.
+	connected := l.WGPeersConnected
+	return parsedLoad{CPUPct: l.CPUPct, Registered: registered, Connected: connected}
+}
+
+// loadPct returns the node's CPU load percentage from its heartbeat payload.
+func loadPct(load json.RawMessage) float64 {
+	return parseLoad(load).CPUPct
+}
+
+// acceptingClients decides whether a node should accept new VPN clients based
+// on the latest heartbeat. Reconnects are handled separately in the provision
+// path and are not gated by this predicate.
+func acceptingClients(cfg config.PlatformValues, registered, connected int, cpuPct float64) bool {
+	if cpuPct > cfg.NodeCPUMax {
+		return false
+	}
+	if registered > 0 && float64(connected)/float64(registered) >= cfg.NodePeerRatioMax {
+		return false
+	}
+	if cpuPct > cfg.NodeCPUSoft && connected >= cfg.NodePeerConnectedSoft {
+		return false
+	}
+	return true
 }
 
