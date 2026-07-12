@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -10,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// handlePlans lists subscription plans (public). In v2.0 plans describe limits;
-// there is no paid checkout — entitlement comes from the trial or NFT gating.
+// handlePlans lists organization plan limits. Personal subscription, trial, and
+// NFT rows are retained only for compatibility and do not grant access.
 func (s *Server) handlePlans(c *gin.Context) {
 	plans, err := s.store.ListPlans(c)
 	if err != nil {
@@ -21,7 +20,42 @@ func (s *Server) handlePlans(c *gin.Context) {
 	ok(c, http.StatusOK, plans)
 }
 
-// handleMySubscription returns the caller's current entitlement.
+// orgEntitlementResponse builds the organization-derived compatibility payload
+// returned by the legacy subscription endpoints while the webapp migrates. It is
+// the single source of truth: organization membership only — personal trials,
+// per-user subscriptions, and NFT grants are no longer consulted for access. The
+// legacy trial_consumed flag is reported read-only (informational) from retained
+// data; it never affects entitlement.
+func (s *Server) orgEntitlementResponse(c *gin.Context, uid string) (gin.H, error) {
+	ent, err := s.store.ResolveDropEntitlement(c, uid)
+	if err != nil {
+		return nil, err
+	}
+	orgPlan, err := s.store.UserOrgVPNPlan(c, uid)
+	if err != nil {
+		return nil, err
+	}
+	orgMember, _ := s.store.UserHasActiveOrgMembership(c, uid)
+	trialConsumed, _ := s.store.HasConsumedTrial(c, uid)
+
+	entitled := orgPlan != ""
+	planID, status := orgPlan, "active"
+	if !entitled {
+		planID, status = store.DropTierFree, "inactive"
+	}
+	return gin.H{
+		"status": status, "entitled": entitled, "plan_id": planID,
+		"source": "org", "org_member": orgMember,
+		"drop_tier":                 ent.Tier,
+		"drop_public_storage_bytes": ent.PublicStorageBytes,
+		"entitlement_org_id":        ent.EntitlementOrgID,
+		"trial_consumed":            trialConsumed,
+		"nft_gating":                s.nft.Enabled(),
+	}, nil
+}
+
+// handleMySubscription returns the caller's current entitlement, derived solely
+// from organization membership.
 func (s *Server) handleMySubscription(c *gin.Context) {
 	uid := userID(c)
 	if c.GetString(ctxRole) == token.RoleAdmin {
@@ -31,82 +65,31 @@ func (s *Server) handleMySubscription(c *gin.Context) {
 		})
 		return
 	}
-
-	// trial_consumed means "has the user ever started their one trial" — it is
-	// independent of which source currently entitles them (e.g. an NFT holder who
-	// previously used the trial still reports trial_consumed=true).
-	trialConsumed, err := s.store.HasConsumedTrial(c, uid)
+	resp, err := s.orgEntitlementResponse(c, uid)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to load subscription")
 		return
-	}
-	orgMember, _ := s.store.UserHasActiveOrgMembership(c, uid)
-
-	// Plan entitlement (holding a seat in an active paid-plan org) takes precedence
-	// over trial/NFT — it is ongoing, so a seated member shows source "plan" even
-	// while a trial is still active.
-	if orgPlan, perr := s.store.UserOrgVPNPlan(c, uid); perr == nil && orgPlan != "" {
-		ok(c, http.StatusOK, gin.H{
-			"status": "active", "entitled": true, "plan_id": orgPlan,
-			"source": "plan", "trial_consumed": trialConsumed, "nft_gating": s.nft.Enabled(),
-			"org_member": orgMember,
-		})
-		return
-	}
-
-	sub, err := s.store.ActiveSubscription(c, uid)
-	if err == nil {
-		ok(c, http.StatusOK, gin.H{
-			"status": sub.Status, "entitled": true, "plan_id": sub.PlanID,
-			"source": sub.Source, "current_period_end": sub.CurrentPeriodEnd,
-			"trial_consumed": trialConsumed, "nft_gating": s.nft.Enabled(),
-			"org_member": orgMember,
-		})
-		return
-	}
-	if !errors.Is(err, store.ErrNotFound) {
-		fail(c, http.StatusInternalServerError, "failed to load subscription")
-		return
-	}
-
-	resp := gin.H{
-		"entitled": false, "trial_consumed": trialConsumed,
-		"nft_gating": s.nft.Enabled(), "org_member": orgMember,
-	}
-	if last, err := s.store.LastSubscription(c, uid); err == nil {
-		resp["status"] = "expired"
-		resp["plan_id"] = last.PlanID
-		resp["source"] = last.Source
-		resp["current_period_end"] = last.CurrentPeriodEnd
-	} else if errors.Is(err, store.ErrNotFound) {
-		resp["status"] = "none"
 	}
 	ok(c, http.StatusOK, resp)
 }
 
-// handleStartTrial grants the one-time free trial (on the 'pro' plan).
+// handleStartTrial is retired. Trials are no longer granted; entitlement comes
+// from organization membership. The route is kept as a no-op that returns the
+// organization-derived entitlement so the webapp keeps working during migration.
 func (s *Server) handleStartTrial(c *gin.Context) {
-	plat := s.platform.Snapshot()
-	sub, err := s.store.StartTrial(c, userID(c), "pro", plat.TrialPeriod)
-	if errors.Is(err, store.ErrTrialUsed) {
-		fail(c, http.StatusConflict, "trial already used")
-		return
-	}
+	resp, err := s.orgEntitlementResponse(c, userID(c))
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to start trial")
+		fail(c, http.StatusInternalServerError, "failed to load subscription")
 		return
 	}
-	// Qualifying action for referrals: the referee's first trial start awards XP
-	// to both parties. Best-effort — never fail the trial on an XP write. The
-	// one-trial-per-user index guarantees this path fires at most once per user.
-	s.awardReferralXP(c, userID(c))
-	ok(c, http.StatusCreated, sub)
+	resp["trial_retired"] = true
+	ok(c, http.StatusOK, resp)
 }
 
 // awardReferralXP grants referral XP when the user was referred: +referrer to the
 // referrer, +referee to the referee (weights from config). Dedup-keyed per
-// referee, so every path that can complete a referral (trial start, signup
-// binding, late code redemption) may call it without double-awarding.
+// referee, so every path that can complete a referral (organization bootstrap,
+// signup binding, or late code redemption) may call it without double-awarding.
 func (s *Server) awardReferralXP(c *gin.Context, refereeID string) {
 	referrerID, err := s.store.ReferrerOf(c, refereeID)
 	if err != nil || referrerID == "" {
@@ -121,11 +104,9 @@ func (s *Server) awardReferralXP(c *gin.Context, refereeID string) {
 		"referral:"+refereeID+":referrer")
 }
 
-// handleNFTRefresh verifies the caller's wallet holds the gating NFT and
-// grants/refreshes a 30-day NFT-sourced entitlement (NFT_GATE_PERIOD) directly,
-// regardless of trial state: a new user goes straight to 30 days; a user mid-
-// trial is upgraded (the 30d NFT row outlasts the 7d trial, so it becomes the
-// active entitlement). Refreshable while held; one per user (idx_subs_one_nft).
+// handleNFTRefresh no longer grants a personal NFT entitlement — product access
+// is organization-only. It still verifies wallet ownership (so NFT-held XP keeps
+// accruing) and returns the organization-derived entitlement for compatibility.
 func (s *Server) handleNFTRefresh(c *gin.Context) {
 	if !s.nft.Enabled() {
 		fail(c, http.StatusServiceUnavailable, "NFT gating is not configured")
@@ -150,14 +131,17 @@ func (s *Server) handleNFTRefresh(c *gin.Context) {
 		return
 	}
 	plat := s.platform.Snapshot()
-	sub, err := s.store.GrantNFTSubscription(c, u.ID, plat.NFTGatePlanID, plat.NFTGatePeriod)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to grant entitlement")
-		return
-	}
 	// XP driver: holding the NFT earns XP once per month (best-effort).
 	month := time.Now().UTC().Format("200601")
 	_, _ = s.store.AwardXPOnce(c, u.ID, "nft_held", plat.XPNFTHeld,
 		map[string]any{"month": month}, "nft_held:"+u.ID+":"+month)
-	ok(c, http.StatusOK, sub)
+
+	resp, err := s.orgEntitlementResponse(c, u.ID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load subscription")
+		return
+	}
+	resp["nft_verified"] = true
+	resp["nft_grant_retired"] = true
+	ok(c, http.StatusOK, resp)
 }

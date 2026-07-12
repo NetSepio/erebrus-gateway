@@ -1,7 +1,9 @@
 # Erebrus Gateway
 
 Control plane for the Erebrus network: wallet auth, node discovery, WebSocket
-node hub, VPN client provisioning, entitlements, referrals/XP, and admin APIs.
+node hub, VPN client provisioning, organization entitlements, Drop (Kubo)
+storage, referrals/XP, and admin APIs. Product/Drop entitlement is
+organization-only (highest active org seat); see [GATEWAY.md](docs/GATEWAY.md).
 
 **Production API:** [gateway.erebrus.io](https://gateway.erebrus.io)  
 **Webapp:** [erebrus.io](https://erebrus.io)

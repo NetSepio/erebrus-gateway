@@ -106,16 +106,16 @@ func entitlementResponse(e *store.OrgEntitlement) gin.H {
 		return gin.H{}
 	}
 	out := gin.H{
-		"org_id":                       e.OrgID,
-		"plan":                         e.Plan,
-		"paid_seats_included":          e.PaidSeatsIncluded,
-		"managed_vpn_nodes_included":   e.ManagedVPNNodesIncluded,
-		"shield_instances_included":    e.ShieldInstancesIncluded,
-		"sentinel_licenses_included":   e.SentinelLicensesIncluded,
-		"audit_logs_enabled":           e.AuditLogsEnabled,
-		"advanced_analytics_enabled":   e.AdvancedAnalyticsEnabled,
-		"created_at":                   e.CreatedAt,
-		"updated_at":                   e.UpdatedAt,
+		"org_id":                     e.OrgID,
+		"plan":                       e.Plan,
+		"paid_seats_included":        e.PaidSeatsIncluded,
+		"managed_vpn_nodes_included": e.ManagedVPNNodesIncluded,
+		"shield_instances_included":  e.ShieldInstancesIncluded,
+		"sentinel_licenses_included": e.SentinelLicensesIncluded,
+		"audit_logs_enabled":         e.AuditLogsEnabled,
+		"advanced_analytics_enabled": e.AdvancedAnalyticsEnabled,
+		"created_at":                 e.CreatedAt,
+		"updated_at":                 e.UpdatedAt,
 	}
 	setIfNonEmpty(out, "public_node_access_tier", e.PublicNodeAccessTier)
 	setIfNonEmpty(out, "bandwidth_policy", e.BandwidthPolicy)

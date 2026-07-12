@@ -13,16 +13,16 @@ import (
 
 // nodeOperatorView is the operator's projection of an org node.
 type nodeOperatorView struct {
-	NodeID        string          `json:"node_id"`
-	PeerID        string          `json:"peer_id"`
-	DID           string          `json:"did"`
-	WalletAddress string          `json:"wallet_address,omitempty"`
-	Chain         string          `json:"chain,omitempty"`
-	Name          string          `json:"name"`
-	Region        string          `json:"region"`
-	Zone          string          `json:"zone,omitempty"`
-	Status        string          `json:"status"`
-	AccessMode    string          `json:"access_mode"`
+	NodeID            string          `json:"node_id"`
+	PeerID            string          `json:"peer_id"`
+	DID               string          `json:"did"`
+	WalletAddress     string          `json:"wallet_address,omitempty"`
+	Chain             string          `json:"chain,omitempty"`
+	Name              string          `json:"name"`
+	Region            string          `json:"region"`
+	Zone              string          `json:"zone,omitempty"`
+	Status            string          `json:"status"`
+	AccessMode        string          `json:"access_mode"`
 	DeploymentProfile string          `json:"deployment_profile"` // standard | shield | sentinel
 	MinTier           int             `json:"min_tier"`
 	Spec              json.RawMessage `json:"spec"`
@@ -30,15 +30,15 @@ type nodeOperatorView struct {
 	Endpoints         json.RawMessage `json:"endpoints"`
 	Org               *orgSummary     `json:"org,omitempty"`
 	Protocols         []string        `json:"protocols"`
-	LoadPct       float64         `json:"load_pct"`
-	WGPeersRegistered int         `json:"wg_peers_registered"`
-	WGPeersConnected  int         `json:"wg_peers_connected"`
-	AcceptingClients  bool        `json:"accepting_clients"`
-	RxBytes       int64           `json:"rx_bytes"`
-	TxBytes       int64           `json:"tx_bytes"`
-	Speedtest     json.RawMessage `json:"speedtest"`
-	LastHeartbeat *time.Time      `json:"last_heartbeat,omitempty"`
-	CreatedAt     time.Time      `json:"created_at"`
+	LoadPct           float64         `json:"load_pct"`
+	WGPeersRegistered int             `json:"wg_peers_registered"`
+	WGPeersConnected  int             `json:"wg_peers_connected"`
+	AcceptingClients  bool            `json:"accepting_clients"`
+	RxBytes           int64           `json:"rx_bytes"`
+	TxBytes           int64           `json:"tx_bytes"`
+	Speedtest         json.RawMessage `json:"speedtest"`
+	LastHeartbeat     *time.Time      `json:"last_heartbeat,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
 }
 
 func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole string) nodeOperatorView {
@@ -55,7 +55,7 @@ func (s *Server) buildNodeOperatorView(c *gin.Context, n *store.Node, callerRole
 		Protocols:    n.Protocols, LoadPct: load.CPUPct,
 		WGPeersRegistered: load.Registered, WGPeersConnected: load.Connected,
 		AcceptingClients: acceptingClients(cfg, load.Registered, load.Connected, load.CPUPct),
-		RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
+		RxBytes:          n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
 		LastHeartbeat: n.LastHeartbeat, CreatedAt: n.CreatedAt,
 	}
 }

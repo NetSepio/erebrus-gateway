@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -60,33 +59,15 @@ type claimReq struct {
 	Reward string `json:"reward"`
 }
 
-// handleRankClaim spends claimable XP on a reward. v2.0 ships "free_days"
-// (XP_FREE_DAYS_COST → XP_FREE_DAYS_GRANT days, source='rank').
+// handleRankClaim retains the legacy route without creating personal product
+// entitlement. Organization plans and seats are the only access source.
 func (s *Server) handleRankClaim(c *gin.Context) {
 	var req claimReq
 	if err := c.ShouldBindJSON(&req); err != nil || req.Reward == "" {
 		fail(c, http.StatusBadRequest, "reward is required")
 		return
 	}
-	if req.Reward != "free_days" {
-		fail(c, http.StatusBadRequest, "unknown reward")
-		return
-	}
-	plat := s.platform.Snapshot()
-	sub, err := s.store.ClaimFreeDays(c, userID(c), plat.XPFreeDaysCost, plat.XPFreeDaysGrant,
-		"pro", clientIP(c), clientDevice(c))
-	if errors.Is(err, store.ErrInsufficientXP) {
-		fail(c, http.StatusConflict, "not enough claimable XP")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "failed to claim reward")
-		return
-	}
-	ok(c, http.StatusOK, gin.H{
-		"reward": "free_days", "xp_spent": plat.XPFreeDaysCost,
-		"days": plat.XPFreeDaysGrant, "subscription": sub,
-	})
+	fail(c, http.StatusGone, "personal entitlement rewards are retired; access is managed by organization plans and seats")
 }
 
 // clampInt parses s as an int, applying a default for empty/invalid and clamping
@@ -111,11 +92,3 @@ func clampInt(s string, def, lo, hi int) int {
 // clientIP returns the caller's IP (gin honors X-Forwarded-For from trusted
 // proxies; S8 hardening pins the trusted set).
 func clientIP(c *gin.Context) string { return c.ClientIP() }
-
-// clientDevice prefers the app's explicit device hint, falling back to UA.
-func clientDevice(c *gin.Context) string {
-	if d := c.GetHeader("X-Erebrus-Client"); d != "" {
-		return d
-	}
-	return c.GetHeader("User-Agent")
-}

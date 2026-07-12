@@ -22,7 +22,7 @@ type UserOrgInvite struct {
 	NodeCount      int       `json:"node_count"`
 	Role           string    `json:"role"`
 	SeatTier       string    `json:"seat_tier,omitempty"`
-	Source         string    `json:"source"` // membership | email
+	Source         string    `json:"source"`                   // membership | email
 	InviteChannel  string    `json:"invite_channel,omitempty"` // wallet | email
 	InvitedByID    string    `json:"invited_by_id,omitempty"`
 	InvitedByName  string    `json:"invited_by_name,omitempty"`

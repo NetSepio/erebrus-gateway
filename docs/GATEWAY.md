@@ -48,7 +48,7 @@ internal/middleware/  HTTP metrics middleware
 internal/config/      Env config + platform_settings loader
 internal/token/       PASETO (user / node / admin)
 internal/wallet/      EVM + Solana signature verify
-internal/nftgate/     NFT entitlement check (optional)
+internal/nftgate/     Legacy NFT reward verification (optional)
 deploy/               Production docker-compose + OTel collector config
 ```
 
@@ -56,8 +56,17 @@ deploy/               Production docker-compose + OTel collector config
 
 - **Auth:** Reown wallet signature only (`chain ∈ {evm, sol}`). Email links via
   Resend OTP — never a login method.
-- **User entitlements (legacy):** 7-day trial (once), NFT → 30 days direct, rank perks,
-  admin bypass. Per-user; separate from org plans below.
+- **Entitlement (organization-only):** Product/Drop entitlement is derived
+  **solely** from organization membership — the effective tier is the highest
+  active org seat across all active memberships (owners and node operators map
+  to the org plan; ordinary members to their `seat_tier`). Personal trials, `ActiveSubscription`,
+  NFT grants, and personal subscription tiers are **no longer** entitlement
+  sources. Every user owns a personal `basic` org (backfilled by migration
+  `0026` for older users; created at first login for new ones), so an
+  authenticated user always resolves to at least Free. Legacy `subscriptions`
+  data is retained for a rollback window; `GET /api/v2/subscriptions`,
+  `…/trial`, and `…/nft/refresh` return organization-derived compatibility
+  responses while the webapp migrates.
 - **Orgs:** Control-plane workspace with plans (`basic` | `starter` | `pro` | `business`
   | `enterprise`), billing status, verification status, and optional public profile.
   Members have a **role** (management) and **seat_tier** (premium access) — these are
@@ -84,6 +93,74 @@ deploy/               Production docker-compose + OTel collector config
   APIs. Actual deploy and runtime sync deferred (see below).
 - **Social layer:** Referrals, XP/tiers, leaderboard, X/Telegram/email verify, perks.
 - **Activity log:** Authenticated mutations logged with IP + device for user visibility.
+- **Drop (Kubo storage):** Independent optional service (not a deployment
+  profile) available on Standard/Shield/Sentinel — see the Drop section below.
+
+---
+
+### Drop (Kubo storage)
+
+Drop lets users store files on Kubo (IPFS) nodes through the gateway. It is an
+**independent optional service** advertised per node over the WS control plane
+(`hello.capabilities.drop`, `heartbeat.drop`, `versions.kubo`,
+`services.drop` — see `docs/ws-protocol.md`), not a fourth deployment profile.
+
+- **Entitlement & quota:** Public storage quota is **per user across all public
+  nodes**, resolved from the highest active org seat: Free `500,000,000`,
+  Starter `1,000,000,000`, Pro `5,000,000,000`, Business `10,000,000,000` bytes
+  (`drop_tier_limits`, seeded by migration `0026`; admins can retune without a
+  redeploy). Enterprise currently mirrors Business — **provisional**, pending a
+  product decision. Private-org storage is governed by org membership and node
+  capacity, not the public per-user quota.
+- **Reservations:** Uploads reserve quota **and** node capacity atomically
+  (row-locked in one transaction) before any bytes move, keyed idempotently by
+  `(owner_user_id, idempotency_key)`. Reserved bytes convert to used bytes on
+  commit and are released on expiry/failure/delete. A background reconciliation
+  pass (`ExpireDropReservations`) releases TTL-expired reservations.
+- **Streaming:** Content streams gateway→node→Kubo (upload) and
+  node→gateway→caller (download) without buffering, via a dedicated
+  `internal/dropclient` with bounded dial/header timeouts and **no**
+  whole-transfer timeout (the short control-plane `internal/nodeclient` is
+  unchanged). Byte limits are enforced; upload bodies are never logged.
+- **Pins & deletion:** One pin row per `(file_id, node_id)`. Duplicate CID
+  references are tolerated; a physical unpin is issued only when the **last**
+  active reference on a node is deleted. Deletion, quota release, and unpin are
+  idempotent. Failed physical unpins and pins created before a metadata-commit
+  failure are persisted and retried by reconciliation after shared-CID checks.
+- **Direct retrieval + fallback:** Nodes advertise a public IPFS gateway base
+  additively (`hello.capabilities.drop.public_gateway_url`, http(s), never the
+  5001 RPC). Public file responses (`GET /drop/files`, `/drop/files/{id}`,
+  `/drop/public/{file_id}`) surface `gateway_url` (primary node) and
+  `gateway_urls` (all nodes holding the CID, from the `drop_pins` join;
+  `public_gateway_url(s)` are accepted aliases) so browsers can fetch
+  `<base>/ipfs/<cid>` directly. `GET /drop/public/{file_id}/content` is the
+  durable proxy fallback and sources the CID from **any** healthy pinned node,
+  so a single node going offline does not break retrieval. **Node-side
+  requirement:** for direct browser fetches the node's `/ipfs/*` must return
+  permissive CORS (`Access-Control-Allow-Origin` + `GET, HEAD, OPTIONS`); without
+  it the webapp silently falls back to the proxy (functional, but no offload).
+- **Security:** Public shares use opaque file ids, never raw CIDs, and enforce
+  `visibility=public` + `status=active`. Private confidentiality relies on
+  **client-side encryption**; the gateway stores only opaque encryption metadata
+  and a versioned, bounded, encrypted **vault** (`drop_crypto_profiles`) — no
+  plaintext key material or recovery secret. Owners/node-operators can inspect
+  metadata and delete but receive **no** decryption keys. Kubo RPC stays private
+  to the node's internal Docker network; the WebUI is reachable only through a
+  short-lived, same-origin gateway proxy session that never reveals the node
+  address. CIDs are validated and response filenames sanitized.
+
+**Deployment ordering:** deploy the node with a running Kubo daemon (private
+RPC on the internal Docker network) **before** relying on Drop APIs — the
+gateway only treats a node as usable once it reports Drop capability on `hello`
+and a healthy runtime `drop.state` on `heartbeat`. No gateway env var enables
+Drop; discovery follows node health. Drop rate limits live in
+`platform_settings` (`rate_limit_drop_write_per_min`,
+`rate_limit_drop_read_per_min`).
+
+Tables (migration `0026_drop.sql`): `drop_tier_limits`, `drop_uploads`,
+`drop_files`, `drop_pins`, `drop_quota_usage`, `node_drop_status`,
+`drop_crypto_profiles`. Migration `0027_drop_gateway_url.sql` adds
+`node_drop_status.public_gateway_url`.
 
 ---
 
@@ -108,9 +185,11 @@ The same file is used by the gateway container (`env_file`) and compose variable
 | `MANAGED_NODE_DEFAULT_REGION`, `MANAGED_NODE_DEFAULT_IMAGE`, `SENTINEL_IMAGE` | Managed-node defaults (DB reservation today) |
 | `EREBRUS_PUBLIC_BASE_URL`, `GATEWAY_PUBLIC_BASE_URL` | URLs embedded in generated installer/config (node repo) |
 
-Gating collections are in **`nft_gate_contracts`** (migration `0012`): IslandDAO + Erebrus Free Trial NFT on Solana; more chains/addresses can be inserted later.
+NFT verification collections are in **`nft_gate_contracts`** (migration `0012`):
+IslandDAO + the historical Erebrus Free Trial NFT on Solana. Verification may
+award social XP but never grants product access.
 
-Product tunables (XP weights, trial length, rate limits, PASETO TTL) live in
+Product tunables (XP weights, retained legacy trial values, rate limits, PASETO TTL) live in
 **`platform_settings`** (DB, migration `0009`) — editable via
 `PATCH /api/v2/admin/settings` without redeploy.
 
@@ -222,6 +301,16 @@ Key metrics: `netsepio_erebrus_gateway_requests_total`,
 `netsepio_erebrus_gateway_app_events_total`,
 `netsepio_erebrus_gateway_build_info`.
 
+Drop (Kubo storage) metrics — labels are deliberately low-cardinality (fixed
+enumerations only, never per-user/per-file):
+
+- `netsepio_erebrus_gateway_drop_uploads_total{result,scope}`
+- `netsepio_erebrus_gateway_drop_upload_bytes_total{scope}`
+- `netsepio_erebrus_gateway_drop_download_bytes_total{scope}`
+- `netsepio_erebrus_gateway_drop_quota_rejections_total{tier}`
+- `netsepio_erebrus_gateway_drop_node_operations_total{operation,result}`
+- `netsepio_erebrus_gateway_drop_reconciliation_jobs_total{operation,result}`
+
 Clients should send `X-Erebrus-Client: webapp|android|ios|node` for HTTP metrics.
 
 ---
@@ -278,7 +367,7 @@ Applied automatically on startup (`internal/store/migrations/`):
 | 0009 | Platform settings (DB-backed config) |
 | 0010 | Remove payments scaffolding |
 | 0011 | Org node model (`enrollment_secret`, `node_key`, drop `owner_user_id`, public/private `access_mode`) |
-| 0012 | `nft_gate_contracts` (Solana gating collections; IslandDAO + Erebrus Free Trial NFT) |
+| 0012 | `nft_gate_contracts` (Solana NFT verification collections; no product entitlement) |
 | 0013 | Node `zone` field |
 | 0014 | `last_peer_handshake` on nodes |
 | 0015 | Node wallet `chain` at enrollment |
@@ -298,7 +387,7 @@ Items intentionally stubbed or split across gateway + node repos. Implement afte
 |------|---------------|-------------------|
 | ~~**Node ID duality**~~ | **Fixed:** `peer_id` is canonical in APIs, tokens, WS hub, and discovery; internal UUID retained for DB FKs only | Node installer + `hello` should send `peer_id` as `node_id` (see `ws-protocol.md`) |
 | **Public node access tier** | Stored in `org_entitlements.public_node_access_tier` | Wire into discovery/VPN gating (replace or combine with XP `min_tier`) |
-| **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning should check org seat, not only user trial/NFT |
+| **Seat tier → VPN access** | `seat_tier` on `org_members`; assign validates plan | Client provisioning checks organization membership and seats, never legacy personal trial/NFT rows |
 | ~~**Firewall runtime**~~ | **Fixed:** `/firewall/sync` pushes rules via WS `sync_firewall`; restart/reset-credentials dispatch WS commands | Node proxies to Sentinel API / Shield admin |
 | **Sentinel unlicensed** | `ReconcileUnlicensedSentinel` helper exists | Call when node reports Sentinel without license; surface user message |
 | **Managed provisioning** | DB rows with `managed_by=erebrus`, status `pending`/`provisioning` | SSH/cloud deploy using `NODE_PROVISION_SSH_*` and image env vars |
@@ -350,10 +439,10 @@ go build ./... && go vet ./... && go test ./...
 
 ### S3 — Entitlements
 
-- [ ] Trial ≈ 7d (`trial_period` in platform_settings); second trial → 409
-- [ ] No trial → provision **402**; with trial → succeeds
-- [ ] NFT refresh → 30d `source:nft` (when `nft_gate_contracts` + `SOLANA_RPC_URL` set)
-- [ ] Admin bypass works; `/payments*` → 404
+- [ ] Missing users are backfilled into a personal basic organization
+- [ ] Free/Starter/Pro/Business resolve from active organization plan/seat data
+- [ ] Personal trials, subscriptions, NFT rows, and rank grants never authorize product access
+- [ ] Legacy subscription routes return compatibility data only; `/payments*` → 404
 
 ### S4 — Operator layer
 
@@ -366,12 +455,12 @@ go build ./... && go vet ./... && go test ./...
 ### S5 — Referrals
 
 - [ ] Migration `0005`; `GET /referrals/me` returns stable code
-- [ ] `ref` on signup binds referrer; first trial → referral XP once
+- [ ] `ref` on signup binds referrer; first active org membership → referral XP once
 
 ### S6 — XP / tiers / leaderboard
 
 - [ ] Migration `0006`; tiers from `xp_earned`; `GET /rank/me`, `GET /leaderboard`
-- [ ] `POST /rank/claim` spends XP → `source:rank` entitlement
+- [ ] `POST /rank/claim` returns 410 and never creates personal entitlement
 - [ ] Drivers idempotent: email, NFT monthly, operator uptime
 
 ### S7 — Social + perks + tier pools
@@ -408,7 +497,7 @@ go build ./... && go vet ./... && go test ./...
 | Nodes | `GET /nodes`, `POST /nodes/register`, `POST /nodes/:id/heartbeat`, `GET /nodes/ws` |
 | VPN | `/vpn/clients`, `/vpn/clients/:id/config` |
 | Account | `/account/profile`, `/account/activity` |
-| Subs | `/subscriptions/*`, `/subscriptions/trial` |
+| Legacy subscription compatibility | `/subscriptions/*`, `/subscriptions/trial` (organization-derived; no grants) |
 | Social | `/referrals/me`, `/rank/*`, `/leaderboard`, `/social/*`, `/perks/*` |
 | Orgs | `/orgs`, `/orgs/:id/entitlements`, `/orgs/:id/profile`, `/orgs/:id/seats`, `/orgs/:id/nodes`, `/orgs/:id/nodes/:nodeId/firewall/*` |
 | Public | `/public/orgs/:slug` |

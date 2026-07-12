@@ -9,14 +9,14 @@ import (
 
 // NodeMetricPoint is one downsampled time-series sample for a node.
 type NodeMetricPoint struct {
-	Bucket          time.Time `json:"bucket"`
-	WGPeers         int       `json:"wg_peers"`
-	WGPeersConnected int      `json:"wg_peers_connected"`
-	ProxySessions   int       `json:"proxy_sessions"`
-	RxBytes         int64     `json:"rx_bytes"`
-	TxBytes         int64     `json:"tx_bytes"`
-	CPUPct          float64   `json:"cpu_pct"`
-	MemPct          float64   `json:"mem_pct"`
+	Bucket           time.Time `json:"bucket"`
+	WGPeers          int       `json:"wg_peers"`
+	WGPeersConnected int       `json:"wg_peers_connected"`
+	ProxySessions    int       `json:"proxy_sessions"`
+	RxBytes          int64     `json:"rx_bytes"`
+	TxBytes          int64     `json:"tx_bytes"`
+	CPUPct           float64   `json:"cpu_pct"`
+	MemPct           float64   `json:"mem_pct"`
 }
 
 // RecordNodeMetrics upserts the per-minute rollup for a node from a heartbeat.

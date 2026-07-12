@@ -581,30 +581,14 @@ func (s *Server) handleUserOrgProvisionClient(c *gin.Context) {
 				return
 			}
 		} else {
-			sub, err := s.store.ActiveSubscription(c, uid)
-			if errors.Is(err, store.ErrNotFound) {
-				orgPlan, perr := s.store.UserOrgVPNPlan(c, uid)
-				if perr != nil {
-					fail(c, http.StatusInternalServerError, "entitlement check failed")
-					return
-				}
-				if orgPlan == "" {
-					fail(c, http.StatusPaymentRequired, "your trial has ended — contact support to upgrade your plan, or hold the access NFT")
-					return
-				}
-				_ = orgPlan
-			} else if err != nil {
+			orgPlan, err := s.store.UserOrgVPNPlan(c, uid)
+			if err != nil {
 				fail(c, http.StatusInternalServerError, "entitlement check failed")
 				return
-			} else if sub != nil {
-				if plan, err := s.store.GetPlan(c, sub.PlanID); err == nil {
-					if existing, _ := s.store.FindClientByUserNodeWGKey(c, uid, node.ID, req.WGPublicKey); existing == nil {
-						if n, _ := s.store.CountActiveClientsByUser(c, uid); n >= plan.MaxClients {
-							fail(c, http.StatusConflict, "client limit reached for your plan")
-							return
-						}
-					}
-				}
+			}
+			if orgPlan == "" {
+				fail(c, http.StatusPaymentRequired, "active organization membership is required to use public nodes")
+				return
 			}
 		}
 	}

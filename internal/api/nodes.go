@@ -21,34 +21,34 @@ import (
 // nodePublic is the public discovery projection for pickers and dashboards.
 // Excludes raw IP, org_id, enrollment secrets, and full spec blobs.
 type nodePublic struct {
-	NodeID        string          `json:"node_id"`
-	Name          string          `json:"name"`
-	DID           string          `json:"did"`
-	PeerID        string          `json:"peer_id,omitempty"`
-	WalletAddress string          `json:"wallet_address,omitempty"`
-	Chain         string          `json:"chain,omitempty"`
-	Region        string          `json:"region"`
-	Zone          string          `json:"zone,omitempty"`
-	Status        string          `json:"status"`
-	AccessMode    string          `json:"access_mode"`
-	DeploymentProfile string      `json:"deployment_profile"`
-	MinTier       int             `json:"min_tier"`
-	Protocols     []string        `json:"protocols"`
-	Capabilities  json.RawMessage `json:"capabilities"`
-	Endpoints     json.RawMessage `json:"endpoints"`
-	IPHash        string          `json:"ip_hash,omitempty"`
-	Version       string          `json:"version,omitempty"`
-	LoadPct       float64         `json:"load_pct"`
-	WGPeersRegistered int         `json:"wg_peers_registered"`
-	WGPeersConnected  int         `json:"wg_peers_connected"`
-	AcceptingClients  bool        `json:"accepting_clients"`
-	RxBytes       int64           `json:"rx_bytes,omitempty"`
-	TxBytes       int64           `json:"tx_bytes,omitempty"`
-	Speedtest     json.RawMessage `json:"speedtest,omitempty"`
-	LastHeartbeat     *time.Time  `json:"last_heartbeat,omitempty"`
-	LastPeerHandshake *time.Time  `json:"last_peer_handshake,omitempty"`
-	CreatedAt         time.Time  `json:"created_at,omitempty"`
-	Org               *orgSummary `json:"org,omitempty"`
+	NodeID            string          `json:"node_id"`
+	Name              string          `json:"name"`
+	DID               string          `json:"did"`
+	PeerID            string          `json:"peer_id,omitempty"`
+	WalletAddress     string          `json:"wallet_address,omitempty"`
+	Chain             string          `json:"chain,omitempty"`
+	Region            string          `json:"region"`
+	Zone              string          `json:"zone,omitempty"`
+	Status            string          `json:"status"`
+	AccessMode        string          `json:"access_mode"`
+	DeploymentProfile string          `json:"deployment_profile"`
+	MinTier           int             `json:"min_tier"`
+	Protocols         []string        `json:"protocols"`
+	Capabilities      json.RawMessage `json:"capabilities"`
+	Endpoints         json.RawMessage `json:"endpoints"`
+	IPHash            string          `json:"ip_hash,omitempty"`
+	Version           string          `json:"version,omitempty"`
+	LoadPct           float64         `json:"load_pct"`
+	WGPeersRegistered int             `json:"wg_peers_registered"`
+	WGPeersConnected  int             `json:"wg_peers_connected"`
+	AcceptingClients  bool            `json:"accepting_clients"`
+	RxBytes           int64           `json:"rx_bytes,omitempty"`
+	TxBytes           int64           `json:"tx_bytes,omitempty"`
+	Speedtest         json.RawMessage `json:"speedtest,omitempty"`
+	LastHeartbeat     *time.Time      `json:"last_heartbeat,omitempty"`
+	LastPeerHandshake *time.Time      `json:"last_peer_handshake,omitempty"`
+	CreatedAt         time.Time       `json:"created_at,omitempty"`
+	Org               *orgSummary     `json:"org,omitempty"`
 }
 
 func nodePublicFrom(n *store.Node, org *orgSummary, cfg config.PlatformValues) nodePublic {
@@ -60,7 +60,7 @@ func nodePublicFrom(n *store.Node, org *orgSummary, cfg config.PlatformValues) n
 		Endpoints: n.Endpoints, IPHash: n.IPHash, Version: n.Version,
 		LoadPct: load.CPUPct, WGPeersRegistered: load.Registered, WGPeersConnected: load.Connected,
 		AcceptingClients: acceptingClients(cfg, load.Registered, load.Connected, load.CPUPct),
-		RxBytes: n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
+		RxBytes:          n.RxBytes, TxBytes: n.TxBytes, Speedtest: n.Speedtest,
 		LastHeartbeat: n.LastHeartbeat, LastPeerHandshake: n.LastPeerHandshake, CreatedAt: n.CreatedAt,
 		Org: org,
 	}
@@ -96,21 +96,21 @@ func (s *Server) handleListNodes(c *gin.Context) {
 
 type nodeRegisterReq struct {
 	RegistrationToken string `json:"registration_token"`
-	PeerID           string `json:"peer_id"`
+	PeerID            string `json:"peer_id"`
 	// step 2
-	FlowID        string `json:"flow_id"`
-	Signature     string `json:"signature"`
-	PublicKey     string `json:"public_key"`
-	WalletAddress string `json:"wallet_address"`
-	Chain         string `json:"chain"`
-	DID           string `json:"did"`
-	Name          string `json:"name"`
-	Region        string `json:"region"`
-	Zone          string `json:"zone"`
-	APIBaseURL    string `json:"api_base_url"`
-	NodeKey       string `json:"node_key"`
-	AccessMode         string `json:"access_mode"` // public | private
-	DeploymentProfile  string `json:"deployment_profile"`
+	FlowID            string `json:"flow_id"`
+	Signature         string `json:"signature"`
+	PublicKey         string `json:"public_key"`
+	WalletAddress     string `json:"wallet_address"`
+	Chain             string `json:"chain"`
+	DID               string `json:"did"`
+	Name              string `json:"name"`
+	Region            string `json:"region"`
+	Zone              string `json:"zone"`
+	APIBaseURL        string `json:"api_base_url"`
+	NodeKey           string `json:"node_key"`
+	AccessMode        string `json:"access_mode"` // public | private
+	DeploymentProfile string `json:"deployment_profile"`
 }
 
 func (s *Server) nodeChallengeMessage(flowID string) string {
@@ -329,13 +329,13 @@ type nodeCommandReq struct {
 
 // allowedNodeCommandActions restricts the actions an admin may send to a node.
 var allowedNodeCommandActions = map[string]bool{
-	nodehub.ActionDrain:                true,
-	nodehub.ActionUndrain:              true,
-	nodehub.ActionRotateReality:        true,
-	nodehub.ActionResyncPeers:          true,
-	nodehub.ActionSyncApps:             true,
-	nodehub.ActionSyncFirewall:         true,
-	nodehub.ActionRestartFirewall:      true,
+	nodehub.ActionDrain:                    true,
+	nodehub.ActionUndrain:                  true,
+	nodehub.ActionRotateReality:            true,
+	nodehub.ActionResyncPeers:              true,
+	nodehub.ActionSyncApps:                 true,
+	nodehub.ActionSyncFirewall:             true,
+	nodehub.ActionRestartFirewall:          true,
 	nodehub.ActionResetFirewallCredentials: true,
 	nodehub.ActionSetFirewallCredentials:   true,
 }
@@ -467,4 +467,3 @@ func acceptingClients(cfg config.PlatformValues, registered, connected int, cpuP
 	}
 	return true
 }
-

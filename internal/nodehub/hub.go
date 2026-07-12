@@ -241,6 +241,11 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 			c.hub.log.Warn("apply hello services failed", "peer_id", c.peerID, "err", err)
 		}
 	}
+	if d := h.Capabilities.Drop; d != nil {
+		if err := c.hub.store.ApplyDropCapability(ctx, c.peerID, d.Enabled, d.AcceptsPublicUploads, d.WebUIAvailable, d.PublicGatewayURL); err != nil {
+			c.hub.log.Warn("apply drop capability failed", "peer_id", c.peerID, "err", err)
+		}
+	}
 	c.setRegion(h.Spec.Region)
 	if frame, err := wrap(TypeHelloAck, HelloAck{HeartbeatIntervalSec: heartbeatIntervalSec}); err == nil {
 		select {
@@ -272,6 +277,12 @@ func (c *conn) onHeartbeat(ctx context.Context, data json.RawMessage) {
 	if len(hb.Services) > 0 {
 		if err := c.hub.store.UpdateNodeServicesFromReport(ctx, c.peerID, hb.Services); err != nil {
 			c.hub.log.Warn("apply heartbeat services failed", "peer_id", c.peerID, "err", err)
+		}
+	}
+	if d := hb.Drop; d != nil {
+		if err := c.hub.store.ApplyDropStatus(ctx, c.peerID, d.State, hb.Versions["kubo"],
+			d.RepoSizeBytes, d.StorageMaxBytes, d.NumObjects); err != nil {
+			c.hub.log.Warn("apply drop status failed", "peer_id", c.peerID, "err", err)
 		}
 	}
 	metrics.NodeHeartbeatsTotal.WithLabelValues("success", c.hub.environment).Inc()
