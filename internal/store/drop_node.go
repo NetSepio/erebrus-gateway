@@ -28,21 +28,24 @@ func NormalizeDropState(state string) string {
 
 // ApplyDropCapability records the Drop capability a node advertised in its hello
 // frame. Capacity/health fields are left untouched (they come from heartbeats).
-func (s *Store) ApplyDropCapability(ctx context.Context, nodeID string, enabled, acceptsPublic, webui bool) error {
+// publicGatewayURL is the node's public IPFS gateway base (http(s)); it is
+// stored for direct-retrieval links and never includes the Kubo RPC endpoint.
+func (s *Store) ApplyDropCapability(ctx context.Context, nodeID string, enabled, acceptsPublic, webui bool, publicGatewayURL string) error {
 	initialState := DropStateDisabled
 	if enabled {
 		initialState = DropStateStarting
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO node_drop_status (node_id, enabled, accepts_public_uploads, webui_available, state, last_reported_at)
-		 VALUES ($1,$2,$3,$4,$5, now())
+		`INSERT INTO node_drop_status (node_id, enabled, accepts_public_uploads, webui_available, state, public_gateway_url, last_reported_at)
+		 VALUES ($1,$2,$3,$4,$5, NULLIF($6,''), now())
 		 ON CONFLICT (node_id) DO UPDATE SET
 		     enabled = EXCLUDED.enabled,
 		     accepts_public_uploads = EXCLUDED.accepts_public_uploads,
 		     webui_available = EXCLUDED.webui_available,
+		     public_gateway_url = EXCLUDED.public_gateway_url,
 		     state = CASE WHEN EXCLUDED.enabled = false THEN $5 ELSE node_drop_status.state END,
 		     last_reported_at = now(), updated_at = now()`,
-		nodeID, enabled, acceptsPublic, webui, initialState)
+		nodeID, enabled, acceptsPublic, webui, initialState, publicGatewayURL)
 	return err
 }
 
@@ -67,15 +70,81 @@ func (s *Store) ApplyDropStatus(ctx context.Context, nodeID, state, kuboVersion 
 }
 
 const nodeDropStatusCols = `node_id, enabled, accepts_public_uploads, webui_available, state,
-	COALESCE(kubo_version,''), repo_size_bytes, storage_max_bytes, num_objects, reserved_bytes, last_reported_at`
+	COALESCE(kubo_version,''), repo_size_bytes, storage_max_bytes, num_objects, reserved_bytes,
+	COALESCE(public_gateway_url,''), last_reported_at`
 
 func scanNodeDropStatus(sc interface{ Scan(...any) error }) (*NodeDropStatus, error) {
 	n := &NodeDropStatus{}
 	if err := sc.Scan(&n.NodeID, &n.Enabled, &n.AcceptsPublicUploads, &n.WebUIAvailable, &n.State,
-		&n.KuboVersion, &n.RepoSizeBytes, &n.StorageMaxBytes, &n.NumObjects, &n.ReservedBytes, &n.LastReportedAt); err != nil {
+		&n.KuboVersion, &n.RepoSizeBytes, &n.StorageMaxBytes, &n.NumObjects, &n.ReservedBytes,
+		&n.PublicGatewayURL, &n.LastReportedAt); err != nil {
 		return nil, err
 	}
 	return n, nil
+}
+
+// DropObjectSource is a node that holds a given CID pinned, along with its
+// public gateway base for direct retrieval. Only http(s) gateway bases are
+// returned; the Kubo RPC is never exposed.
+type DropObjectSource struct {
+	NodeID           string `json:"node_id"`
+	PublicGatewayURL string `json:"gateway_url"`
+}
+
+// DropObjectSources returns the healthy nodes that currently hold cid pinned
+// and advertise a public gateway base, ordered with a preferred node first (its
+// gateway_url leads the list). Used to build direct + fallback retrieval links.
+func (s *Store) DropObjectSources(ctx context.Context, cid, preferNodeID string) ([]DropObjectSource, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.node_id, d.public_gateway_url
+		   FROM drop_pins p
+		   JOIN node_drop_status d ON d.node_id = p.node_id
+		  WHERE p.cid = $1 AND p.status = 'pinned'
+		    AND d.enabled = true AND d.state IN ('active','degraded')
+		    AND d.public_gateway_url IS NOT NULL AND d.public_gateway_url <> ''
+		  ORDER BY (d.node_id = $2) DESC, d.node_id`,
+		cid, preferNodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropObjectSource
+	for rows.Next() {
+		var src DropObjectSource
+		if err := rows.Scan(&src.NodeID, &src.PublicGatewayURL); err != nil {
+			return nil, err
+		}
+		out = append(out, src)
+	}
+	return out, rows.Err()
+}
+
+// DropPinnedNodes returns the ids of healthy nodes that currently hold cid
+// pinned, preferred node first. Used to source retrieval (node→gateway→caller)
+// from any node holding the object, so a single node going down does not break
+// reads. Unlike DropObjectSources this does not require a public gateway base.
+func (s *Store) DropPinnedNodes(ctx context.Context, cid, preferNodeID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.node_id
+		   FROM drop_pins p
+		   JOIN node_drop_status d ON d.node_id = p.node_id
+		  WHERE p.cid = $1 AND p.status = 'pinned'
+		    AND d.enabled = true AND d.state IN ('active','degraded')
+		  ORDER BY (d.node_id = $2) DESC, d.node_id`,
+		cid, preferNodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // GetNodeDropStatus returns the latest Drop status for a node, or ErrNotFound.

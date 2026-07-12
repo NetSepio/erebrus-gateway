@@ -124,7 +124,7 @@ const canonicalDropHello = `{
     "spec": { "cpu": "4 vCPU", "mem_mb": 8192, "region": "SG", "ip": "203.0.113.10" },
     "capabilities": {
       "app_hosting": false, "wildcard_domain": "",
-      "drop": { "enabled": true, "accepts_public_uploads": true, "webui_available": true }
+      "drop": { "enabled": true, "accepts_public_uploads": true, "webui_available": true, "public_gateway_url": "https://node-sg-1.gw.erebrus.io" }
     },
     "endpoints": {
       "wireguard": { "port": 51820, "public_key": "k" },
@@ -149,6 +149,9 @@ func TestParseDropHelloCapability(t *testing.T) {
 	}
 	if !h.Capabilities.Drop.Enabled || !h.Capabilities.Drop.AcceptsPublicUploads || !h.Capabilities.Drop.WebUIAvailable {
 		t.Errorf("drop capability = %+v", h.Capabilities.Drop)
+	}
+	if h.Capabilities.Drop.PublicGatewayURL != "https://node-sg-1.gw.erebrus.io" {
+		t.Errorf("drop public_gateway_url = %q", h.Capabilities.Drop.PublicGatewayURL)
 	}
 	if h.Services["drop"] != "active" {
 		t.Errorf("services.drop = %q", h.Services["drop"])

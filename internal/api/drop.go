@@ -411,7 +411,7 @@ func (s *Server) handleDropListFiles(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(files))
 	for _, f := range files {
-		out = append(out, dropFileView(f, true))
+		out = append(out, s.renderDropFile(c, f, true))
 	}
 	ok(c, http.StatusOK, gin.H{"files": out})
 }
@@ -421,7 +421,7 @@ func (s *Server) handleDropGetFile(c *gin.Context) {
 	if !ok2 {
 		return
 	}
-	ok(c, http.StatusOK, dropFileView(f, owner))
+	ok(c, http.StatusOK, s.renderDropFile(c, f, owner))
 }
 
 func (s *Server) handleDropFileContent(c *gin.Context) {
@@ -468,7 +468,7 @@ func (s *Server) handleDropPatchFile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to update file")
 		return
 	}
-	ok(c, http.StatusOK, dropFileView(f, true))
+	ok(c, http.StatusOK, s.renderDropFile(c, f, true))
 }
 
 func (s *Server) handleDropDeleteFile(c *gin.Context) {
@@ -656,14 +656,41 @@ func (s *Server) handleDropPutVault(c *gin.Context) {
 
 // ── public opaque share ────────────────────────────
 
+// handleDropPublicGet returns public metadata for an opaquely-identified file,
+// including the hosting node's gateway_url and any other nodes' gateway_urls
+// that hold the CID (for direct, CORS-permitting browser retrieval). The
+// gateway proxy at /content remains the durable fallback.
 func (s *Server) handleDropPublicGet(c *gin.Context) {
 	f, ok2 := s.loadPublicDropFile(c)
 	if !ok2 {
 		return
 	}
-	ok(c, http.StatusOK, dropFileView(f, false))
+	sources, _ := s.store.DropObjectSources(c, f.CID, f.NodeID)
+	gwURL, gwURLs := dropGatewayLinks(sources, f.CID)
+	h := gin.H{
+		"id":           f.ID,
+		"cid":          f.CID,
+		"filename":     f.Filename,
+		"size_bytes":   f.SizeBytes,
+		"content_type": f.ContentType,
+		"encrypted":    f.Encrypted,
+		"created_at":   f.CreatedAt,
+		"content_url":  "/api/v2/drop/public/" + f.ID + "/content",
+	}
+	if gwURL != "" {
+		h["gateway_url"] = gwURL
+		h["public_gateway_url"] = gwURL // webapp-accepted alias
+	}
+	if len(gwURLs) > 0 {
+		h["gateway_urls"] = gwURLs
+		h["public_gateway_urls"] = gwURLs // webapp-accepted alias
+	}
+	ok(c, http.StatusOK, h)
 }
 
+// handleDropPublicContent streams a public file's bytes through the gateway.
+// It sources the object from any healthy node that holds the CID pinned so a
+// single node going offline does not break retrieval.
 func (s *Server) handleDropPublicContent(c *gin.Context) {
 	f, ok2 := s.loadPublicDropFile(c)
 	if !ok2 {
@@ -672,6 +699,9 @@ func (s *Server) handleDropPublicContent(c *gin.Context) {
 	s.streamDropContent(c, f)
 }
 
+// loadPublicDropFile loads a file and enforces that it is publicly shareable
+// (public visibility + scope, unencrypted, active). Any other state is 404 so
+// the opaque id does not leak the existence of private/deleted files.
 func (s *Server) loadPublicDropFile(c *gin.Context) (*store.DropFile, bool) {
 	f, err := s.store.GetDropFile(c, c.Param("fileId"))
 	if errors.Is(err, store.ErrNotFound) {
@@ -849,35 +879,65 @@ func (s *Server) canDeleteDropFile(c *gin.Context, f *store.DropFile) bool {
 	return false
 }
 
-// streamDropContent streams a file's bytes from its node through the gateway to
+// streamDropContent streams a file's bytes from a node through the gateway to
 // the caller without buffering. It validates the CID, sanitizes the filename in
 // the Content-Disposition header, and never trusts a client-provided MIME type
-// blindly (the stored content type is echoed only as a hint).
+// blindly (the stored content type is echoed only as a hint). Retrieval is
+// sourced from any healthy node holding the CID pinned (origin first), so a
+// single node going offline does not break reads.
 func (s *Server) streamDropContent(c *gin.Context, f *store.DropFile) {
 	if !validCID(f.CID) {
 		fail(c, http.StatusUnprocessableEntity, "invalid object reference")
 		return
 	}
-	if !s.revalidateDropNode(c, f.NodeID, f.StorageScope, false) {
+	candidates, err := s.store.DropPinnedNodes(c, f.CID, f.NodeID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to resolve object sources")
 		return
 	}
-	baseURL, nodeKey, tok, okNode := s.dropNodeEndpoint(c, f.NodeID, dropclient.PurposeRead)
-	if !okNode {
-		return
+	if len(candidates) == 0 {
+		// Fall back to the recorded origin node when the pin index has no
+		// healthy match (e.g. status not yet reconciled to 'pinned').
+		candidates = []string{f.NodeID}
 	}
 	maxBytes := f.SizeBytes
 	if maxBytes <= 0 {
 		maxBytes = store.DropMaxFileBytes
 	}
-	rc, ctype, err := s.drop.GetObject(c.Request.Context(), baseURL, tok, nodeKey, f.CID, maxBytes)
-	if dropclient.ErrNotFound(err) {
+	var (
+		rc     io.ReadCloser
+		ctype  string
+		anyErr bool
+	)
+	for _, nodeID := range candidates {
+		baseURL, nodeKey, _, aerr := s.store.NodeAPI(c, nodeID)
+		if aerr != nil || baseURL == "" {
+			anyErr = true
+			continue
+		}
+		tok, terr := s.tokens.IssueGatewayCall(nodeID, dropclient.PurposeRead)
+		if terr != nil {
+			anyErr = true
+			continue
+		}
+		r, ct2, gerr := s.drop.GetObject(c.Request.Context(), baseURL, tok, nodeKey, f.CID, maxBytes)
+		if gerr != nil {
+			if !dropclient.ErrNotFound(gerr) {
+				anyErr = true
+			}
+			continue
+		}
+		rc, ctype = r, ct2
+		break
+	}
+	if rc == nil {
+		if anyErr {
+			metrics.DropNodeOperationsTotal.WithLabelValues("download", "failed").Inc()
+			fail(c, http.StatusBadGateway, "node download failed")
+			return
+		}
 		metrics.DropNodeOperationsTotal.WithLabelValues("download", "missing").Inc()
 		fail(c, http.StatusNotFound, "object not found on node")
-		return
-	}
-	if err != nil {
-		metrics.DropNodeOperationsTotal.WithLabelValues("download", "failed").Inc()
-		fail(c, http.StatusBadGateway, "node download failed")
 		return
 	}
 	defer rc.Close()
@@ -903,6 +963,50 @@ func (s *Server) streamDropContent(c *gin.Context, f *store.DropFile) {
 	}
 	metrics.DropNodeOperationsTotal.WithLabelValues("download", result).Inc()
 	metrics.DropDownloadBytesTotal.WithLabelValues(f.StorageScope).Add(float64(n))
+}
+
+// renderDropFile builds a file's response view, augmenting public files that
+// have a committed CID with direct-retrieval gateway URLs (origin node first
+// plus any other nodes holding the CID). Private/encrypted files never expose
+// gateway URLs — their content is only reachable via the authenticated proxy.
+func (s *Server) renderDropFile(c *gin.Context, f *store.DropFile, owner bool) gin.H {
+	h := dropFileView(f, owner)
+	if f.Visibility == store.DropVisibilityPublic && f.Status == store.DropFileActive && f.CID != "" {
+		if sources, err := s.store.DropObjectSources(c, f.CID, f.NodeID); err == nil {
+			if gwURL, gwURLs := dropGatewayLinks(sources, f.CID); gwURL != "" {
+				h["gateway_url"] = gwURL
+				h["public_gateway_url"] = gwURL
+				if len(gwURLs) > 0 {
+					h["gateway_urls"] = gwURLs
+					h["public_gateway_urls"] = gwURLs
+				}
+			}
+		}
+	}
+	return h
+}
+
+// dropGatewayLinks turns pinned-node sources into a primary gateway_url and the
+// full list of per-node CID URLs. Each URL is `<gateway-base>/ipfs/<cid>`; the
+// primary is the preferred (origin) node, which DropObjectSources returns first.
+func dropGatewayLinks(sources []store.DropObjectSource, cid string) (primary string, all []string) {
+	seen := map[string]struct{}{}
+	for _, src := range sources {
+		base := strings.TrimRight(src.PublicGatewayURL, "/")
+		if base == "" {
+			continue
+		}
+		u := base + "/ipfs/" + cid
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		all = append(all, u)
+	}
+	if len(all) > 0 {
+		primary = all[0]
+	}
+	return primary, all
 }
 
 // contentDisposition builds a safe attachment header, stripping control

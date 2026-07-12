@@ -242,7 +242,7 @@ func (c *conn) onHello(ctx context.Context, data json.RawMessage) {
 		}
 	}
 	if d := h.Capabilities.Drop; d != nil {
-		if err := c.hub.store.ApplyDropCapability(ctx, c.peerID, d.Enabled, d.AcceptsPublicUploads, d.WebUIAvailable); err != nil {
+		if err := c.hub.store.ApplyDropCapability(ctx, c.peerID, d.Enabled, d.AcceptsPublicUploads, d.WebUIAvailable, d.PublicGatewayURL); err != nil {
 			c.hub.log.Warn("apply drop capability failed", "peer_id", c.peerID, "err", err)
 		}
 	}

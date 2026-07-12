@@ -116,6 +116,8 @@ func (s *Server) Router() *gin.Engine {
 
 	// Drop: opaque public share (no auth; visibility + status enforced). Rate
 	// limited per IP. The file id is an unguessable opaque handle, never the CID.
+	// The bare route returns metadata (incl. node gateway_url(s) for direct
+	// retrieval); /content streams bytes through the gateway as a fallback.
 	v2.GET("/drop/public/:fileId", s.rateLimit("drop_public", s.platform.Snapshot().RateLimitDropReadPerMin), s.handleDropPublicGet)
 	v2.GET("/drop/public/:fileId/content", s.rateLimit("drop_public_content", s.platform.Snapshot().RateLimitDropReadPerMin), s.handleDropPublicContent)
 	// Drop: short-lived same-origin WebUI proxy. The session id is validated

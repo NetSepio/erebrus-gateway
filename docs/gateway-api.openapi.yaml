@@ -880,10 +880,20 @@ paths:
   /api/v2/drop/files:
     get:
       summary: List the caller's Drop files (newest first)
+      description: |
+        Each file includes `id, node_id, scope, filename, size_bytes, visibility,
+        encrypted, status, created_at` (owner also gets `cid` + `encryption_metadata`).
+        Public files with a committed CID additionally include `gateway_url` (the
+        primary node's `<base>/ipfs/<cid>`) and `gateway_urls` (all nodes holding
+        the CID); `public_gateway_url`/`public_gateway_urls` are accepted aliases.
       responses: { "200": { description: "{ files[] }" } }
   /api/v2/drop/files/{file_id}:
     get:
       summary: File metadata (owner sees CID + encryption metadata; others do not)
+      description: |
+        Public files with a committed CID also carry `gateway_url` + `gateway_urls`
+        (with `public_gateway_url`/`public_gateway_urls` aliases) for direct
+        node-gateway retrieval. Private/encrypted files never expose these.
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }
       responses:
@@ -962,17 +972,26 @@ paths:
     get:
       summary: Opaque public share metadata (no auth)
       description: |
-        Serves metadata only when visibility is `public` and status is active.
-        The path uses the file's opaque id — never a raw CID. Rate limited per IP.
+        Returns metadata for a `public` + `active` file: `id, cid, filename,
+        size_bytes, content_type, encrypted, created_at, content_url`, plus
+        `gateway_url` + `gateway_urls` (with `public_gateway_url`/
+        `public_gateway_urls` aliases) pointing at node IPFS gateways that hold
+        the CID, for direct browser retrieval. The path uses the file's opaque
+        id — never a raw CID. Rate limited per IP. Any other state → 404.
       security: []
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: public file metadata }
+        "200": { description: "{ id, cid, filename, size_bytes, content_type, content_url, gateway_url?, gateway_urls? }" }
         "404": { description: Not found / not public }
   /api/v2/drop/public/{file_id}/content:
     get:
-      summary: Stream opaque public share content (no auth)
+      summary: Opaque public share content — gateway proxy fallback (no auth)
+      description: |
+        Streams the file's bytes through the gateway. Durable fallback for when
+        the browser cannot fetch a node gateway directly (e.g. missing CORS or a
+        node offline); sources the CID from **any** healthy node that holds it
+        pinned. Filenames are sanitized; `X-Content-Type-Options: nosniff`.
       security: []
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }

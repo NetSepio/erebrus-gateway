@@ -3,7 +3,34 @@ package api
 import (
 	"strings"
 	"testing"
+
+	"github.com/NetSepio/gateway/internal/store"
 )
+
+func TestDropGatewayLinks(t *testing.T) {
+	cid := "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG"
+	sources := []store.DropObjectSource{
+		{NodeID: "origin", PublicGatewayURL: "https://a.gw.erebrus.io/"}, // trailing slash trimmed
+		{NodeID: "b", PublicGatewayURL: "https://b.gw.erebrus.io"},
+		{NodeID: "c", PublicGatewayURL: ""},                          // skipped (no base)
+		{NodeID: "dup", PublicGatewayURL: "https://a.gw.erebrus.io"}, // dedup vs first
+	}
+	primary, all := dropGatewayLinks(sources, cid)
+	want := "https://a.gw.erebrus.io/ipfs/" + cid
+	if primary != want {
+		t.Errorf("primary = %q want %q", primary, want)
+	}
+	if len(all) != 2 {
+		t.Fatalf("all = %v (want 2 deduped, non-empty)", all)
+	}
+	if all[1] != "https://b.gw.erebrus.io/ipfs/"+cid {
+		t.Errorf("all[1] = %q", all[1])
+	}
+	// No sources → empty.
+	if p, a := dropGatewayLinks(nil, cid); p != "" || len(a) != 0 {
+		t.Errorf("empty sources should yield no links, got %q %v", p, a)
+	}
+}
 
 func TestValidCID(t *testing.T) {
 	cases := map[string]bool{

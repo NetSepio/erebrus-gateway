@@ -195,7 +195,8 @@ compatible). Standard, Shield, and Sentinel profiles may all run Drop.
     "drop": {
       "enabled": true,
       "accepts_public_uploads": true,
-      "webui_available": true
+      "webui_available": true,
+      "public_gateway_url": "https://node-sg-1.gw.erebrus.io"
     }
   }
 }
@@ -207,6 +208,13 @@ compatible). Standard, Shield, and Sentinel profiles may all run Drop.
 - `webui_available` — the node exposes a Kubo WebUI that the gateway may proxy
   through a short-lived same-origin session. The raw Kubo RPC/WebUI address is
   never published; it stays on the node's internal Docker network.
+- `public_gateway_url` — optional. The node's **public IPFS gateway base**
+  (`http(s)`, e.g. `https://node-host:8080` or a reverse-proxied host) that the
+  gateway surfaces on public file responses (`gateway_url`/`gateway_urls`) for
+  direct browser retrieval of `<base>/ipfs/<cid>`. The Kubo **RPC** port (5001)
+  is never advertised or stored. For browsers to fetch it cross-origin the
+  node's `/ipfs/*` must send permissive CORS; without it the webapp silently
+  falls back to the gateway proxy.
 
 ### `heartbeat.drop` + `heartbeat.versions.kubo` (node → gateway)
 

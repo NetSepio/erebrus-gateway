@@ -70,6 +70,11 @@ type DropCapability struct {
 	Enabled              bool `json:"enabled"`
 	AcceptsPublicUploads bool `json:"accepts_public_uploads"`
 	WebUIAvailable       bool `json:"webui_available"`
+	// PublicGatewayURL is the node's public IPFS gateway base (http(s), e.g.
+	// https://node-host:8080 or a reverse-proxied host) used for direct object
+	// retrieval. The Kubo RPC (5001) is never advertised. Empty when the node
+	// exposes no public gateway.
+	PublicGatewayURL string `json:"public_gateway_url,omitempty"`
 }
 
 // DropStatus is the node's Drop runtime health and capacity, reported in each
