@@ -992,7 +992,7 @@ func (s *Server) renderDropFile(c *gin.Context, f *store.DropFile, owner bool) g
 func dropGatewayLinks(sources []store.DropObjectSource, cid string) (primary string, all []string) {
 	seen := map[string]struct{}{}
 	for _, src := range sources {
-		base := strings.TrimRight(src.PublicGatewayURL, "/")
+		base := store.NormalizePublicGatewayURL(src.PublicGatewayURL)
 		if base == "" {
 			continue
 		}

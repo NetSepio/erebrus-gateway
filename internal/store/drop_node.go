@@ -4,8 +4,48 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net/url"
 	"strings"
 )
+
+// kuboRPCPort is the Kubo admin RPC port, which must never appear in a public
+// gateway base advertised to callers.
+const kuboRPCPort = "5001"
+
+// NormalizePublicGatewayURL validates and canonicalizes a node-advertised public
+// IPFS gateway base. It returns the normalized `scheme://host[:port]` (path,
+// query, fragment, and any userinfo stripped) or "" when the input is empty or
+// unsafe. Only http/https with a host are accepted; the Kubo RPC port (5001) is
+// rejected so admin endpoints can never be surfaced as a retrieval base.
+func NormalizePublicGatewayURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	if u.User != nil {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return ""
+	}
+	if u.Port() == kuboRPCPort {
+		return ""
+	}
+	normalized := scheme + "://" + host
+	if p := u.Port(); p != "" {
+		normalized += ":" + p
+	}
+	return normalized
+}
 
 // NormalizeDropState maps a node-reported Drop state onto a known value,
 // defaulting unknown/empty input to disabled.
@@ -35,6 +75,7 @@ func (s *Store) ApplyDropCapability(ctx context.Context, nodeID string, enabled,
 	if enabled {
 		initialState = DropStateStarting
 	}
+	publicGatewayURL = NormalizePublicGatewayURL(publicGatewayURL)
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO node_drop_status (node_id, enabled, accepts_public_uploads, webui_available, state, public_gateway_url, last_reported_at)
 		 VALUES ($1,$2,$3,$4,$5, NULLIF($6,''), now())
