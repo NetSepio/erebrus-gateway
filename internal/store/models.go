@@ -296,6 +296,16 @@ type Plan struct {
 	MaxClients int    `json:"max_clients"`
 }
 
+// Subscription is a user's (or org's) entitlement.
+type Subscription struct {
+	ID               string     
+	PlanID           string     
+	Source           string     
+	Status           string     
+	CurrentPeriodEnd *time.Time 
+	CreatedAt        time.Time  
+}
+
 // Org is a workspace; members and API keys operate within it.
 type Org struct {
 	ID                   string    `json:"id"`

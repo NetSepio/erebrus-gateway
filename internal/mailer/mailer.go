@@ -72,6 +72,13 @@ func (m *Mailer) SendOrgInviteDeclined(ctx context.Context, to, orgDisplayName, 
 	return m.send(ctx, to, subject, text, html)
 }
 
+// SendDeletionProcessed confirms to a user that their account deletion request was fulfilled.
+func (m *Mailer) SendDeletionProcessed(ctx context.Context, to string) error {
+	subject := "Your Erebrus account has been deleted"
+	text := "Your account deletion request has been processed and your personal information has been removed. Your wallet address has been retained for our records. If you did not request this deletion, please contact support immediately."
+	return m.send(ctx, to, subject, text, "")
+}
+
 // SendOTP emails a 6-digit verification code.
 func (m *Mailer) SendOTP(ctx context.Context, to, code string) error {
 	subject := "Your Erebrus verification code"
