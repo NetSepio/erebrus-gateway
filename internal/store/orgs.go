@@ -437,6 +437,15 @@ func MemberHasPaidSeat(role, seatTier string) bool {
 		(seatTier != "" && seatTier != SeatTierFree)
 }
 
+// UserOwnsOrgs reports whether the user is an active owner of any org.
+func (s *Store) UserOwnsOrgs(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM org_members WHERE user_id = $1 AND role = 'owner' AND status = $2)`,
+		userID, MemberStatusActive).Scan(&exists)
+	return exists, err
+}
+
 // UserHasActiveOrgMembership reports whether the user belongs to any active workspace.
 func (s *Store) UserHasActiveOrgMembership(ctx context.Context, userID string) (bool, error) {
 	var ok bool

@@ -44,3 +44,44 @@ func (s *Server) handlePatchProfile(c *gin.Context) {
 	u, _ := s.store.GetUser(c, userID(c))
 	ok(c, http.StatusOK, u)
 }
+
+// handleAccountDeletionRequest creates a pending deletion request for the caller.
+func (s *Server) handleAccountDeletionRequest(c *gin.Context) {
+	uid := userID(c)
+	u, err := s.store.GetUser(c, uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to load profile")
+		return
+	}
+	if u.Email == "" || !u.EmailVerified {
+		fail(c, http.StatusBadRequest, "Please add and verify an email in your profile before requesting deletion.")
+		return
+	}
+
+	owns, err := s.store.UserOwnsOrgs(c, uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to check org ownership")
+		return
+	}
+	if owns {
+		fail(c, http.StatusBadRequest, "You still own organizations. Transfer ownership or delete them first.")
+		return
+	}
+
+	member, err := s.store.UserHasActiveOrgMembership(c, uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to check org membership")
+		return
+	}
+	if member {
+		fail(c, http.StatusBadRequest, "You are still a member of organizations. Leave them first.")
+		return
+	}
+
+	id, err := s.store.CreateDeletionRequest(c, uid, u.WalletAddress, u.Email, u.Name)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to register deletion request")
+		return
+	}
+	ok(c, http.StatusCreated, gin.H{"request_id": id, "message": "Deletion request registered. You will receive an email once it is processed."})
+}

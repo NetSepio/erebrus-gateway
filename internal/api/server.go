@@ -135,6 +135,7 @@ func (s *Server) Router() *gin.Engine {
 	{
 		user.GET("/account/profile", s.handleGetProfile)
 		user.PATCH("/account/profile", s.handlePatchProfile)
+		user.POST("/account/deletion-request", s.handleAccountDeletionRequest)
 		user.GET("/account/org-invites", s.handleListAccountOrgInvites)
 		user.GET("/account/org-invites/:orgId", s.handleGetAccountOrgInvite)
 		user.POST("/account/org-invites/:orgId/accept", s.handleAcceptAccountOrgInvite)
@@ -265,6 +266,9 @@ func (s *Server) Router() *gin.Engine {
 		admin.GET("/activity", s.handleAdminActivity)
 		admin.GET("/nodes", s.handleAdminNodes)
 		admin.GET("/users", s.handleAdminUsers)
+		admin.GET("/users/:id", s.handleAdminUser)
+		admin.GET("/users/:id/orgs", s.handleAdminUserOrgs)
+		admin.POST("/users/:id/plan", s.handleAdminUserPlan)
 		admin.GET("/subscriptions", s.handleAdminSubscriptions)
 		admin.GET("/orgs", s.handleAdminOrgs)
 		admin.PATCH("/orgs/:id", s.handleAdminPatchOrg)
@@ -274,6 +278,8 @@ func (s *Server) Router() *gin.Engine {
 		admin.POST("/nodes/:id/min_tier", s.handleAdminSetNodeMinTier)
 		admin.POST("/perks", s.handleAdminUpsertPerk)
 		admin.POST("/perks/:id/grant", s.handleAdminGrantPerk)
+		admin.GET("/deletion-requests", s.handleAdminDeletionRequests)
+		admin.POST("/deletion-requests/:id/fulfill", s.handleAdminFulfillDeletionRequest)
 		admin.GET("/settings", s.handleAdminListSettings)
 		admin.PATCH("/settings", s.handleAdminPatchSettings)
 	}
