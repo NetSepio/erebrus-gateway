@@ -58,24 +58,39 @@ func (s *Store) EnsurePersonalOrg(ctx context.Context, userID, walletAddress str
 	return org, true, nil
 }
 
-// UserOrgVPNPlan returns the highest paid org plan that entitles the user to VPN,
-// or "" if none. A paid-plan org grants VPN to its seated members: the owner
-// (always) and any member holding a paid seat (org_members.seat_tier <> 'free',
-// assigned by an admin up to org_entitlements.paid_seats_included). Members
-// without a seat fall back to their personal trial/NFT. The manual seat
-// assignment is the single source of truth (CountPaidSeatsUsed == VPN-entitled
-// members). Independent of the per-user subscription.
+// UserOrgVPNPlan returns the highest active organization tier that entitles the
+// user to public VPN access, or "" when the user has no active organization.
+// Owners and node operators inherit their organization's plan; members use
+// their assigned seat tier. An unseated member resolves to Free. Personal
+// subscriptions, trials, and NFT grants are never consulted.
 func (s *Store) UserOrgVPNPlan(ctx context.Context, userID string) (string, error) {
 	var plan string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT o.plan
+		`SELECT CASE
+		     WHEN m.role IN ('owner','node_operator') THEN CASE o.plan
+		         WHEN 'starter' THEN 'starter'
+		         WHEN 'pro' THEN 'pro'
+		         WHEN 'business' THEN 'business'
+		         WHEN 'enterprise' THEN 'enterprise'
+		         ELSE 'free' END
+		     ELSE COALESCE(NULLIF(m.seat_tier, ''), 'free')
+		 END AS effective_tier
 		 FROM org_members m
 		 JOIN orgs o ON o.id = m.org_id
 		 WHERE m.user_id = $1::uuid AND m.status = 'active'
 		   AND o.billing_status = $2
-		   AND o.plan IN ('starter','pro','business','enterprise')
-		   AND (m.role = 'owner' OR m.seat_tier <> 'free')
-		 ORDER BY array_position(ARRAY['starter','pro','business','enterprise'], o.plan) DESC
+		 ORDER BY array_position(
+		     ARRAY['free','starter','pro','business','enterprise']::text[],
+		     CASE
+		         WHEN m.role IN ('owner','node_operator') THEN CASE o.plan
+		             WHEN 'starter' THEN 'starter'
+		             WHEN 'pro' THEN 'pro'
+		             WHEN 'business' THEN 'business'
+		             WHEN 'enterprise' THEN 'enterprise'
+		             ELSE 'free' END
+		         ELSE COALESCE(NULLIF(m.seat_tier, ''), 'free')
+		     END
+		 ) DESC NULLS LAST
 		 LIMIT 1`, userID, OrgBillingActive).Scan(&plan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil

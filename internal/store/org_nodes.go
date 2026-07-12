@@ -589,7 +589,17 @@ func (s *Store) ListOrgNodeServices(ctx context.Context, orgID, nodeID string) (
 }
 
 // DeploymentProfileAllowsService reports whether a profile supports a service type.
+// Drop is an independent optional service (not a fourth profile), so every
+// profile may run it alongside its firewall posture.
 func DeploymentProfileAllowsService(profile, serviceType string) bool {
+	if serviceType == ServiceTypeDrop {
+		switch profile {
+		case DeploymentProfileStandard, DeploymentProfileShield, DeploymentProfileSentinel:
+			return true
+		default:
+			return false
+		}
+	}
 	switch profile {
 	case DeploymentProfileStandard:
 		return serviceType == ServiceTypeVPN

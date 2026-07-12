@@ -34,8 +34,8 @@ func truncWallet(w string) string {
 
 // bindReferralCode best-effort binds a referral code during login/signup:
 // resolves the code, sets the caller's referrer (one-shot, self-blocked) and,
-// when the referee has already started their qualifying trial, fires the
-// (idempotent) XP awards immediately — otherwise the trial-start path fires
+// when the referee already has an active organization membership, fires the
+// idempotent XP awards immediately. Otherwise first-login org bootstrap fires
 // them. Invalid or already-bound codes are ignored so login never fails.
 func (s *Server) bindReferralCode(c *gin.Context, userID, code string) {
 	code = strings.ToUpper(strings.TrimSpace(code))
@@ -50,14 +50,14 @@ func (s *Server) bindReferralCode(c *gin.Context, userID, code string) {
 	if err != nil || !bound {
 		return
 	}
-	if qualified, err := s.store.HasQualifiedTrial(c, userID); err == nil && qualified {
+	if qualified, err := s.store.UserHasActiveOrgMembership(c, userID); err == nil && qualified {
 		s.awardReferralXP(c, userID)
 	}
 }
 
 // handleReferralRedeem lets a signed-in user apply an invite code after signup:
 // POST /api/v2/referrals/redeem. One referrer per account, ever; when the
-// caller already qualified (their trial has started) both XP awards fire
+// caller already has an active organization membership, both XP awards fire
 // immediately, dedup-keyed so nothing can double-pay.
 func (s *Server) handleReferralRedeem(c *gin.Context) {
 	var req struct {
@@ -87,7 +87,7 @@ func (s *Server) handleReferralRedeem(c *gin.Context) {
 		fail(c, http.StatusConflict, "an invite code is already applied to this account")
 		return
 	}
-	if qualified, err := s.store.HasQualifiedTrial(c, uid); err == nil && qualified {
+	if qualified, err := s.store.UserHasActiveOrgMembership(c, uid); err == nil && qualified {
 		s.awardReferralXP(c, uid)
 	}
 

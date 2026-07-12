@@ -111,18 +111,18 @@ func (s *Server) handleOrgNodeRegister(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Token            string `json:"token"`
+		Token             string `json:"token"`
 		RegistrationToken string `json:"registration_token"`
-		PeerID           string `json:"peer_id"`
-		DID              string `json:"did"`
-		WalletAddress    string `json:"wallet_address"`
-		Chain            string `json:"chain"`
-		Name             string `json:"name"`
-		Region           string `json:"region"`
-		Zone             string `json:"zone"`
-		APIBaseURL       string `json:"api_base_url"`
-		NodeKey          string `json:"node_key"`
-		AccessMode       string `json:"access_mode"`
+		PeerID            string `json:"peer_id"`
+		DID               string `json:"did"`
+		WalletAddress     string `json:"wallet_address"`
+		Chain             string `json:"chain"`
+		Name              string `json:"name"`
+		Region            string `json:"region"`
+		Zone              string `json:"zone"`
+		APIBaseURL        string `json:"api_base_url"`
+		NodeKey           string `json:"node_key"`
+		AccessMode        string `json:"access_mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "invalid body")

@@ -14,7 +14,7 @@ const referralAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 // ReferralRecent is one recent referee in a referral summary.
 type ReferralRecent struct {
 	Wallet    string    `json:"wallet"`    // truncated by the API layer
-	Qualified bool      `json:"qualified"` // has started their trial (the qualifying action)
+	Qualified bool      `json:"qualified"` // has an active organization membership
 	JoinedAt  time.Time `json:"joined_at"`
 }
 
@@ -98,16 +98,6 @@ func (s *Store) BindReferrer(ctx context.Context, userID, referrerUserID string)
 	return n > 0, nil
 }
 
-// HasQualifiedTrial reports whether the user has started their trial — the
-// action that qualifies a referral for XP.
-func (s *Store) HasQualifiedTrial(ctx context.Context, userID string) (bool, error) {
-	var qualified bool
-	err := s.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM subscriptions WHERE user_id = $1 AND source = 'trial')`,
-		userID).Scan(&qualified)
-	return qualified, err
-}
-
 // ReferrerOf returns the user's referrer id, or "" when none.
 func (s *Store) ReferrerOf(ctx context.Context, userID string) (string, error) {
 	var ref sql.NullString
@@ -143,7 +133,10 @@ func (s *Store) ReferralSummary(ctx context.Context, userID string) (*ReferralSu
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT COALESCE(u.wallet_address,''), u.created_at,
-		        EXISTS(SELECT 1 FROM subscriptions s WHERE s.user_id = u.id AND s.source = 'trial') AS qualified
+		        EXISTS(
+		            SELECT 1 FROM org_members m
+		            WHERE m.user_id = u.id AND m.status = 'active'
+		        ) AS qualified
 		 FROM users u
 		 WHERE u.referred_by_user_id = $1
 		 ORDER BY u.created_at DESC

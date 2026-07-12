@@ -89,6 +89,56 @@ var (
 		},
 		[]string{"region", "environment"},
 	)
+
+	// Drop (Kubo storage) metrics. Labels are deliberately low-cardinality:
+	// result/scope/operation/tier are all small fixed enumerations.
+	DropUploadsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netsepio_erebrus_gateway_drop_uploads_total",
+			Help: "Total Drop uploads by result and scope.",
+		},
+		[]string{"result", "scope"},
+	)
+
+	DropUploadBytesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netsepio_erebrus_gateway_drop_upload_bytes_total",
+			Help: "Total bytes uploaded to Drop by scope.",
+		},
+		[]string{"scope"},
+	)
+
+	DropDownloadBytesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netsepio_erebrus_gateway_drop_download_bytes_total",
+			Help: "Total bytes downloaded from Drop by scope.",
+		},
+		[]string{"scope"},
+	)
+
+	DropQuotaRejectionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netsepio_erebrus_gateway_drop_quota_rejections_total",
+			Help: "Total Drop reservations rejected for quota by tier.",
+		},
+		[]string{"tier"},
+	)
+
+	DropNodeOperationsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netsepio_erebrus_gateway_drop_node_operations_total",
+			Help: "Total Drop node operations by operation and result.",
+		},
+		[]string{"operation", "result"},
+	)
+
+	DropReconciliationJobsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "netsepio_erebrus_gateway_drop_reconciliation_jobs_total",
+			Help: "Total Drop reconciliation jobs by operation and result.",
+		},
+		[]string{"operation", "result"},
+	)
 )
 
 func Register() {
@@ -103,6 +153,12 @@ func Register() {
 		VPNConfigsGeneratedTotal,
 		AppEventsTotal,
 		ActiveNodeSessions,
+		DropUploadsTotal,
+		DropUploadBytesTotal,
+		DropDownloadBytesTotal,
+		DropQuotaRejectionsTotal,
+		DropNodeOperationsTotal,
+		DropReconciliationJobsTotal,
 	)
 }
 

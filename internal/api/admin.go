@@ -13,7 +13,7 @@ func (s *Server) handleAdminStats(c *gin.Context) {
 	nodesByStatus, _ := s.store.CountNodesByStatus(c)
 	users, _ := s.store.CountUsers(c)
 	orgs, _ := s.store.CountOrgs(c)
-	subsByPlan, _ := s.store.CountActiveSubscriptionsByPlan(c)
+	subsByPlan, _ := s.store.CountLegacyActiveSubscriptionsByPlan(c)
 	since := time.Now().AddDate(0, 0, -30)
 	rx, tx, _ := s.store.TotalBandwidth(c, since)
 
@@ -42,7 +42,7 @@ func (s *Server) handleAdminUsers(c *gin.Context) {
 
 // handleAdminSubscriptions returns active subscription counts by plan.
 func (s *Server) handleAdminSubscriptions(c *gin.Context) {
-	byPlan, err := s.store.CountActiveSubscriptionsByPlan(c)
+	byPlan, err := s.store.CountLegacyActiveSubscriptionsByPlan(c)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "failed to load subscriptions")
 		return

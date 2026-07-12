@@ -5,7 +5,7 @@ import "testing"
 func TestBuildFirewallSyncPayload(t *testing.T) {
 	fw := &FirewallService{
 		ServiceKind: "sentinel",
-		Service: OrgNodeService{ServiceStatus: ServiceStatusActive},
+		Service:     OrgNodeService{ServiceStatus: ServiceStatusActive},
 	}
 	rules := []FirewallRule{
 		{RuleType: FirewallRuleDomainBlock, Target: "ads.example.com", Enabled: true},

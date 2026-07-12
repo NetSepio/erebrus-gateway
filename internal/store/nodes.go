@@ -13,18 +13,18 @@ import (
 
 // NodeRegistration carries the fields a node submits when registering.
 type NodeRegistration struct {
-	PeerID     string
-	DID        string
-	Wallet     string
-	Chain      string
-	OrgID      string
-	Name       string
-	Region     string
-	Zone       string
-	APIBaseURL string
-	NodeKey    string
-	AccessMode         string
-	DeploymentProfile  string // standard | shield | sentinel
+	PeerID            string
+	DID               string
+	Wallet            string
+	Chain             string
+	OrgID             string
+	Name              string
+	Region            string
+	Zone              string
+	APIBaseURL        string
+	NodeKey           string
+	AccessMode        string
+	DeploymentProfile string // standard | shield | sentinel
 }
 
 // ResolvePeerID verifies a node exists and returns its peer_id.

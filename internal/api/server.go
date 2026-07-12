@@ -5,6 +5,7 @@ package api
 import (
 	"github.com/NetSepio/gateway/internal/cache"
 	"github.com/NetSepio/gateway/internal/config"
+	"github.com/NetSepio/gateway/internal/dropclient"
 	"github.com/NetSepio/gateway/internal/mailer"
 	"github.com/NetSepio/gateway/internal/middleware"
 	"github.com/NetSepio/gateway/internal/nftgate"
@@ -16,8 +17,8 @@ import (
 	"github.com/NetSepio/gateway/internal/store"
 	"github.com/NetSepio/gateway/internal/token"
 	"github.com/gin-contrib/cors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Server holds the gateway's API dependencies.
@@ -29,6 +30,7 @@ type Server struct {
 	hub      *nodehub.Hub
 	cache    *cache.Cache
 	nodes    *nodeclient.Client
+	drop     *dropclient.Client
 	nft      nftgate.Checker
 	mailer   *mailer.Mailer
 	xverify  *socialverify.XVerifier
@@ -46,7 +48,7 @@ func New(cfg *config.Config, platform *config.PlatformSettings, st *store.Store,
 	}
 	p := platform.Snapshot()
 	return &Server{
-		cfg: cfg, platform: platform, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(),
+		cfg: cfg, platform: platform, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(), drop: dropclient.New(),
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(p.XAPIBaseURL),
 		google: oauth.NewGoogle(splitCSVRaw(cfg.GoogleClientIDs)),
 		apple:  oauth.NewApple(splitCSVRaw(cfg.AppleClientIDs)),
@@ -70,7 +72,7 @@ func (s *Server) Router() *gin.Engine {
 	corsCfg := cors.DefaultConfig()
 	corsCfg.AllowOrigins = splitCSV(s.cfg.AllowedOrigin)
 	corsCfg.AllowHeaders = []string{"Origin", "Content-Type", "Authorization", "X-Api-Key", "X-Erebrus-Client"}
-	corsCfg.AllowMethods = []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"}
+	corsCfg.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 	r.Use(cors.New(corsCfg))
 
 	r.GET("/healthz", s.handleHealthz)
@@ -111,6 +113,16 @@ func (s *Server) Router() *gin.Engine {
 	// public org profiles
 	v2.GET("/public/orgs/:slug", s.handlePublicOrgBySlug)
 	v2.GET("/public/orgs/:slug/invite", s.handleOrgInviteBySlug)
+
+	// Drop: opaque public share (no auth; visibility + status enforced). Rate
+	// limited per IP. The file id is an unguessable opaque handle, never the CID.
+	// The bare route returns metadata (incl. node gateway_url(s) for direct
+	// retrieval); /content streams bytes through the gateway as a fallback.
+	v2.GET("/drop/public/:fileId", s.rateLimit("drop_public", s.platform.Snapshot().RateLimitDropReadPerMin), s.handleDropPublicGet)
+	v2.GET("/drop/public/:fileId/content", s.rateLimit("drop_public_content", s.platform.Snapshot().RateLimitDropReadPerMin), s.handleDropPublicContent)
+	// Drop: short-lived same-origin WebUI proxy. The session id is validated
+	// inside; the raw node/Kubo address is never exposed to the caller.
+	v2.Any("/drop/webui/:sessionId/*proxyPath", s.handleDropWebUIProxy)
 
 	// node heartbeat (node PASETO)
 	v2.POST("/nodes/:nodeId/heartbeat", s.handleNodeHeartbeat)
@@ -160,7 +172,8 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/perks", s.handleListPerks)
 		user.GET("/perks/me", s.handleMyPerks)
 
-		// entitlement: trial + NFT gating only (no money in v2.0)
+		// Legacy compatibility routes. Responses are organization-derived; trial
+		// and NFT refreshes never grant product access.
 		user.GET("/subscriptions", s.handleMySubscription)
 		user.POST("/subscriptions/trial", s.handleStartTrial)
 		user.POST("/subscriptions/nft/refresh", s.handleNFTRefresh)
@@ -214,6 +227,25 @@ func (s *Server) Router() *gin.Engine {
 		user.GET("/orgs/:id/usage", s.handleOrgUsage)
 		user.GET("/orgs/:id/clients", s.handleOrgClients)
 		user.POST("/orgs/:id/vpn/clients", s.handleUserOrgProvisionClient)
+
+		// Drop: private org file metadata/usage + WebUI session (org-scoped)
+		user.GET("/orgs/:id/drop/files", s.handleOrgDropFiles)
+		user.GET("/orgs/:id/drop/usage", s.handleOrgDropUsage)
+		user.POST("/orgs/:id/nodes/:nodeId/drop/webui/session", s.handleDropWebUISession)
+
+		// Drop: authenticated node discovery, uploads, files, usage, vault.
+		user.GET("/drop/nodes", s.handleDropNodes)
+		user.POST("/drop/uploads", s.dropRateLimit("drop_create", true), s.handleDropReserveUpload)
+		user.PUT("/drop/uploads/:uploadId/content", s.dropRateLimit("drop_content", true), s.handleDropUploadContent)
+		user.GET("/drop/uploads/:uploadId", s.handleDropUploadStatus)
+		user.GET("/drop/files", s.handleDropListFiles)
+		user.GET("/drop/files/:fileId", s.handleDropGetFile)
+		user.GET("/drop/files/:fileId/content", s.dropRateLimit("drop_read", false), s.handleDropFileContent)
+		user.PATCH("/drop/files/:fileId", s.handleDropPatchFile)
+		user.DELETE("/drop/files/:fileId", s.handleDropDeleteFile)
+		user.GET("/drop/usage", s.handleDropUsage)
+		user.GET("/drop/crypto/vault", s.handleDropGetVault)
+		user.PUT("/drop/crypto/vault", s.handleDropPutVault)
 	}
 
 	// org programmatic access (X-Api-Key) — scoped to the key's org

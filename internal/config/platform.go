@@ -28,6 +28,10 @@ type PlatformValues struct {
 
 	RateLimitAuthPerMin     int
 	RateLimitRegisterPerMin int
+	// Drop rate limits: write covers upload create/content; read covers file and
+	// public content retrieval. Per (user or IP) per minute.
+	RateLimitDropWritePerMin int
+	RateLimitDropReadPerMin  int
 
 	// Node capacity gate thresholds.
 	NodeCPUMax            float64
@@ -66,8 +70,10 @@ func DefaultPlatformValues() PlatformValues {
 		XPFreeDaysCost:   500,
 		XPFreeDaysGrant:  7,
 
-		RateLimitAuthPerMin:     30,
-		RateLimitRegisterPerMin: 10,
+		RateLimitAuthPerMin:      30,
+		RateLimitRegisterPerMin:  10,
+		RateLimitDropWritePerMin: 60,
+		RateLimitDropReadPerMin:  120,
 
 		NodeCPUMax:            80.0,
 		NodeCPUSoft:           60.0,
@@ -202,6 +208,18 @@ func ParsePlatformSettings(raw map[string]string) (PlatformValues, error) {
 			return s, fmt.Errorf("rate_limit_register_per_min: %w", err)
 		}
 	}
+	if v, ok := raw["rate_limit_drop_write_per_min"]; ok {
+		s.RateLimitDropWritePerMin, err = strconv.Atoi(v)
+		if err != nil {
+			return s, fmt.Errorf("rate_limit_drop_write_per_min: %w", err)
+		}
+	}
+	if v, ok := raw["rate_limit_drop_read_per_min"]; ok {
+		s.RateLimitDropReadPerMin, err = strconv.Atoi(v)
+		if err != nil {
+			return s, fmt.Errorf("rate_limit_drop_read_per_min: %w", err)
+		}
+	}
 
 	if v, ok := raw["paseto_expiration"]; ok {
 		s.PasetoExpiration, err = time.ParseDuration(v)
@@ -267,6 +285,7 @@ var KnownPlatformKeys = []string{
 	"xp_uptime_day", "xp_tier_thresholds", "xp_social_verified",
 	"xp_free_days_cost", "xp_free_days_grant",
 	"rate_limit_auth_per_min", "rate_limit_register_per_min",
+	"rate_limit_drop_write_per_min", "rate_limit_drop_read_per_min",
 	"node_cpu_max", "node_cpu_soft", "node_peer_ratio_max", "node_peer_connected_soft",
 	"paseto_expiration", "paseto_signed_by", "auth_eula",
 	"magic_link_expiration", "x_api_base_url",

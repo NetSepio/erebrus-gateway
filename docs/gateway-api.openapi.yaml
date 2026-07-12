@@ -281,7 +281,8 @@ paths:
       summary: My referral code, who referred me, and recent referees
       description: >
         Code is short + shareable (allocated on first access). The qualifying
-        action is a referee's first trial start (referrer +100 XP, referee +25).
+        action is the referee joining their first active organization (the
+        personal basic organization created at first login qualifies).
       responses:
         "200":
           description: Referral summary
@@ -310,7 +311,7 @@ paths:
                         qualified:
                           {
                             type: boolean,
-                            description: "Referee has started their trial",
+                            description: "Referee has an active organization membership",
                           }
                         joined_at: { type: string, format: date-time }
 
@@ -339,8 +340,8 @@ paths:
                     { type: object, additionalProperties: { type: integer } }
   /api/v2/rank/claim:
     post:
-      summary: Spend claimable XP on a reward
-      description: "v2.0 reward: free_days (XP_FREE_DAYS_COST → XP_FREE_DAYS_GRANT days, source='rank', stacked on the current period). Logged with IP + device."
+      summary: Deprecated personal entitlement reward endpoint
+      description: Personal free-day rewards are retired because product access is organization-only.
       requestBody:
         required: true
         content:
@@ -352,9 +353,8 @@ paths:
                 properties: { reward: { type: string, enum: [free_days] } },
               }
       responses:
-        "200": { description: "{ reward, xp_spent, days, subscription }" }
-        "400": { description: Unknown reward }
-        "409": { description: Not enough claimable XP }
+        "400": { description: Invalid request }
+        "410": { description: Personal entitlement rewards are retired }
   /api/v2/leaderboard:
     get:
       summary: Top users by XP or referrals (Redis-cached) + my rank
@@ -443,7 +443,8 @@ paths:
     post:
       summary: Provision a VPN client on a node
       description: |
-        Requires entitlement (active subscription/trial, or org API key).
+        Requires active organization membership; owners/node operators inherit
+        the organization plan and members use their assigned seat tier.
         Flow: pending row committed → PUT node /api/v2/peers/{uuid} (10s
         timeout, 2 retries, idempotent) → active. Returns the full credential
         bundle: WireGuard conf (with REPLACE_WITH_PRIVATE_KEY placeholder),
@@ -482,7 +483,7 @@ paths:
           "404": { description: Not found },
         }
 
-  # ───────────────────────── subscriptions (trial + NFT; no payments yet) ─────
+  # ───────────────────────── legacy subscription compatibility ────────────────
   /api/v2/subscriptions/plans:
     get:
       {
@@ -492,7 +493,8 @@ paths:
       }
   /api/v2/subscriptions:
     get:
-      summary: My subscription + entitlement state
+      summary: Organization-derived compatibility entitlement state
+      description: Personal trial, subscription, and NFT records do not authorize product access.
       responses:
         "200":
           description: Entitlement snapshot
@@ -503,17 +505,12 @@ paths:
                 properties:
                   status: { type: string, enum: [active, expired, none] }
                   entitled: { type: boolean }
-                  source:
-                    {
-                      type: string,
-                      enum: [trial, nft, admin, rank],
-                      description: "What grants the entitlement",
-                    }
+                  source: { type: string, enum: [org, admin] }
                   plan_id: { type: string }
                   trial_consumed:
                     {
                       type: boolean,
-                      description: "Whether the user ever started their one trial",
+                      description: "Whether retained legacy data includes a personal trial row",
                     }
                   current_period_end:
                     { type: string, format: date-time, nullable: true }
@@ -525,22 +522,21 @@ paths:
   /api/v2/subscriptions/trial:
     post:
       {
-        summary: "Start the one-time free trial (7 days, plan 'pro')",
+        summary: "Deprecated trial compatibility endpoint",
+        description: "Does not create a personal trial; returns the caller's organization-derived entitlement.",
         responses:
           {
-            "201": { description: Trial active },
-            "409": { description: Already used },
+            "200": { description: Organization-derived entitlement },
           },
       }
   /api/v2/subscriptions/nft/refresh:
     post:
-      summary: Verify the gating NFT and grant/refresh a 30-day entitlement
+      summary: Verify the gating NFT for legacy rewards compatibility
       description: >
-        Grants 30 days directly regardless of trial state (a mid-trial user is
-        upgraded, since the 30d NFT entitlement outlasts the 7d trial).
-        Refreshable while held; one per user.
+        NFT ownership may drive XP/reward compatibility but never grants product
+        access; organization membership and seat tiers are authoritative.
       responses:
-        "200": { description: NFT entitlement granted/refreshed }
+        "200": { description: NFT ownership verified }
         "400": { description: No wallet on account }
         "403": { description: Wallet does not hold the required NFT }
         "502": { description: NFT ownership check failed }
@@ -779,7 +775,7 @@ paths:
     }
   /api/v2/admin/settings:
     get:
-      summary: List platform_settings (XP, trials, rate limits, auth text, …)
+      summary: List platform_settings (XP, legacy trial values, rate limits, auth text, …)
       responses:
         "200": { description: "{ settings[{key, value, description}] }" }
     patch:
@@ -799,6 +795,251 @@ paths:
       responses:
         "200": { description: "{ status: updated }" }
         "400": { description: Unknown key or invalid value }
+
+  # ───────────────────────── Drop (Kubo storage) ─────────────────────────
+  # Drop is an independent optional service. Entitlement is organization-only:
+  # the effective public tier is the highest active org seat. Uploads reserve
+  # quota atomically, stream gateway→node→Kubo, and are committed idempotently.
+  # Private confidentiality relies on client-side encryption; the gateway stores
+  # only opaque encryption metadata and never raw Kubo addresses or key material.
+  /api/v2/drop/nodes:
+    get:
+      summary: Discover Drop-capable nodes (authenticated)
+      description: |
+        `scope=public` (default) lists online public nodes accepting public
+        uploads; `scope=private&org_id=…` lists an org's own Drop nodes (caller
+        must be a member). Only coarse, non-sensitive fields are returned — no
+        Kubo RPC URLs, credentials, or exact capacity. `capacity` is one of
+        `available | limited | full | unknown`.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [public, private], default: public } }
+        - { name: org_id, in: query, schema: { type: string }, description: "required when scope=private" }
+      responses:
+        "200": { description: "{ scope, nodes[{node_id, org_id?, name, region, access_mode, deployment_profile, online, state, accepting_uploads, webui_available, capacity}] }" }
+        "403": { description: Not a member of the org }
+  /api/v2/drop/uploads:
+    post:
+      summary: Open an upload reservation (atomic quota + node-capacity hold)
+      description: |
+        Reserves public quota (or private-org node capacity) before any bytes
+        are transferred. Idempotent per `(user, idempotency_key)`. Rejects with
+        409 on quota, 507 on node capacity, 503 when the node is unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [node_id, scope, size_bytes, idempotency_key]
+              properties:
+                node_id: { type: string }
+                scope: { type: string, enum: [public, private], default: public }
+                visibility: { type: string, enum: [public, private], default: private }
+                filename: { type: string }
+                content_type: { type: string }
+                size_bytes: { type: integer, description: declared byte length of the content that will be PUT }
+                sha256: { type: string, pattern: "^[A-Fa-f0-9]{64}$", description: SHA-256 of the uploaded body }
+                encrypted: { type: boolean }
+                encryption_metadata: { type: object, description: opaque to the gateway }
+                org_id: { type: string, description: "required for scope=private" }
+                idempotency_key: { type: string }
+      responses:
+        "201": { description: "{ id, upload_id, node_id, scope, visibility, filename, size_bytes, declared_size_bytes, status, expires_at }" }
+        "409": { description: Storage quota exceeded }
+        "413": { description: File exceeds per-file ceiling }
+        "507": { description: Node storage capacity exhausted }
+        "503": { description: Drop node unavailable }
+  /api/v2/drop/uploads/{upload_id}/content:
+    put:
+      summary: Stream upload content to the node (gateway→node→Kubo)
+      description: |
+        Streams the request body straight to the node without buffering, capped
+        at the reserved size. On success the gateway pins, records the logical
+        file, and converts the reservation into used bytes (idempotent). On a
+        post-pin metadata failure creates a durable orphan-pin reconciliation
+        job that checks shared-CID references before unpinning.
+      parameters:
+        - { name: upload_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        "200": { description: committed file metadata }
+        "409": { description: Upload not accepting content }
+        "413": { description: Body exceeds declared size }
+        "502": { description: Node upload failed }
+  /api/v2/drop/uploads/{upload_id}:
+    get:
+      summary: Upload reservation status
+      parameters:
+        - { name: upload_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ id, upload_id, status, cid?, expires_at, … }" }
+        "404": { description: Not found }
+  /api/v2/drop/files:
+    get:
+      summary: List the caller's Drop files (newest first)
+      description: |
+        Each file includes `id, node_id, scope, filename, size_bytes, visibility,
+        encrypted, status, created_at` (owner also gets `cid` + `encryption_metadata`).
+        Public files with a committed CID additionally include `gateway_url` (the
+        primary node's `<base>/ipfs/<cid>`) and `gateway_urls` (all nodes holding
+        the CID); `public_gateway_url`/`public_gateway_urls` are accepted aliases.
+      responses: { "200": { description: "{ files[] }" } }
+  /api/v2/drop/files/{file_id}:
+    get:
+      summary: File metadata (owner sees CID + encryption metadata; others do not)
+      description: |
+        Public files with a committed CID also carry `gateway_url` + `gateway_urls`
+        (with `public_gateway_url`/`public_gateway_urls` aliases) for direct
+        node-gateway retrieval. Private/encrypted files never expose these.
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: file metadata }
+        "403": { description: Not allowed }
+        "404": { description: Not found }
+    patch:
+      summary: Change visibility (owner only)
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [visibility], properties: { visibility: { type: string, enum: [public, private] } } }
+      responses: { "200": { description: updated file } }
+    delete:
+      summary: Delete a file (owner or org owner/node-operator)
+      description: |
+        Releases quota and marks the file delete-pending, then issues a physical
+        unpin only when no other active file references the same CID on the node.
+        Idempotent; leftover pin errors are retried by reconciliation.
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ status: deleted, unpinned }" }
+        "202": { description: "{ status: delete_pending, unpinned: false }" }
+        "403": { description: Not allowed }
+  /api/v2/drop/files/{file_id}/content:
+    get:
+      summary: Stream file content (node→gateway→caller)
+      description: |
+        Streams the object through the gateway. Filenames are sanitized in the
+        Content-Disposition header; encrypted payloads are served as opaque
+        octet-streams with `X-Content-Type-Options: nosniff`.
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: file bytes }
+        "404": { description: Not found }
+  /api/v2/drop/usage:
+    get:
+      summary: Caller's public Drop usage + quota
+      responses:
+        "200": { description: "{ tier, entitlement_org_id, public_quota_bytes, max_file_bytes, used_bytes, reserved_bytes, available_bytes }" }
+  /api/v2/drop/crypto/vault:
+    get:
+      summary: Fetch the caller's opaque encrypted Drop vault
+      responses: { "200": { description: "{ version, kdf, iterations, salt, iv, ciphertext } or null" } }
+    put:
+      summary: Store the caller's encrypted Drop vault (optimistic-version guarded)
+      description: |
+        The vault is encrypted client-side and opaque to the gateway; no
+        plaintext key material or recovery secret is ever stored. Bounded in
+        size. Concurrent writes are optimistic-version guarded by the stored
+        profile version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, kdf, iterations, salt, iv, ciphertext]
+              properties:
+                version: { type: integer, minimum: 1 }
+                kdf: { type: string, example: PBKDF2-SHA256 }
+                iterations: { type: integer, minimum: 1 }
+                salt: { type: string }
+                iv: { type: string }
+                ciphertext: { type: string }
+      responses:
+        "200": { description: stored vault }
+        "409": { description: Version conflict }
+        "413": { description: Vault too large }
+  /api/v2/drop/public/{file_id}:
+    get:
+      summary: Opaque public share metadata (no auth)
+      description: |
+        Returns metadata for a `public` + `active` file: `id, cid, filename,
+        size_bytes, content_type, encrypted, created_at, content_url`, plus
+        `gateway_url` + `gateway_urls` (with `public_gateway_url`/
+        `public_gateway_urls` aliases) pointing at node IPFS gateways that hold
+        the CID, for direct browser retrieval. The path uses the file's opaque
+        id — never a raw CID. Rate limited per IP. Any other state → 404.
+      security: []
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ id, cid, filename, size_bytes, content_type, content_url, gateway_url?, gateway_urls? }" }
+        "404": { description: Not found / not public }
+  /api/v2/drop/public/{file_id}/content:
+    get:
+      summary: Opaque public share content — gateway proxy fallback (no auth)
+      description: |
+        Streams the file's bytes through the gateway. Durable fallback for when
+        the browser cannot fetch a node gateway directly (e.g. missing CORS or a
+        node offline); sources the CID from **any** healthy node that holds it
+        pinned. Filenames are sanitized; `X-Content-Type-Options: nosniff`.
+      security: []
+      parameters:
+        - { name: file_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: file bytes }
+        "404": { description: Not found / not public }
+  /api/v2/orgs/{org_id}/drop/files:
+    get:
+      summary: Private-org Drop files
+      description: Ordinary members see only their own files; owners/node-operators may inspect all metadata but never receive another user's encryption metadata.
+      parameters:
+        - { name: org_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ files[] }" }
+        "403": { description: Not a member }
+  /api/v2/orgs/{org_id}/drop/usage:
+    get:
+      summary: Private-org aggregate Drop usage
+      parameters:
+        - { name: org_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ used_bytes, file_count }" }
+        "403": { description: Not a member }
+  /api/v2/orgs/{org_id}/nodes/{node_id}/drop/webui/session:
+    post:
+      summary: Open a short-lived same-origin Kubo WebUI proxy session (owner/node-operator)
+      description: |
+        Returns a gateway-relative `session_path`. The gateway proxies WebUI
+        traffic through that path; the raw node/Kubo address is never revealed.
+        Sessions are short-lived (5 min).
+      parameters:
+        - { name: org_id, in: path, required: true, schema: { type: string } }
+        - { name: node_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "{ session_path, expires_in }" }
+        "403": { description: Insufficient role }
+        "409": { description: WebUI not available on node }
+  /api/v2/drop/webui/{session_id}/{proxy_path}:
+    get:
+      summary: Same-origin Kubo WebUI proxy (session-validated)
+      description: Relays to the node's private WebUI. Any method is accepted; the session id is validated server-side.
+      security: []
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+        - { name: proxy_path, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: proxied response }
+        "404": { description: Session not found or expired }
 components:
   schemas:
     NodePublic:
