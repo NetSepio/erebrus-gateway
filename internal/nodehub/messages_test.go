@@ -18,7 +18,7 @@ const canonicalHello = `{
       "ip_hash": "f1820f54e0e51b8a1a47b0ec96265d6021b3a0b6c6c61563b1d62fa4a4b0d3c2"
     },
     "spec": { "cpu": "4 vCPU", "mem_mb": 8192, "region": "SG", "ip": "203.0.113.10" },
-    "capabilities": { "app_hosting": false, "wildcard_domain": "" },
+    "capabilities": { "access_mode": "public" },
     "endpoints": {
       "wireguard":     { "port": 51820, "public_key": "wOLuwnTGzkkCC1WiV2t5HpJ56FftZyXTK0WnWxSDFkI=" },
       "vless_reality": { "port": 8443,  "public_key": "SRYxyiZ1Tr3w0aV3PXAhd1NSjpvm8wOCnnlLWWBd7Vc", "short_ids": ["6ba85179e30d4fc2"], "sni": "www.microsoft.com" },
@@ -54,18 +54,13 @@ func TestParseCanonicalHello(t *testing.T) {
 	if len(h.Endpoints.VLESSReality.ShortIDs) != 1 || h.Endpoints.VLESSReality.SNI != "www.microsoft.com" {
 		t.Errorf("vless endpoint = %+v", h.Endpoints.VLESSReality)
 	}
+	if h.Capabilities.AccessMode != "public" {
+		t.Errorf("access_mode = %q, want public", h.Capabilities.AccessMode)
+	}
 
-	// access_mode is optional in the canonical example but must round-trip when present.
-	var env2 Envelope
-	if err := json.Unmarshal([]byte(canonicalHello), &env2); err != nil {
-		t.Fatalf("unmarshal envelope: %v", err)
-	}
-	var h2 Hello
-	if err := json.Unmarshal(env2.Data, &h2); err != nil {
-		t.Fatalf("unmarshal hello: %v", err)
-	}
-	h2.Capabilities.AccessMode = "private"
-	caps, err := json.Marshal(h2.Capabilities)
+	// access_mode must round-trip when set to private.
+	h.Capabilities.AccessMode = "private"
+	caps, err := json.Marshal(h.Capabilities)
 	if err != nil {
 		t.Fatalf("marshal capabilities: %v", err)
 	}
@@ -123,8 +118,8 @@ const canonicalDropHello = `{
     "identity": { "peer_id": "12D3Koo", "did": "did:erebrus:12D3Koo", "ip_hash": "abc" },
     "spec": { "cpu": "4 vCPU", "mem_mb": 8192, "region": "SG", "ip": "203.0.113.10" },
     "capabilities": {
-      "app_hosting": false, "wildcard_domain": "",
-      "drop": { "enabled": true, "accepts_public_uploads": true, "webui_available": true, "public_gateway_url": "https://node-sg-1.gw.erebrus.io" }
+      "access_mode": "public",
+      "drop": { "enabled": true, "accepts_public_uploads": true, "webui_available": false }
     },
     "endpoints": {
       "wireguard": { "port": 51820, "public_key": "k" },
@@ -147,11 +142,8 @@ func TestParseDropHelloCapability(t *testing.T) {
 	if h.Capabilities.Drop == nil {
 		t.Fatal("expected drop capability")
 	}
-	if !h.Capabilities.Drop.Enabled || !h.Capabilities.Drop.AcceptsPublicUploads || !h.Capabilities.Drop.WebUIAvailable {
+	if !h.Capabilities.Drop.Enabled || !h.Capabilities.Drop.AcceptsPublicUploads || h.Capabilities.Drop.WebUIAvailable {
 		t.Errorf("drop capability = %+v", h.Capabilities.Drop)
-	}
-	if h.Capabilities.Drop.PublicGatewayURL != "https://node-sg-1.gw.erebrus.io" {
-		t.Errorf("drop public_gateway_url = %q", h.Capabilities.Drop.PublicGatewayURL)
 	}
 	if h.Services["drop"] != "active" {
 		t.Errorf("services.drop = %q", h.Services["drop"])
@@ -159,7 +151,7 @@ func TestParseDropHelloCapability(t *testing.T) {
 
 	// A hello without a drop block must leave Drop nil (backward compatible).
 	var legacy Hello
-	if err := json.Unmarshal([]byte(`{"node_id":"x","capabilities":{"app_hosting":false,"wildcard_domain":""}}`), &legacy); err != nil {
+	if err := json.Unmarshal([]byte(`{"node_id":"x","capabilities":{"access_mode":"private"}}`), &legacy); err != nil {
 		t.Fatalf("legacy hello: %v", err)
 	}
 	if legacy.Capabilities.Drop != nil {

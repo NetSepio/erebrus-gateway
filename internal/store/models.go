@@ -556,7 +556,6 @@ type NodeDropStatus struct {
 	StorageMaxBytes      int64      `json:"storage_max_bytes"`
 	NumObjects           int64      `json:"num_objects"`
 	ReservedBytes        int64      `json:"reserved_bytes"`
-	PublicGatewayURL     string     `json:"public_gateway_url,omitempty"`
 	LastReportedAt       *time.Time `json:"last_reported_at,omitempty"`
 }
 

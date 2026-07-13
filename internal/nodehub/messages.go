@@ -26,7 +26,6 @@ const (
 	ActionUndrain                  = "undrain"
 	ActionRotateReality            = "rotate_reality"
 	ActionResyncPeers              = "resync_peers"
-	ActionSyncApps                 = "sync_apps"
 	ActionSyncFirewall             = "sync_firewall"
 	ActionRestartFirewall          = "restart_firewall"
 	ActionResetFirewallCredentials = "reset_firewall_credentials"
@@ -57,10 +56,8 @@ type Spec struct {
 
 // Capabilities advertises optional node features.
 type Capabilities struct {
-	AccessMode     string          `json:"access_mode,omitempty"` // private | shared | public
-	AppHosting     bool            `json:"app_hosting"`
-	WildcardDomain string          `json:"wildcard_domain"`
-	Drop           *DropCapability `json:"drop,omitempty"` // additive; absent on non-Drop nodes
+	AccessMode string          `json:"access_mode,omitempty"` // private | public
+	Drop       *DropCapability `json:"drop,omitempty"`        // additive; absent on non-Drop nodes
 }
 
 // DropCapability advertises a node's optional Drop (Kubo storage) support. It is
@@ -70,11 +67,6 @@ type DropCapability struct {
 	Enabled              bool `json:"enabled"`
 	AcceptsPublicUploads bool `json:"accepts_public_uploads"`
 	WebUIAvailable       bool `json:"webui_available"`
-	// PublicGatewayURL is the node's public IPFS gateway base (http(s), e.g.
-	// https://node-host:8080 or a reverse-proxied host) used for direct object
-	// retrieval. The Kubo RPC (5001) is never advertised. Empty when the node
-	// exposes no public gateway.
-	PublicGatewayURL string `json:"public_gateway_url,omitempty"`
 }
 
 // DropStatus is the node's Drop runtime health and capacity, reported in each

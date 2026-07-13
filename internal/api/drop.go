@@ -656,18 +656,15 @@ func (s *Server) handleDropPutVault(c *gin.Context) {
 
 // ── public opaque share ────────────────────────────
 
-// handleDropPublicGet returns public metadata for an opaquely-identified file,
-// including the hosting node's gateway_url and any other nodes' gateway_urls
-// that hold the CID (for direct, CORS-permitting browser retrieval). The
-// gateway proxy at /content remains the durable fallback.
+// handleDropPublicGet returns public metadata for an opaquely-identified file.
+// Content is retrieved only via the gateway proxy at /content (nodes no longer
+// advertise a public IPFS gateway base).
 func (s *Server) handleDropPublicGet(c *gin.Context) {
 	f, ok2 := s.loadPublicDropFile(c)
 	if !ok2 {
 		return
 	}
-	sources, _ := s.store.DropObjectSources(c, f.CID, f.NodeID)
-	gwURL, gwURLs := dropGatewayLinks(sources, f.CID)
-	h := gin.H{
+	ok(c, http.StatusOK, gin.H{
 		"id":           f.ID,
 		"cid":          f.CID,
 		"filename":     f.Filename,
@@ -676,16 +673,7 @@ func (s *Server) handleDropPublicGet(c *gin.Context) {
 		"encrypted":    f.Encrypted,
 		"created_at":   f.CreatedAt,
 		"content_url":  "/api/v2/drop/public/" + f.ID + "/content",
-	}
-	if gwURL != "" {
-		h["gateway_url"] = gwURL
-		h["public_gateway_url"] = gwURL // webapp-accepted alias
-	}
-	if len(gwURLs) > 0 {
-		h["gateway_urls"] = gwURLs
-		h["public_gateway_urls"] = gwURLs // webapp-accepted alias
-	}
-	ok(c, http.StatusOK, h)
+	})
 }
 
 // handleDropPublicContent streams a public file's bytes through the gateway.
@@ -965,48 +953,11 @@ func (s *Server) streamDropContent(c *gin.Context, f *store.DropFile) {
 	metrics.DropDownloadBytesTotal.WithLabelValues(f.StorageScope).Add(float64(n))
 }
 
-// renderDropFile builds a file's response view, augmenting public files that
-// have a committed CID with direct-retrieval gateway URLs (origin node first
-// plus any other nodes holding the CID). Private/encrypted files never expose
-// gateway URLs — their content is only reachable via the authenticated proxy.
+// renderDropFile builds a file's response view. Content retrieval is always
+// gateway-proxied (`content_url`); nodes no longer advertise a public IPFS
+// gateway base for direct browser retrieval.
 func (s *Server) renderDropFile(c *gin.Context, f *store.DropFile, owner bool) gin.H {
-	h := dropFileView(f, owner)
-	if f.Visibility == store.DropVisibilityPublic && f.Status == store.DropFileActive && f.CID != "" {
-		if sources, err := s.store.DropObjectSources(c, f.CID, f.NodeID); err == nil {
-			if gwURL, gwURLs := dropGatewayLinks(sources, f.CID); gwURL != "" {
-				h["gateway_url"] = gwURL
-				h["public_gateway_url"] = gwURL
-				if len(gwURLs) > 0 {
-					h["gateway_urls"] = gwURLs
-					h["public_gateway_urls"] = gwURLs
-				}
-			}
-		}
-	}
-	return h
-}
-
-// dropGatewayLinks turns pinned-node sources into a primary gateway_url and the
-// full list of per-node CID URLs. Each URL is `<gateway-base>/ipfs/<cid>`; the
-// primary is the preferred (origin) node, which DropObjectSources returns first.
-func dropGatewayLinks(sources []store.DropObjectSource, cid string) (primary string, all []string) {
-	seen := map[string]struct{}{}
-	for _, src := range sources {
-		base := store.NormalizePublicGatewayURL(src.PublicGatewayURL)
-		if base == "" {
-			continue
-		}
-		u := base + "/ipfs/" + cid
-		if _, dup := seen[u]; dup {
-			continue
-		}
-		seen[u] = struct{}{}
-		all = append(all, u)
-	}
-	if len(all) > 0 {
-		primary = all[0]
-	}
-	return primary, all
+	return dropFileView(f, owner)
 }
 
 // contentDisposition builds a safe attachment header, stripping control

@@ -22,31 +22,6 @@ func TestCoarseCapacity(t *testing.T) {
 	}
 }
 
-func TestNormalizePublicGatewayURL(t *testing.T) {
-	t.Parallel()
-	cases := map[string]string{
-		"":                             "",
-		"   ":                          "",
-		"https://drop-sg1.erebrus.io":  "https://drop-sg1.erebrus.io",
-		"https://drop-sg1.erebrus.io/": "https://drop-sg1.erebrus.io",
-		"https://Node-SG-1.Erebrus.IO/ipfs/x?a=b#c": "https://node-sg-1.erebrus.io",
-		"  https://drop.erebrus.io  ":               "https://drop.erebrus.io",
-		"http://203.0.113.10:8080":                  "http://203.0.113.10:8080",
-		"HTTPS://Drop.Erebrus.io":                   "https://drop.erebrus.io",
-		"http://node:5001":                          "", // Kubo RPC port rejected
-		"https://user:pass@drop.io":                 "", // credentials rejected
-		"ftp://drop.erebrus.io":                     "", // non-http(s) rejected
-		"https://":                                  "", // missing host
-		"not a url":                                 "", // no scheme/host
-		"/ipfs/x":                                   "", // relative
-	}
-	for in, want := range cases {
-		if got := NormalizePublicGatewayURL(in); got != want {
-			t.Errorf("NormalizePublicGatewayURL(%q)=%q want %q", in, got, want)
-		}
-	}
-}
-
 func TestNormalizeDropState(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{

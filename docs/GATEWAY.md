@@ -127,18 +127,12 @@ Drop lets users store files on Kubo (IPFS) nodes through the gateway. It is an
   active reference on a node is deleted. Deletion, quota release, and unpin are
   idempotent. Failed physical unpins and pins created before a metadata-commit
   failure are persisted and retried by reconciliation after shared-CID checks.
-- **Direct retrieval + fallback:** Nodes advertise a public IPFS gateway base
-  additively (`hello.capabilities.drop.public_gateway_url`, http(s), never the
-  5001 RPC). Public file responses (`GET /drop/files`, `/drop/files/{id}`,
-  `/drop/public/{file_id}`) surface `gateway_url` (primary node) and
-  `gateway_urls` (all nodes holding the CID, from the `drop_pins` join;
-  `public_gateway_url(s)` are accepted aliases) so browsers can fetch
-  `<base>/ipfs/<cid>` directly. `GET /drop/public/{file_id}/content` is the
-  durable proxy fallback and sources the CID from **any** healthy pinned node,
-  so a single node going offline does not break retrieval. **Node-side
-  requirement:** for direct browser fetches the node's `/ipfs/*` must return
-  permissive CORS (`Access-Control-Allow-Origin` + `GET, HEAD, OPTIONS`); without
-  it the webapp silently falls back to the proxy (functional, but no offload).
+- **Content retrieval:** Public and private file bytes are always streamed
+  gateway→caller via the authenticated or public proxy (`GET
+  /drop/files/{id}/content`, `GET /drop/public/{file_id}/content`). The proxy
+  sources the CID from **any** healthy pinned node, so a single node going
+  offline does not break retrieval. Nodes no longer advertise a public IPFS
+  gateway base; there are no direct `gateway_url` / `public_gateway_url` links.
 - **Security:** Public shares use opaque file ids, never raw CIDs, and enforce
   `visibility=public` + `status=active`. Private confidentiality relies on
   **client-side encryption**; the gateway stores only opaque encryption metadata
@@ -159,8 +153,10 @@ Drop; discovery follows node health. Drop rate limits live in
 
 Tables (migration `0026_drop.sql`): `drop_tier_limits`, `drop_uploads`,
 `drop_files`, `drop_pins`, `drop_quota_usage`, `node_drop_status`,
-`drop_crypto_profiles`. Migration `0027_drop_gateway_url.sql` adds
-`node_drop_status.public_gateway_url`.
+`drop_crypto_profiles`. Migration `0027_drop_gateway_url.sql` added
+`node_drop_status.public_gateway_url` (later removed by
+`0029_drop_public_gateway_url.sql` when nodes stopped advertising a public
+gateway base).
 
 ---
 
