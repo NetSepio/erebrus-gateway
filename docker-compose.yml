@@ -78,7 +78,6 @@ services:
       REALITY_SERVER_NAMES: www.microsoft.com
       STATE_DIR: /var/lib/erebrus
       CHAIN_REGISTRATION: "off"
-      ENABLE_APP_HOSTING: "false"
     volumes: [node1state:/var/lib/erebrus]
     ports: ["9080:9080", "51820:51820/udp", "8443:8443", "4443:4443/udp"]
 

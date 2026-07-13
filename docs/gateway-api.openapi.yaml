@@ -651,28 +651,6 @@ paths:
     post:
       summary: Node REST heartbeat (node PASETO)
       responses: { "204": { description: Recorded } }
-  # ───────────────────────── hosted apps (Phase 5) ─────────────────────────
-  /api/v2/apps:
-    get:
-      { summary: My hosted apps, responses: { "200": { description: Apps } } }
-    post:
-      summary: Register an app exposure
-      description: |
-        Requires an active VPN client on a node with app_hosting capability.
-        visibility=global requires explicit T&C acceptance (timestamp stored).
-        Subdomain unique per node domain. Gateway dispatches sync_apps to node.
-      responses:
-        {
-          "201": { description: App registered },
-          "409": { description: Subdomain taken / node lacks capability },
-        }
-  /api/v2/apps/{id}:
-    delete:
-      {
-        summary: Remove app exposure,
-        responses: { "204": { description: Removed } },
-      }
-
   # ───────────────────────── admin ─────────────────────────
   /api/v2/admin/stats:
     get:
@@ -765,14 +743,6 @@ paths:
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
       responses:
         "200": { description: "{ activity[{id, user_id, wallet, action, target, ip, device, app, created_at}], next_cursor? }" }
-  /api/v2/admin/apps:
-    {
-      get:
-        {
-          summary: "All hosted apps (takedown via DELETE /api/v2/apps/{id} as admin)",
-          responses: { "200": { description: Apps } },
-        },
-    }
   /api/v2/admin/settings:
     get:
       summary: List platform_settings (XP, legacy trial values, rate limits, auth text, …)
@@ -883,17 +853,15 @@ paths:
       description: |
         Each file includes `id, node_id, scope, filename, size_bytes, visibility,
         encrypted, status, created_at` (owner also gets `cid` + `encryption_metadata`).
-        Public files with a committed CID additionally include `gateway_url` (the
-        primary node's `<base>/ipfs/<cid>`) and `gateway_urls` (all nodes holding
-        the CID); `public_gateway_url`/`public_gateway_urls` are accepted aliases.
+        Content is retrieved via the gateway proxy only
+        (`GET /api/v2/drop/files/{file_id}/content`).
       responses: { "200": { description: "{ files[] }" } }
   /api/v2/drop/files/{file_id}:
     get:
       summary: File metadata (owner sees CID + encryption metadata; others do not)
       description: |
-        Public files with a committed CID also carry `gateway_url` + `gateway_urls`
-        (with `public_gateway_url`/`public_gateway_urls` aliases) for direct
-        node-gateway retrieval. Private/encrypted files never expose these.
+        Metadata only. Bytes stream through the gateway proxy at
+        `GET /api/v2/drop/files/{file_id}/content` (no node public-gateway links).
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }
       responses:
@@ -973,25 +941,24 @@ paths:
       summary: Opaque public share metadata (no auth)
       description: |
         Returns metadata for a `public` + `active` file: `id, cid, filename,
-        size_bytes, content_type, encrypted, created_at, content_url`, plus
-        `gateway_url` + `gateway_urls` (with `public_gateway_url`/
-        `public_gateway_urls` aliases) pointing at node IPFS gateways that hold
-        the CID, for direct browser retrieval. The path uses the file's opaque
-        id — never a raw CID. Rate limited per IP. Any other state → 404.
+        size_bytes, content_type, encrypted, created_at, content_url`. Content
+        is always retrieved via the gateway proxy at
+        `GET /api/v2/drop/public/{file_id}/content`. The path uses the file's
+        opaque id — never a raw CID. Rate limited per IP. Any other state → 404.
       security: []
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: "{ id, cid, filename, size_bytes, content_type, content_url, gateway_url?, gateway_urls? }" }
+        "200": { description: "{ id, cid, filename, size_bytes, content_type, content_url }" }
         "404": { description: Not found / not public }
   /api/v2/drop/public/{file_id}/content:
     get:
-      summary: Opaque public share content — gateway proxy fallback (no auth)
+      summary: Opaque public share content — gateway proxy (no auth)
       description: |
-        Streams the file's bytes through the gateway. Durable fallback for when
-        the browser cannot fetch a node gateway directly (e.g. missing CORS or a
-        node offline); sources the CID from **any** healthy node that holds it
-        pinned. Filenames are sanitized; `X-Content-Type-Options: nosniff`.
+        Streams the file's bytes through the gateway. Sources the CID from
+        **any** healthy node that holds it pinned so a single node offline does
+        not break retrieval. Filenames are sanitized;
+        `X-Content-Type-Options: nosniff`.
       security: []
       parameters:
         - { name: file_id, in: path, required: true, schema: { type: string } }

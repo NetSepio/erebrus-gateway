@@ -56,8 +56,7 @@ below and compare them field-for-field. Change this file first, then both repos.
       "ip": "203.0.113.10"
     },
     "capabilities": {
-      "app_hosting": false,
-      "wildcard_domain": ""
+      "access_mode": "public"
     },
     "endpoints": {
       "wireguard":     { "port": 51820, "public_key": "wOLuwnTGzkkCC1WiV2t5HpJ56FftZyXTK0WnWxSDFkI=" },
@@ -72,8 +71,7 @@ below and compare them field-for-field. Change this file first, then both repos.
   string (see `identity.md`). The raw `spec.ip` is sent over the authenticated
   channel for gateway operational use (client endpoint construction); only
   `ip_hash` may ever be published externally (future on-chain registration).
-- `capabilities.wildcard_domain` is set only when `app_hosting` is true
-  (Phase 5), e.g. `"*.node-sg-1.erebrus.network"`.
+- `capabilities.access_mode` is `private` or `public`.
 - `endpoints.hysteria2.obfs` is `""` (no obfuscation) or `"salamander"`.
 
 ### `hello_ack` (gateway → node)
@@ -163,7 +161,6 @@ Actions (v2.0):
 | `undrain` | `{}` | leave draining state |
 | `rotate_reality` | `{}` | regenerate REALITY short-ids (keypair kept), rebuild sing-box; node re-sends `hello` with new endpoint data |
 | `resync_peers` | `{"peer_ids": ["...", "..."]}` | authoritative list of active peer ids from the gateway; node deletes local peers not in the list and reports peers it has that are missing (in `command_result.error` as a JSON detail, `ok=true`) |
-| `sync_apps` | `{"apps": [...]}` (Phase 5) | reconcile hosted-apps table; schema frozen in Phase 5 addendum |
 | `sync_firewall` | gateway policy payload (`org_id`, `node_id`, `service_kind`, `rules`, `upstreams`, `licensed`) | node applies rules to Sentinel (Unbound) or clears Shield (AdGuard) cache |
 | `restart_firewall` | `{}` | reload Sentinel Unbound or restart Shield |
 | `reset_firewall_credentials` | `{}` | Shield credential reset hook (operator re-opens AdGuard setup) |
@@ -190,13 +187,11 @@ compatible). Standard, Shield, and Sentinel profiles may all run Drop.
 ```json
 {
   "capabilities": {
-    "app_hosting": false,
-    "wildcard_domain": "",
+    "access_mode": "public",
     "drop": {
       "enabled": true,
       "accepts_public_uploads": true,
-      "webui_available": true,
-      "public_gateway_url": "https://node-sg-1.gw.erebrus.io"
+      "webui_available": false
     }
   }
 }
@@ -208,13 +203,8 @@ compatible). Standard, Shield, and Sentinel profiles may all run Drop.
 - `webui_available` — the node exposes a Kubo WebUI that the gateway may proxy
   through a short-lived same-origin session. The raw Kubo RPC/WebUI address is
   never published; it stays on the node's internal Docker network.
-- `public_gateway_url` — optional. The node's **public IPFS gateway base**
-  (`http(s)`, e.g. `https://node-host:8080` or a reverse-proxied host) that the
-  gateway surfaces on public file responses (`gateway_url`/`gateway_urls`) for
-  direct browser retrieval of `<base>/ipfs/<cid>`. The Kubo **RPC** port (5001)
-  is never advertised or stored. For browsers to fetch it cross-origin the
-  node's `/ipfs/*` must send permissive CORS; without it the webapp silently
-  falls back to the gateway proxy.
+- Content retrieval is always gateway-proxied (`content_url`); nodes do not
+  advertise a public IPFS gateway base.
 
 ### `heartbeat.drop` + `heartbeat.versions.kubo` (node → gateway)
 

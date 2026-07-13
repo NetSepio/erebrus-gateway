@@ -333,7 +333,6 @@ var allowedNodeCommandActions = map[string]bool{
 	nodehub.ActionUndrain:                  true,
 	nodehub.ActionRotateReality:            true,
 	nodehub.ActionResyncPeers:              true,
-	nodehub.ActionSyncApps:                 true,
 	nodehub.ActionSyncFirewall:             true,
 	nodehub.ActionRestartFirewall:          true,
 	nodehub.ActionResetFirewallCredentials: true,
