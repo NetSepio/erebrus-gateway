@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -322,7 +323,7 @@ func dropUploadScan(u *DropUpload) []any {
 	return []any{
 		&u.ID, &u.OwnerUserID, &u.OrgID, &u.EntitlementOrgID, &u.NodeID, &u.StorageScope,
 		&u.Visibility, &u.Filename, &u.ContentType, &u.DeclaredSizeBytes, &u.ReservedBytes,
-		&u.SHA256, &u.Encrypted, &u.EncryptionMetadata, &u.Status, &u.IdempotencyKey, &u.CID,
+		&u.SHA256, &u.Encrypted, nullJSONScan{&u.EncryptionMetadata}, &u.Status, &u.IdempotencyKey, &u.CID,
 		&u.Error, &u.ExpiresAt, &u.CreatedAt, &u.UpdatedAt,
 	}
 }
@@ -362,4 +363,22 @@ func nullJSON(b json.RawMessage) any {
 		return nil
 	}
 	return []byte(b)
+}
+
+// nullJSONScan scans a nullable jsonb column into a json.RawMessage, mapping
+// SQL NULL to a nil message (database/sql cannot scan NULL into *json.RawMessage).
+type nullJSONScan struct{ dst *json.RawMessage }
+
+func (n nullJSONScan) Scan(src any) error {
+	switch v := src.(type) {
+	case nil:
+		*n.dst = nil
+	case []byte:
+		*n.dst = append(json.RawMessage(nil), v...)
+	case string:
+		*n.dst = json.RawMessage(v)
+	default:
+		return fmt.Errorf("unsupported jsonb scan type %T", src)
+	}
+	return nil
 }
