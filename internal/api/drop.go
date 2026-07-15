@@ -249,7 +249,10 @@ func (s *Server) handleDropReserveUpload(c *gin.Context) {
 			return
 		}
 		in.OrgID = req.OrgID
-		in.Visibility = store.DropVisibilityPrivate // private-org files are never public shares
+		in.Visibility = req.Visibility
+		if in.Visibility != store.DropVisibilityPublic {
+			in.Visibility = store.DropVisibilityPrivate
+		}
 	default:
 		if node.AccessMode != store.NodeAccessPublic {
 			fail(c, http.StatusForbidden, "node is not public")
@@ -267,7 +270,7 @@ func (s *Server) handleDropReserveUpload(c *gin.Context) {
 		}
 	}
 
-	if (in.Scope == store.DropScopePrivateOrg || in.Visibility == store.DropVisibilityPrivate) &&
+	if in.Visibility == store.DropVisibilityPrivate &&
 		(!in.Encrypted || len(in.EncryptionMetadata) == 0) {
 		fail(c, http.StatusBadRequest, "private files require client-side encryption metadata")
 		return
@@ -454,9 +457,8 @@ func (s *Server) handleDropPatchFile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to load file")
 		return
 	}
-	if req.Visibility == store.DropVisibilityPublic &&
-		(current.StorageScope == store.DropScopePrivateOrg || current.Encrypted) {
-		fail(c, http.StatusBadRequest, "encrypted or private-node files cannot be made public")
+	if req.Visibility == store.DropVisibilityPublic && current.Encrypted {
+		fail(c, http.StatusBadRequest, "encrypted files cannot be made public")
 		return
 	}
 	f, err := s.store.SetDropFileVisibility(c, c.Param("fileId"), userID(c), req.Visibility)
@@ -700,7 +702,7 @@ func (s *Server) loadPublicDropFile(c *gin.Context) (*store.DropFile, bool) {
 		fail(c, http.StatusInternalServerError, "failed to load file")
 		return nil, false
 	}
-	if f.Visibility != store.DropVisibilityPublic || f.StorageScope != store.DropScopePublic ||
+	if f.Visibility != store.DropVisibilityPublic ||
 		f.Encrypted || f.Status != store.DropFileActive {
 		fail(c, http.StatusNotFound, "not found")
 		return nil, false
