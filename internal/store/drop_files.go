@@ -15,7 +15,7 @@ func dropFileScan(f *DropFile) []any {
 	return []any{
 		&f.ID, &f.UploadID, &f.OwnerUserID, &f.OrgID, &f.EntitlementOrgID, &f.NodeID,
 		&f.StorageScope, &f.CID, &f.Filename, &f.ContentType, &f.SizeBytes, &f.Visibility,
-		&f.Encrypted, &f.EncryptionMetadata, &f.Status, &f.CreatedAt, &f.DeletedAt,
+		&f.Encrypted, nullJSONScan{&f.EncryptionMetadata}, &f.Status, &f.CreatedAt, &f.DeletedAt,
 	}
 }
 
@@ -518,7 +518,7 @@ func (s *Store) GetDropCryptoProfile(ctx context.Context, userID string) (*DropC
 	err := s.db.QueryRowContext(ctx,
 		`SELECT user_id, version, COALESCE(public_key,''), encrypted_vault, kdf_metadata, created_at, updated_at
 		 FROM drop_crypto_profiles WHERE user_id=$1::uuid`, userID).
-		Scan(&p.UserID, &p.Version, &p.PublicKey, &p.EncryptedVault, &p.KDFMetadata, &p.CreatedAt, &p.UpdatedAt)
+		Scan(&p.UserID, &p.Version, &p.PublicKey, &p.EncryptedVault, nullJSONScan{&p.KDFMetadata}, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -562,7 +562,7 @@ func (s *Store) PutDropCryptoProfile(ctx context.Context, userID, publicKey, enc
 		     encrypted_vault=EXCLUDED.encrypted_vault, kdf_metadata=EXCLUDED.kdf_metadata, updated_at=now()
 		 RETURNING user_id, version, COALESCE(public_key,''), encrypted_vault, kdf_metadata, created_at, updated_at`,
 		userID, next, publicKey, encryptedVault, nullJSON(kdf)).
-		Scan(&p.UserID, &p.Version, &p.PublicKey, &p.EncryptedVault, &p.KDFMetadata, &p.CreatedAt, &p.UpdatedAt)
+		Scan(&p.UserID, &p.Version, &p.PublicKey, &p.EncryptedVault, nullJSONScan{&p.KDFMetadata}, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
