@@ -51,6 +51,20 @@ func (d OrgInviteEmail) inviterLine() string {
 	return "You have been invited to join a workspace on Erebrus VPN."
 }
 
+func brandURLs(product string) (logoURL, siteURL string) {
+	switch strings.ToLower(strings.TrimSpace(product)) {
+	case "erebrus ai", "ai":
+		return "https://erebrus.io/ai/logo.png", "https://erebrus.io/ai"
+	case "erebrus drop", "drop":
+		return "https://erebrus.io/drop/logo.png", "https://erebrus.io/drop"
+	case "erebrus vpn", "vpn":
+		return "https://erebrus.io/vpn/logo.png", "https://erebrus.io/vpn"
+	case "erebrus":
+		return "https://erebrus.io/favicon.ico", "https://erebrus.io"
+	}
+	return "https://erebrus.io/favicon.ico", "https://erebrus.io"
+}
+
 func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
 	year := time.Now().Year()
 	preheader = html.EscapeString(strings.TrimSpace(preheader))
@@ -59,6 +73,7 @@ func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
 	if product == "" {
 		product = "Erebrus"
 	}
+	logoURL, siteURL := brandURLs(product)
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -105,7 +120,7 @@ func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
 		title,
 		brandBg, preheader, brandBg,
 		brandSurface,
-		brandSiteURL, brandLogoURL, product, brandText3, product,
+		siteURL, logoURL, product, brandText3, product,
 		brandText, title,
 		bodyHTML,
 		brandText2, year,
