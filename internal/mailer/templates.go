@@ -26,14 +26,6 @@ type OrgInviteEmail struct {
 	LogoURL     string
 }
 
-func (d OrgInviteEmail) logo() string {
-	if u := strings.TrimSpace(d.LogoURL); u != "" {
-		return u
-	}
-	logoURL, _ := brandURLs("Erebrus")
-	return logoURL
-}
-
 func (d OrgInviteEmail) inviterLine() string {
 	inviter := strings.TrimSpace(d.InviterName)
 	role := strings.TrimSpace(d.Role)
