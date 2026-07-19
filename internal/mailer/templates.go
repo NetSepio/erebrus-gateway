@@ -51,10 +51,14 @@ func (d OrgInviteEmail) inviterLine() string {
 	return "You have been invited to join a workspace on Erebrus VPN."
 }
 
-func renderBrandedEmail(preheader, title, bodyHTML string) string {
+func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
 	year := time.Now().Year()
 	preheader = html.EscapeString(strings.TrimSpace(preheader))
 	title = html.EscapeString(strings.TrimSpace(title))
+	product = html.EscapeString(strings.TrimSpace(product))
+	if product == "" {
+		product = "Erebrus"
+	}
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -70,9 +74,9 @@ func renderBrandedEmail(preheader, title, bodyHTML string) string {
 <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:560px;background:%s;border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;">
 <tr><td style="padding:28px 32px 20px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">
 <a href="%s" style="text-decoration:none;">
-<img src="%s" alt="Erebrus VPN" width="48" height="48" style="display:block;margin:0 auto 12px;border-radius:12px;">
+<img src="%s" alt="%s" width="48" height="48" style="display:block;margin:0 auto 12px;border-radius:12px;">
 </a>
-<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:%s;font-weight:600;">Erebrus VPN</div>
+<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:%s;font-weight:600;">%s</div>
 </td></tr>
 <tr><td style="padding:32px;">
 <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:700;color:%s;">%s</h1>
@@ -101,7 +105,7 @@ func renderBrandedEmail(preheader, title, bodyHTML string) string {
 		title,
 		brandBg, preheader, brandBg,
 		brandSurface,
-		brandSiteURL, brandLogoURL, brandText3,
+		brandSiteURL, brandLogoURL, product, brandText3, product,
 		brandText, title,
 		bodyHTML,
 		brandText2, year,
@@ -137,6 +141,7 @@ func renderOrgInviteHTML(data OrgInviteEmail) string {
 		fmt.Sprintf("Join %s on Erebrus VPN", data.OrgName),
 		fmt.Sprintf("Join %s", data.OrgName),
 		body,
+		"Erebrus VPN",
 	)
 }
 
@@ -159,7 +164,7 @@ func renderOrgInviteAcceptedHTML(org, invitee, role, workspaceURL string, toInvi
 		body := bodyParagraph(fmt.Sprintf("<strong style=\"color:%s;\">%s</strong> accepted your invitation to join <strong style=\"color:%s;\">%s</strong> as <strong>%s</strong>.",
 			brandText, html.EscapeString(invitee), brandText, html.EscapeString(org), html.EscapeString(role))) +
 			ctaButton(url, "Open workspace")
-		htmlOut = renderBrandedEmail(subject, "Invitation accepted", body)
+		htmlOut = renderBrandedEmail(subject, "Invitation accepted", body, "Erebrus VPN")
 		return
 	}
 
@@ -169,7 +174,7 @@ func renderOrgInviteAcceptedHTML(org, invitee, role, workspaceURL string, toInvi
 		brandText, html.EscapeString(org), html.EscapeString(role))) +
 		bodyParagraph("You can now access workspace nodes, manage VPN clients, and collaborate with your team.") +
 		ctaButton(url, "Open workspace")
-	htmlOut = renderBrandedEmail(subject, fmt.Sprintf("Welcome to %s", org), body)
+	htmlOut = renderBrandedEmail(subject, fmt.Sprintf("Welcome to %s", org), body, "Erebrus VPN")
 	return
 }
 
@@ -190,7 +195,7 @@ func renderOrgInviteDeclinedHTML(org, invitee, role string, toInviter bool) (sub
 		body := bodyParagraph(fmt.Sprintf("<strong style=\"color:%s;\">%s</strong> declined the invitation to join <strong style=\"color:%s;\">%s</strong> as <strong>%s</strong>.",
 			brandText, html.EscapeString(invitee), brandText, html.EscapeString(org), html.EscapeString(role))) +
 			bodyParagraph("No further action is required on your part.")
-		htmlOut = renderBrandedEmail(subject, "Invitation declined", body)
+		htmlOut = renderBrandedEmail(subject, "Invitation declined", body, "Erebrus VPN")
 		return
 	}
 
@@ -199,14 +204,42 @@ func renderOrgInviteDeclinedHTML(org, invitee, role string, toInviter bool) (sub
 	body := bodyParagraph(fmt.Sprintf("You declined the invitation to join <strong style=\"color:%s;\">%s</strong> as <strong>%s</strong>.",
 		brandText, html.EscapeString(org), html.EscapeString(role))) +
 		bodyParagraph("No further action is needed.")
-	htmlOut = renderBrandedEmail(subject, "Invitation declined", body)
+	htmlOut = renderBrandedEmail(subject, "Invitation declined", body, "Erebrus VPN")
 	return
 }
 
-func renderOTPHTML(code string) string {
+func otpProductName(app string) string {
+	app = strings.TrimSpace(app)
+	if app == "" {
+		return "Erebrus"
+	}
+	switch strings.ToLower(app) {
+	case "drop", "erebrus-drop", "erebrus drop":
+		return "Erebrus Drop"
+	case "ai", "erebrus-ai", "erebrus ai":
+		return "Erebrus AI"
+	case "vpn", "erebrus-vpn", "erebrus vpn":
+		return "Erebrus VPN"
+	case "erebrus":
+		return "Erebrus"
+	}
+	return "Erebrus"
+}
+
+func renderOTPHTML(code, product string) string {
+	product = strings.TrimSpace(product)
+	if product == "" {
+		product = "Erebrus"
+	}
 	code = html.EscapeString(strings.TrimSpace(code))
-	body := bodyParagraph("Enter this verification code to sign in to Erebrus VPN:") +
+	displayProduct := html.EscapeString(product)
+	body := bodyParagraph(fmt.Sprintf("Enter this verification code to sign in to %s:", displayProduct)) +
 		fmt.Sprintf(`<p style="margin:20px 0;font-size:32px;font-weight:700;letter-spacing:0.35em;color:%s;text-align:center;">%s</p>`, brandAccent, code) +
 		bodyParagraph("This code expires shortly. If you didn't request it, you can ignore this email.")
-	return renderBrandedEmail("Your Erebrus verification code", "Verification code", body)
+	return renderBrandedEmail(
+		fmt.Sprintf("Your %s verification code", product),
+		"Verification code",
+		body,
+		product,
+	)
 }
