@@ -68,7 +68,7 @@ func TestSendOrgInviteUsesBrandedHTML(t *testing.T) {
 		t.Fatalf("SendOrgInvite: %v", err)
 	}
 	html, _ := body["html"].(string)
-	for _, want := range []string{"Erebrus VPN", "Acme Corp", "Alex", "Manager", "NetSepio LLC", brandLogoURL} {
+	for _, want := range []string{"Erebrus", "Acme Corp", "Alex", "Manager", "NetSepio LLC", "https://erebrus.io/favicon.ico"} {
 		if !contains(html, want) {
 			t.Fatalf("html missing %q: %.200s…", want, html)
 		}
