@@ -49,10 +49,10 @@ func (m *Mailer) Enabled() bool { return m != nil && m.apiKey != "" }
 func (m *Mailer) SendOrgInvite(ctx context.Context, to string, data OrgInviteEmail) error {
 	orgName := strings.TrimSpace(data.OrgName)
 	inviteURL := strings.TrimSpace(data.InviteURL)
-	subject := fmt.Sprintf("You've been invited to %s on Erebrus VPN", orgName)
+	subject := fmt.Sprintf("You've been invited to %s on Erebrus", orgName)
 	inviter := strings.TrimSpace(data.InviterName)
 	role := strings.TrimSpace(data.Role)
-	text := fmt.Sprintf("You've been invited to join %s on Erebrus VPN.\n\n", orgName)
+	text := fmt.Sprintf("You've been invited to join %s on Erebrus.\n\n", orgName)
 	if inviter != "" && role != "" {
 		text += fmt.Sprintf("%s invited you as %s.\n\n", inviter, role)
 	}
