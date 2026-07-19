@@ -15,8 +15,6 @@ const (
 	brandText     = "#F4F3F0"
 	brandText2    = "#9B9A97"
 	brandText3    = "#5C5B58"
-	brandLogoURL  = "https://erebrus.io/vpn/logo.png"
-	brandSiteURL  = "https://erebrus.io/vpn"
 )
 
 // OrgInviteEmail carries data for a workspace invitation message.
@@ -26,13 +24,6 @@ type OrgInviteEmail struct {
 	Role        string
 	InviteURL   string
 	LogoURL     string
-}
-
-func (d OrgInviteEmail) logo() string {
-	if u := strings.TrimSpace(d.LogoURL); u != "" {
-		return u
-	}
-	return brandLogoURL
 }
 
 func (d OrgInviteEmail) inviterLine() string {
@@ -48,7 +39,21 @@ func (d OrgInviteEmail) inviterLine() string {
 	if role != "" {
 		return fmt.Sprintf("You have been invited to join as <strong>%s</strong>.", html.EscapeString(role))
 	}
-	return "You have been invited to join a workspace on Erebrus VPN."
+	return "You have been invited to join a workspace on Erebrus."
+}
+
+func brandURLs(product string) (logoURL, siteURL string) {
+	switch strings.ToLower(strings.TrimSpace(product)) {
+	case "erebrus ai", "ai":
+		return "https://erebrus.io/ai/logo.png", "https://erebrus.io/ai"
+	case "erebrus drop", "drop":
+		return "https://erebrus.io/drop/logo.png", "https://erebrus.io/drop"
+	case "erebrus vpn", "vpn":
+		return "https://erebrus.io/vpn/logo.png", "https://erebrus.io/vpn"
+	case "erebrus":
+		return "https://erebrus.io/favicon.ico", "https://erebrus.io"
+	}
+	return "https://erebrus.io/favicon.ico", "https://erebrus.io"
 }
 
 func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
@@ -59,6 +64,7 @@ func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
 	if product == "" {
 		product = "Erebrus"
 	}
+	logoURL, siteURL := brandURLs(product)
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -105,7 +111,7 @@ func renderBrandedEmail(preheader, title, bodyHTML, product string) string {
 		title,
 		brandBg, preheader, brandBg,
 		brandSurface,
-		brandSiteURL, brandLogoURL, product, brandText3, product,
+		siteURL, logoURL, product, brandText3, product,
 		brandText, title,
 		bodyHTML,
 		brandText2, year,
@@ -132,16 +138,16 @@ func renderOrgInviteHTML(data OrgInviteEmail) string {
 	org := html.EscapeString(strings.TrimSpace(data.OrgName))
 	url := strings.TrimSpace(data.InviteURL)
 	body := bodyParagraph(data.inviterLine()) +
-		bodyParagraph(fmt.Sprintf("Join <strong style=\"color:%s;\">%s</strong> on Erebrus VPN — your private network for devices, teams, and nodes.", brandText, org)) +
+		bodyParagraph(fmt.Sprintf("Join <strong style=\"color:%s;\">%s</strong> on Erebrus — your private network for devices, teams, and nodes.", brandText, org)) +
 		ctaButton(url, "Accept invitation") +
 		bodyParagraph(fmt.Sprintf(`Or copy this link:<br><a href="%s" style="color:%s;word-break:break-all;">%s</a>`,
 			html.EscapeString(url), brandAccentHi, html.EscapeString(url))) +
 		bodyParagraph("If you didn't expect this invitation, you can safely ignore this email.")
 	return renderBrandedEmail(
-		fmt.Sprintf("Join %s on Erebrus VPN", data.OrgName),
+		fmt.Sprintf("Join %s on Erebrus", data.OrgName),
 		fmt.Sprintf("Join %s", data.OrgName),
 		body,
-		"Erebrus VPN",
+		"Erebrus",
 	)
 }
 
@@ -164,7 +170,7 @@ func renderOrgInviteAcceptedHTML(org, invitee, role, workspaceURL string, toInvi
 		body := bodyParagraph(fmt.Sprintf("<strong style=\"color:%s;\">%s</strong> accepted your invitation to join <strong style=\"color:%s;\">%s</strong> as <strong>%s</strong>.",
 			brandText, html.EscapeString(invitee), brandText, html.EscapeString(org), html.EscapeString(role))) +
 			ctaButton(url, "Open workspace")
-		htmlOut = renderBrandedEmail(subject, "Invitation accepted", body, "Erebrus VPN")
+		htmlOut = renderBrandedEmail(subject, "Invitation accepted", body, "Erebrus")
 		return
 	}
 
@@ -172,9 +178,9 @@ func renderOrgInviteAcceptedHTML(org, invitee, role, workspaceURL string, toInvi
 	text = fmt.Sprintf("Welcome to %s — you joined as %s.\n\nOpen your workspace: %s", org, role, url)
 	body := bodyParagraph(fmt.Sprintf("Welcome to <strong style=\"color:%s;\">%s</strong>. You joined as <strong>%s</strong>.",
 		brandText, html.EscapeString(org), html.EscapeString(role))) +
-		bodyParagraph("You can now access workspace nodes, manage VPN clients, and collaborate with your team.") +
+		bodyParagraph("You can now access workspace nodes, manage services, and collaborate with your team.") +
 		ctaButton(url, "Open workspace")
-	htmlOut = renderBrandedEmail(subject, fmt.Sprintf("Welcome to %s", org), body, "Erebrus VPN")
+	htmlOut = renderBrandedEmail(subject, fmt.Sprintf("Welcome to %s", org), body, "Erebrus")
 	return
 }
 
@@ -195,7 +201,7 @@ func renderOrgInviteDeclinedHTML(org, invitee, role string, toInviter bool) (sub
 		body := bodyParagraph(fmt.Sprintf("<strong style=\"color:%s;\">%s</strong> declined the invitation to join <strong style=\"color:%s;\">%s</strong> as <strong>%s</strong>.",
 			brandText, html.EscapeString(invitee), brandText, html.EscapeString(org), html.EscapeString(role))) +
 			bodyParagraph("No further action is required on your part.")
-		htmlOut = renderBrandedEmail(subject, "Invitation declined", body, "Erebrus VPN")
+		htmlOut = renderBrandedEmail(subject, "Invitation declined", body, "Erebrus")
 		return
 	}
 
@@ -204,7 +210,7 @@ func renderOrgInviteDeclinedHTML(org, invitee, role string, toInviter bool) (sub
 	body := bodyParagraph(fmt.Sprintf("You declined the invitation to join <strong style=\"color:%s;\">%s</strong> as <strong>%s</strong>.",
 		brandText, html.EscapeString(org), html.EscapeString(role))) +
 		bodyParagraph("No further action is needed.")
-	htmlOut = renderBrandedEmail(subject, "Invitation declined", body, "Erebrus VPN")
+	htmlOut = renderBrandedEmail(subject, "Invitation declined", body, "Erebrus")
 	return
 }
 
