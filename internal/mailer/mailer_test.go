@@ -26,7 +26,7 @@ func TestSendOTPPostsToResend(t *testing.T) {
 	m := New("re_test_key", "Erebrus <no-reply@erebrus.network>")
 	m.baseURL = srv.URL // white-box override for the test
 
-	if err := m.SendOTP(context.Background(), "user@example.com", "123456"); err != nil {
+	if err := m.SendOTP(context.Background(), "user@example.com", "123456", ""); err != nil {
 		t.Fatalf("SendOTP: %v", err)
 	}
 	if gotPath != "/emails" {
@@ -80,7 +80,7 @@ func TestDisabledMailer(t *testing.T) {
 	if m.Enabled() {
 		t.Fatal("empty api key should be disabled")
 	}
-	if err := m.SendOTP(context.Background(), "user@example.com", "123456"); err != ErrDisabled {
+	if err := m.SendOTP(context.Background(), "user@example.com", "123456", ""); err != ErrDisabled {
 		t.Fatalf("want ErrDisabled, got %v", err)
 	}
 }
@@ -94,7 +94,7 @@ func TestSendOTPNon2xxIsError(t *testing.T) {
 
 	m := New("re_test_key", "")
 	m.baseURL = srv.URL
-	if err := m.SendOTP(context.Background(), "user@example.com", "123456"); err == nil {
+	if err := m.SendOTP(context.Background(), "user@example.com", "123456", ""); err == nil {
 		t.Fatal("expected error on 422")
 	}
 }

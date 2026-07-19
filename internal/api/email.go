@@ -24,6 +24,7 @@ const (
 
 type emailOTPReq struct {
 	Email string `json:"email"`
+	App   string `json:"app"` // optional product name for the OTP email (e.g. "Erebrus Drop")
 }
 
 // handleEmailOTPStart sends a 6-digit code to the requested email: POST /api/v2/auth/email.
@@ -65,7 +66,7 @@ func (s *Server) handleEmailOTPStart(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to store code")
 		return
 	}
-	if err := s.mailer.SendOTP(c, email, code); err != nil {
+	if err := s.mailer.SendOTP(c, email, code, req.App); err != nil {
 		fail(c, http.StatusBadGateway, "failed to send email")
 		return
 	}

@@ -132,6 +132,9 @@ paths:
               required: [email]
               properties:
                 email: { type: string, format: email }
+                app:
+                  type: string
+                  description: Optional product/app name to display in the OTP email (e.g. "Erebrus Drop", "Erebrus AI"). Defaults to "Erebrus".
       responses:
         "200": { description: "{ status: sent, expires_in: <seconds> }" }
         "400": { description: Invalid email }

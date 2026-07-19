@@ -79,11 +79,14 @@ func (m *Mailer) SendDeletionProcessed(ctx context.Context, to string) error {
 	return m.send(ctx, to, subject, text, "")
 }
 
-// SendOTP emails a 6-digit verification code.
-func (m *Mailer) SendOTP(ctx context.Context, to, code string) error {
-	subject := "Your Erebrus verification code"
-	text := fmt.Sprintf("Your Erebrus verification code is %s.\n\nIt expires shortly. If you didn't request this, you can ignore this email.", code)
-	return m.send(ctx, to, subject, text, renderOTPHTML(code))
+// SendOTP emails a 6-digit verification code. The optional app argument customizes
+// the product name in the subject and body (e.g. "Erebrus Drop", "Erebrus AI");
+// an empty value defaults to "Erebrus".
+func (m *Mailer) SendOTP(ctx context.Context, to, code, app string) error {
+	product := otpProductName(app)
+	subject := fmt.Sprintf("Your %s verification code", product)
+	text := fmt.Sprintf("Your %s verification code is %s.\n\nIt expires shortly. If you didn't request this, you can ignore this email.", product, code)
+	return m.send(ctx, to, subject, text, renderOTPHTML(code, product))
 }
 
 func (m *Mailer) send(ctx context.Context, to, subject, text, html string) error {
