@@ -58,7 +58,7 @@ func (s *Server) handleEmailLoginStart(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to store code")
 		return
 	}
-	if err := s.mailer.SendOTP(c, email, code); err != nil {
+	if err := s.mailer.SendOTP(c, email, code, req.App); err != nil {
 		fail(c, http.StatusBadGateway, "failed to send email")
 		return
 	}
