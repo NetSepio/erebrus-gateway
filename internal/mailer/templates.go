@@ -186,7 +186,7 @@ func renderOrgInviteAcceptedHTML(org, invitee, role, workspaceURL string, toInvi
 	text = fmt.Sprintf("Welcome to %s — you joined as %s.\n\nOpen your workspace: %s", org, role, url)
 	body := bodyParagraph(fmt.Sprintf("Welcome to <strong style=\"color:%s;\">%s</strong>. You joined as <strong>%s</strong>.",
 		brandText, html.EscapeString(org), html.EscapeString(role))) +
-		bodyParagraph("You can now access workspace nodes, manage clients, and collaborate with your team.") +
+		bodyParagraph("You can now access workspace nodes, manage services, and collaborate with your team.") +
 		ctaButton(url, "Open workspace")
 	htmlOut = renderBrandedEmail(subject, fmt.Sprintf("Welcome to %s", org), body, "Erebrus")
 	return
