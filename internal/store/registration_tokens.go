@@ -48,7 +48,7 @@ func (s *Store) CreateNodeRegistrationToken(ctx context.Context, orgID, createdB
 	err = s.db.QueryRowContext(ctx,
 		`INSERT INTO node_registration_tokens (org_id, token_hash, scopes, expires_at, peer_id, created_by)
 		 VALUES ($1, $2, $3, $4, NULLIF($5,''), NULLIF($6,'')::uuid)
-		 RETURNING id, org_id, peer_id, scopes, expires_at, created_by, used_at, revoked_at, created_at`,
+		 RETURNING id, org_id, COALESCE(peer_id, '') AS peer_id, scopes, expires_at, created_by, used_at, revoked_at, created_at`,
 		orgID, hash, pq.Array(scopes), expiresAt, peerID, createdBy).
 		Scan(&t.ID, &t.OrgID, &t.PeerID, pq.Array(&t.Scopes), &t.ExpiresAt, &t.CreatedBy, &t.UsedAt, &t.RevokedAt, &t.CreatedAt)
 	if err != nil {
@@ -67,7 +67,7 @@ func (s *Store) LookupNodeRegistrationToken(ctx context.Context, token, required
 	var expiresAt time.Time
 	var usedAt, revokedAt sql.NullTime
 	err = s.db.QueryRowContext(ctx,
-		`SELECT id, org_id, peer_id, scopes, expires_at, used_at, revoked_at
+		`SELECT id, org_id, COALESCE(peer_id, '') AS peer_id, scopes, expires_at, used_at, revoked_at
 		 FROM node_registration_tokens WHERE token_hash=$1`, hash).
 		Scan(&tokenID, &orgID, &peerID, pq.Array(&scopes), &expiresAt, &usedAt, &revokedAt)
 	if errors.Is(err, sql.ErrNoRows) {
