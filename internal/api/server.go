@@ -3,6 +3,8 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/NetSepio/gateway/internal/cache"
 	"github.com/NetSepio/gateway/internal/config"
 	"github.com/NetSepio/gateway/internal/dropclient"
@@ -35,8 +37,17 @@ type Server struct {
 	mailer   *mailer.Mailer
 	xverify  *socialverify.XVerifier
 	google   *oauth.Verifier
-	apple    *oauth.Verifier
-	crypt    *secretbox.Box
+	apple    *oauth.Verifier // legacy/global Apple verifier
+
+	// Per-app Apple Sign-In configuration derived from APPLE_CLIENT_IDS.
+	applePackages  map[string]string        // app key -> Android package
+	appleVerifiers map[string]*oauth.Verifier // app key -> verifier
+
+	// Apple app keys that should use the Android intent redirect relay.
+	// Other Apple callbacks are redirected to the webapp.
+	appleAndroidRelayIDs map[string]bool
+
+	crypt *secretbox.Box
 }
 
 // New builds the API server. platform is the live DB-backed settings object
@@ -47,12 +58,27 @@ func New(cfg *config.Config, platform *config.PlatformSettings, st *store.Store,
 		platform.Replace(config.DefaultPlatformValues())
 	}
 	p := platform.Snapshot()
+	appleClientIDs := splitCSVRaw(cfg.AppleClientIDs)
+	appleAudiences := appleAppAudiences(appleClientIDs)
+	applePackages := appleAppPackages(appleClientIDs)
+	appleVerifiers := map[string]*oauth.Verifier{}
+	for app, auds := range appleAudiences {
+		if len(auds) > 0 {
+			appleVerifiers[app] = oauth.NewApple(auds)
+		}
+	}
+
 	return &Server{
 		cfg: cfg, platform: platform, store: st, tokens: tm, hub: hub, cache: c, nodes: nodeclient.New(), drop: dropclient.New(),
 		nft: nft, mailer: ml, xverify: socialverify.NewXVerifier(p.XAPIBaseURL),
 		google: oauth.NewGoogle(splitCSVRaw(cfg.GoogleClientIDs)),
-		apple:  oauth.NewApple(splitCSVRaw(cfg.AppleClientIDs)),
-		crypt:  secretbox.New(cfg.Mnemonic),
+		apple:  oauth.NewApple(appleClientIDs),
+
+		applePackages:        applePackages,
+		appleVerifiers:       appleVerifiers,
+		appleAndroidRelayIDs: appleRelayIDs(splitCSVRaw(cfg.AppleAndroidRelayIDs)),
+
+		crypt: secretbox.New(cfg.Mnemonic),
 	}
 }
 
@@ -99,6 +125,10 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/email/login/verify", s.handleEmailLoginVerify)
 		auth.POST("/google", s.handleGoogleAuth)
 		auth.POST("/apple", s.handleAppleAuth)
+		// Apple form_post callbacks. Bare /apple/callback is treated as the
+		// "auth" app for the legacy web service ID (com.erebrus.auth).
+		auth.POST("/apple/callback", s.handleAppleCallback)
+		auth.POST("/apple/callback/:app", s.handleAppleCallback)
 	}
 
 	// node discovery (public) + control plane
@@ -284,6 +314,68 @@ func (s *Server) Router() *gin.Engine {
 	}
 
 	return r
+}
+
+// appleAppAudiences groups Apple client IDs by app key.
+// For "com.erebrus.drop.login" the app key is "drop"; for "com.erebrus.drop" it is also "drop".
+func appleAppAudiences(ids []string) map[string][]string {
+	m := map[string][]string{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		m[appleAppKey(id)] = append(m[appleAppKey(id)], id)
+	}
+	return m
+}
+
+// appleAppPackages derives the Android package name for each app key.
+// Service IDs ending in ".login" strip that suffix to get the Android package.
+func appleAppPackages(ids []string) map[string]string {
+	m := map[string]string{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		app := appleAppKey(id)
+		if _, ok := m[app]; !ok {
+			m[app] = applePackage(id)
+		}
+	}
+	return m
+}
+
+// appleRelayIDs builds a set of app keys that use the Android relay. Entries
+// can be app keys ("drop") or full client IDs ("com.erebrus.drop").
+func appleRelayIDs(ids []string) map[string]bool {
+	m := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			m[appleAppKey(id)] = true
+		}
+	}
+	return m
+}
+
+func appleAppKey(id string) string {
+	base := id
+	if strings.HasSuffix(id, ".login") {
+		base = strings.TrimSuffix(id, ".login")
+	}
+	if i := strings.LastIndex(base, "."); i >= 0 {
+		return base[i+1:]
+	}
+	return base
+}
+
+func applePackage(id string) string {
+	if strings.HasSuffix(id, ".login") {
+		return strings.TrimSuffix(id, ".login")
+	}
+	return id
 }
 
 func splitCSV(s string) []string {

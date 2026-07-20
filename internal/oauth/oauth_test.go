@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -148,5 +149,39 @@ func TestEnabled(t *testing.T) {
 	}
 	if !New("u", []string{"i"}, []string{"a"}).Enabled() {
 		t.Fatal("with audience => enabled")
+	}
+}
+
+func TestAppleNonceOK(t *testing.T) {
+	raw := "random-nonce-123"
+	if !AppleNonceOK(raw, raw) {
+		t.Fatal("raw nonce should match")
+	}
+
+	sum := sha256.Sum256([]byte(raw))
+	b64 := base64.RawURLEncoding.EncodeToString(sum[:])
+	if !AppleNonceOK(raw, b64) {
+		t.Fatal("base64url SHA-256 nonce should match")
+	}
+
+	hex := fmt.Sprintf("%x", sum)
+	if !AppleNonceOK(raw, hex) {
+		t.Fatal("hex SHA-256 nonce should match")
+	}
+
+	if AppleNonceOK(raw, "other") {
+		t.Fatal("mismatched nonce should fail")
+	}
+}
+
+func TestAppleCHashOK(t *testing.T) {
+	code := "test-code-456"
+	sum := sha256.Sum256([]byte(code))
+	cHash := base64.RawURLEncoding.EncodeToString(sum[:16])
+	if !AppleCHashOK(code, cHash) {
+		t.Fatal("valid c_hash should match")
+	}
+	if AppleCHashOK(code, "bad") {
+		t.Fatal("invalid c_hash should fail")
 	}
 }

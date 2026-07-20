@@ -21,8 +21,15 @@ func (s *Server) handleAuthMethods(c *gin.Context) {
 		"wallet": true,
 		"email":  s.mailer.Enabled(),
 		"google": s.google.Enabled(),
-		"apple":  s.apple.Enabled(),
+		"apple":  s.appleEnabled(),
 	})
+}
+
+func (s *Server) appleEnabled() bool {
+	if s.apple.Enabled() {
+		return true
+	}
+	return len(s.appleVerifiers) > 0
 }
 
 // ── Email login (passwordless, identity-resolving) ───────────────────────────
@@ -114,8 +121,70 @@ type oidcReq struct {
 	Ref     string `json:"ref"` // optional referral code (binds once, on first signup)
 }
 
+type appleAuthReq struct {
+	IDToken           string `json:"id_token"`
+	AuthorizationCode string `json:"authorization_code"`
+	Nonce             string `json:"nonce"`
+	State             string `json:"state"`
+	Ref               string `json:"ref"` // optional referral code
+}
+
 func (s *Server) handleGoogleAuth(c *gin.Context) { s.oidcLogin(c, "google", s.google) }
-func (s *Server) handleAppleAuth(c *gin.Context)  { s.oidcLogin(c, "apple", s.apple) }
+
+func (s *Server) handleAppleAuth(c *gin.Context) {
+	if !s.appleEnabled() {
+		fail(c, http.StatusServiceUnavailable, "apple login is not configured")
+		return
+	}
+	var req appleAuthReq
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.IDToken) == "" {
+		fail(c, http.StatusBadRequest, "id_token is required")
+		return
+	}
+
+	v, app, ok := s.appleVerifierForState(req.State)
+	if !ok {
+		fail(c, http.StatusServiceUnavailable, "apple login is not configured for this app")
+		return
+	}
+
+	claims, err := v.Verify(c, req.IDToken)
+	if err != nil {
+		// Per-app Service IDs validate Android/web tokens. iOS native tokens use
+		// the iOS bundle ID as aud, configured in APPLE_CLIENT_IDS, so fall back
+		// to the legacy verifier when the per-app verifier rejects the audience.
+		if err.Error() == "audience mismatch" && s.apple.Enabled() {
+			claims, err = s.apple.Verify(c, req.IDToken)
+		}
+		if err != nil {
+			fail(c, http.StatusUnauthorized, "invalid apple token")
+			return
+		}
+	}
+
+	if req.State != "" && !strings.HasPrefix(req.State, app+".") {
+		fail(c, http.StatusUnauthorized, "invalid apple state")
+		return
+	}
+	if err := s.validateAppleClaims(claims, req.Nonce, req.AuthorizationCode); err != nil {
+		fail(c, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	// Only a provider-verified email is trusted for account resolution/merge.
+	email := claims.Email
+	if email != "" && !claims.EmailVerified {
+		email = ""
+	}
+	u, created, err := s.store.ResolveOrCreateUserBySocial(c, "apple", claims.Subject, email, email)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "failed to resolve account")
+		return
+	}
+	// Bind before bootstrap so first-organization qualification awards referral XP.
+	s.bindReferralCode(c, u.ID, req.Ref)
+	s.finishIdentityLogin(c, u, created, email, "apple")
+}
 
 func (s *Server) oidcLogin(c *gin.Context, provider string, v *oauth.Verifier) {
 	if !v.Enabled() {
@@ -145,6 +214,42 @@ func (s *Server) oidcLogin(c *gin.Context, provider string, v *oauth.Verifier) {
 	// Bind before bootstrap so first-organization qualification awards referral XP.
 	s.bindReferralCode(c, u.ID, req.Ref)
 	s.finishIdentityLogin(c, u, created, email, provider)
+}
+
+// appleVerifierForState returns the Apple verifier and app key for a state
+// value. State is expected to be "app.<random>" (e.g. "drop.abc123").
+func (s *Server) appleVerifierForState(state string) (*oauth.Verifier, string, bool) {
+	if state != "" {
+		if i := strings.IndexByte(state, '.'); i > 0 {
+			app := state[:i]
+			if v, ok := s.appleVerifiers[app]; ok {
+				return v, app, true
+			}
+		}
+	}
+	return s.apple, "legacy", s.apple.Enabled()
+}
+
+func (s *Server) validateAppleClaims(claims *oauth.Claims, rawNonce, code string) error {
+	if claims.NonceSupported && claims.Nonce == "" {
+		return errors.New("apple token missing nonce")
+	}
+	if claims.Nonce != "" {
+		if !oauth.AppleNonceOK(rawNonce, claims.Nonce) {
+			return errors.New("apple nonce mismatch")
+		}
+	} else if rawNonce != "" {
+		return errors.New("apple nonce mismatch")
+	}
+	if claims.CHash != "" {
+		if code == "" {
+			return errors.New("apple authorization code required")
+		}
+		if !oauth.AppleCHashOK(code, claims.CHash) {
+			return errors.New("apple authorization code mismatch")
+		}
+	}
+	return nil
 }
 
 // finishIdentityLogin accepts pending org invites for the email, runs the

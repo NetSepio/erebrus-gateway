@@ -54,6 +54,11 @@ type Config struct {
 	GoogleClientIDs string `env:"GOOGLE_CLIENT_IDS"`
 	AppleClientIDs  string `env:"APPLE_CLIENT_IDS"`
 
+	// Apple client IDs / app keys (drop,vpn,ai) that use the Android web relay
+	// callback. Others are treated as web Sign in with Apple and redirected to
+	// EREBRUS_PUBLIC_BASE_URL/auth/apple/callback.
+	AppleAndroidRelayIDs string `env:"APPLE_ANDROID_RELAY_IDS"`
+
 	// managed node / service provisioning
 	ManagedNodeProvisioningEnabled bool   `env:"MANAGED_NODE_PROVISIONING_ENABLED" envDefault:"false"`
 	ManagedNodeDefaultRegion       string `env:"MANAGED_NODE_DEFAULT_REGION" envDefault:"unknown"`

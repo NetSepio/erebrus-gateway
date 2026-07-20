@@ -20,10 +20,14 @@ import (
 
 // Claims is the verified subset of an ID token we use for identity resolution.
 type Claims struct {
-	Subject       string // stable provider account id ("sub")
-	Email         string // lower-cased; may be empty (e.g. Apple "hide my email" omitted)
-	EmailVerified bool
-	Issuer        string
+	Subject        string // stable provider account id ("sub")
+	Email          string // lower-cased; may be empty (e.g. Apple "hide my email" omitted)
+	EmailVerified  bool
+	Issuer         string
+	Aud            string // first audience value from the token
+	Nonce          string // Apple ID token nonce claim (hashed value)
+	NonceSupported bool   // Apple nonce_supported claim
+	CHash          string // Apple authorization code hash
 }
 
 // Verifier validates RS256 ID tokens for one provider.
@@ -90,6 +94,9 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (*Claims, error) 
 		Sub           string          `json:"sub"`
 		Email         string          `json:"email"`
 		EmailVerified json.RawMessage `json:"email_verified"`
+		Nonce         string          `json:"nonce"`
+		NonceSupported bool           `json:"nonce_supported"`
+		CHash         string          `json:"c_hash"`
 	}
 	if err := decodeSegment(parts[1], &claims); err != nil {
 		return nil, fmt.Errorf("bad payload: %w", err)
@@ -120,10 +127,14 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (*Claims, error) 
 		return nil, errors.New("signature verification failed")
 	}
 	return &Claims{
-		Subject:       claims.Sub,
-		Email:         strings.ToLower(strings.TrimSpace(claims.Email)),
-		EmailVerified: parseFlexBool(claims.EmailVerified),
-		Issuer:        claims.Iss,
+		Subject:        claims.Sub,
+		Email:          strings.ToLower(strings.TrimSpace(claims.Email)),
+		EmailVerified:  parseFlexBool(claims.EmailVerified),
+		Issuer:         claims.Iss,
+		Aud:            firstStringFromRaw(claims.Aud),
+		Nonce:          claims.Nonce,
+		NonceSupported: claims.NonceSupported,
+		CHash:          claims.CHash,
 	}, nil
 }
 
@@ -251,4 +262,54 @@ func toSet(items []string) map[string]bool {
 		}
 	}
 	return m
+}
+
+// firstStringFromRaw extracts the first audience from a JSON string or array.
+func firstStringFromRaw(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var one string
+	if err := json.Unmarshal(raw, &one); err == nil {
+		return one
+	}
+	var many []string
+	if err := json.Unmarshal(raw, &many); err == nil && len(many) > 0 {
+		return many[0]
+	}
+	return ""
+}
+
+// AppleNonceOK verifies that an Apple ID token's nonce claim matches the raw
+// nonce supplied by the client. Different Apple clients pass the nonce either
+// raw, SHA-256 hex encoded, or base64url encoded, so we accept all common
+// representations.
+func AppleNonceOK(rawNonce, tokenNonce string) bool {
+	if tokenNonce == "" {
+		return rawNonce == ""
+	}
+	if rawNonce == "" {
+		return false
+	}
+	if rawNonce == tokenNonce {
+		return true
+	}
+	sum := sha256.Sum256([]byte(rawNonce))
+	if base64.RawURLEncoding.EncodeToString(sum[:]) == tokenNonce {
+		return true
+	}
+	if fmt.Sprintf("%x", sum) == tokenNonce {
+		return true
+	}
+	return false
+}
+
+// AppleCHashOK validates an Apple ID token's c_hash against the authorization
+// code, per OIDC: c_hash = leftmost 128 bits of SHA256(code), base64url.
+func AppleCHashOK(code, cHash string) bool {
+	if cHash == "" || code == "" {
+		return cHash == code
+	}
+	sum := sha256.Sum256([]byte(code))
+	return base64.RawURLEncoding.EncodeToString(sum[:16]) == cHash
 }
