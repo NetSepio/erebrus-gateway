@@ -180,6 +180,26 @@ The same file is used by the gateway container (`env_file`) and compose variable
 | `MANAGED_NODE_PROVISIONING_ENABLED` | When true, reserved managed nodes use `provisioning` status (no cloud deploy yet) |
 | `MANAGED_NODE_DEFAULT_REGION`, `MANAGED_NODE_DEFAULT_IMAGE`, `SENTINEL_IMAGE` | Managed-node defaults (DB reservation today) |
 | `EREBRUS_PUBLIC_BASE_URL`, `GATEWAY_PUBLIC_BASE_URL` | URLs embedded in generated installer/config (node repo) |
+| `APPLE_CLIENT_IDS` | CSV of accepted Apple OAuth `aud` values. The last dot-segment is the per-app key; `.login` suffixes are stripped to derive Android packages. |
+| `APPLE_ANDROID_RELAY_IDS` | App keys (or full client IDs) that use the Android intent relay. Non-relay callbacks redirect to `EREBRUS_PUBLIC_BASE_URL/auth/apple/callback`. |
+
+### Apple Sign-In (Android / web relay)
+
+- iOS/macOS use the native `Sign in with Apple` capability; `APPLE_CLIENT_IDS` lists accepted bundle IDs.
+- Android uses a web relay through the gateway. Each app has its own callback path:
+  - `POST /api/v2/auth/apple/callback` — legacy web auth (`auth` app, e.g. `com.erebrus.auth`)
+  - Drop: `POST /api/v2/auth/apple/callback/drop`
+  - VPN: `POST /api/v2/auth/apple/callback/vpn`
+  - AI: `POST /api/v2/auth/apple/callback/ai`
+- App keys and Android packages are derived from `APPLE_CLIENT_IDS`:
+  - `com.erebrus.drop` → app `drop`, package `com.erebrus.drop`
+  - `com.erebrus.drop.login` → app `drop`, package `com.erebrus.drop`
+- `APPLE_ANDROID_RELAY_IDS` controls where the callback redirects:
+  - Example: `APPLE_ANDROID_RELAY_IDS=com.erebrus.ai,com.erebrus.drop,com.erebrus.vpn`
+  - If the app is in the relay list: `intent://callback?...#Intent;package=<android-package>;scheme=signinwithapple;end`
+  - Otherwise: `https://erebrus.io/auth/apple/callback?...` (using `EREBRUS_PUBLIC_BASE_URL`)
+- The package name / web redirect target is never taken from the request; it is derived from config.
+- `POST /api/v2/auth/apple` accepts `id_token`, `authorization_code`, `nonce`, `state`, and optional `ref`. It validates signature, issuer, `aud`, nonce, and authorization code (`c_hash`).
 
 NFT verification collections are in **`nft_gate_contracts`** (migration `0012`):
 IslandDAO + the historical Erebrus Free Trial NFT on Solana. Verification may
