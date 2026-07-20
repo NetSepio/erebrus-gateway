@@ -231,9 +231,8 @@ func (s *Server) appleVerifierForState(state string) (*oauth.Verifier, string, b
 }
 
 func (s *Server) validateAppleClaims(claims *oauth.Claims, rawNonce, code string) error {
-	if claims.NonceSupported && claims.Nonce == "" {
-		return errors.New("apple token missing nonce")
-	}
+	// Nonce is optional for Apple web tokens (Apple JS may return nonce_supported
+	// without a nonce claim). Only validate when the token contains a nonce.
 	if claims.Nonce != "" {
 		if !oauth.AppleNonceOK(rawNonce, claims.Nonce) {
 			return errors.New("apple nonce mismatch")
